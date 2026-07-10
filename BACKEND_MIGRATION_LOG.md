@@ -6,11 +6,22 @@ layer for a module is only cut over after its API is verified.
 
 **Honest status up front:** this branch delivers Phases 1–4 fully (extraction, skeleton, auth,
 RLS→guard framework) plus **all fifteen Phase 5 modules API-side**, verified by **57 passing end-to-end tests**
-against the real schema and seed data. What is NOT done: the **frontend cutover** — the app
-still runs entirely on `@supabase/supabase-js`, intentionally, per the module-by-module
-discipline (each module's frontend flips only against a reachable backend, verified per role);
-and the deeper write paths listed per module below (admissions pipeline, payroll generation,
-fleet CRUD, etc.) which migrate together with each module's frontend cutover.
+against the real schema and seed data. What is NOT done: the per-module
+**frontend data-layer cutover** (dashboards/lists still query `@supabase/supabase-js`), and the
+deeper write paths listed per module below — both flip module by module using the dual-session
+pattern now in place.
+
+**Frontend auth cutover: DONE and UI-verified.** The app now authenticates against the NestJS
+API using a dual-session (strangler) model — `src/lib/api/client.ts` holds the API session
+(access token + auto-refresh + auth-change events) as the PRIMARY identity source
+(`use-current-user.ts`, route guard, sign-out), while a best-effort legacy Supabase login keeps
+not-yet-migrated modules working in production. Verified end-to-end in a real browser against
+the local full stack (Postgres + NestJS + built frontend): all four demo roles log in through
+the UI, land on /dashboard with the correct identity and role-scoped navigation, sign out, and
+a wrong password is rejected — 13/13 UI checks pass (screenshots in
+`docs/screenshots/nestjs-auth/`). Locally the unmigrated dashboard widgets show empty states
+because Supabase is unreachable from this environment — expected; in production the legacy
+session feeds them until each module's frontend flips.
 
 ## Section 1 — Extracted from Supabase (build checklist)
 

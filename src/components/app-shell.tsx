@@ -34,6 +34,7 @@ import {
   Menu,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { apiLogout } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
@@ -137,7 +138,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    // End both coexistence sessions: API (primary) and legacy Supabase.
+    await apiLogout();
+    await supabase.auth.signOut().catch(() => undefined);
     navigate({ to: "/auth", replace: true });
   };
 

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { apiLogin, apiRegister, getApiToken } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,10 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (getApiToken()) {
+      navigate({ to: "/dashboard", replace: true });
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/dashboard", replace: true });
     });
@@ -37,20 +42,25 @@ function AuthPage() {
     setLoading(true);
     try {
       if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        // Primary session: the NestJS API (identity/RBAC + migrated modules).
+        await apiLogin(email, password);
+        // Legacy session: Supabase, for modules not yet cut over. Best-effort —
+        // its absence only affects legacy pages, never the login itself.
+        await supabase.auth.signInWithPassword({ email, password }).catch(() => undefined);
         toast.success("Welcome back");
         navigate({ to: "/dashboard", replace: true });
       } else if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
-            data: { full_name: fullName },
-          },
-        });
-        if (error) throw error;
+        await apiRegister(email, password, fullName);
+        await supabase.auth
+          .signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: `${window.location.origin}/dashboard`,
+              data: { full_name: fullName },
+            },
+          })
+          .catch(() => undefined);
         toast.success("Account created — check your email if confirmation is required.");
         navigate({ to: "/dashboard", replace: true });
       } else {
