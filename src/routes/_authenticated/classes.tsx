@@ -2,7 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,72 +47,34 @@ function ClassesPage() {
 
   const { data: classes } = useQuery({
     queryKey: ["classes", year],
-    queryFn: async () => {
-      let query = supabase.from("classes").select("*").order("name").order("section");
-      if (year !== "all") query = query.eq("academic_year", year);
-      return (await query).data ?? [];
-    },
+    queryFn: () => apiGet<any[]>(`/classes?year=${encodeURIComponent(year)}`),
   });
 
   const { data: years } = useQuery({
     queryKey: ["class-years"],
-    queryFn: async () => {
-      const { data } = await supabase.from("classes").select("academic_year");
-      return Array.from(new Set((data ?? []).map((r) => r.academic_year)))
-        .sort()
-        .reverse();
-    },
+    queryFn: () => apiGet<string[]>("/classes/years"),
   });
 
-  const classIds = useMemo(() => (classes ?? []).map((c: any) => c.id), [classes]);
-
-  const { data: aggregates } = useQuery({
-    enabled: classIds.length > 0,
-    queryKey: ["classes-agg", classIds.join(",")],
-    queryFn: async () => {
-      const [{ data: stats }, { data: teacherIds }] = await Promise.all([
-        supabase.rpc("get_class_stats", { _class_ids: classIds }),
-        supabase.from("classes").select("id, class_teacher_id").in("id", classIds),
-      ]);
-      const uniqTeachers = Array.from(
-        new Set((teacherIds ?? []).map((r: any) => r.class_teacher_id).filter(Boolean)),
-      );
-      const { data: profs } = uniqTeachers.length
-        ? await supabase.from("profiles").select("id,full_name").in("id", uniqTeachers)
-        : { data: [] };
-      const teacherMap: Record<string, string> = {};
-      (profs ?? []).forEach((p: any) => {
-        teacherMap[p.id] = p.full_name;
-      });
-
-      const counts: Record<string, number> = {};
-      const attMap: Record<string, { t: number; p: number }> = {};
-      for (const row of (stats ?? []) as any[]) {
-        counts[row.class_id] = Number(row.student_count) || 0;
-        attMap[row.class_id] = {
-          t: Number(row.attendance_total) || 0,
-          p: Number(row.attendance_present) || 0,
-        };
-      }
-      const teacherByClass: Record<string, string | null> = {};
-      for (const r of teacherIds ?? [])
-        teacherByClass[r.id] = r.class_teacher_id ? (teacherMap[r.class_teacher_id] ?? null) : null;
-      return { counts, attMap, teacherByClass };
-    },
-  });
+  // Stats + class-teacher names ride along on /classes now (get_class_stats
+  // was ported into the API), so derive the same aggregate maps client-side.
+  const aggregates = useMemo(() => {
+    if (!classes) return undefined;
+    const counts: Record<string, number> = {};
+    const attMap: Record<string, { t: number; p: number }> = {};
+    const teacherByClass: Record<string, string | null> = {};
+    for (const c of classes as any[]) {
+      counts[c.id] = c.studentCount ?? 0;
+      attMap[c.id] = { t: c.attendanceTotal ?? 0, p: c.attendancePresent ?? 0 };
+      teacherByClass[c.id] = c.classTeacherName ?? null;
+    }
+    return { counts, attMap, teacherByClass };
+  }, [classes]);
 
   const { data: allTeachers } = useQuery({
     queryKey: ["classes-form-teachers"],
     queryFn: async () => {
-      const { data } = await supabase.from("teacher_classes").select("teacher_id");
-      const ids = Array.from(new Set((data ?? []).map((r) => r.teacher_id))).filter(Boolean);
-      if (!ids.length) return [];
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id,full_name")
-        .in("id", ids)
-        .order("full_name");
-      return profs ?? [];
+      const opts = await apiGet<{ id: string; fullName: string }[]>("/classes/teacher-options");
+      return opts.map((t) => ({ id: t.id, full_name: t.fullName }));
     },
   });
 
@@ -140,16 +102,23 @@ function ClassesPage() {
     const room = String(fd.get("room") || "").trim() || null;
     if (!name) return toast.error("Class name is required");
     setSaving(true);
-    const { error } = await supabase.from("classes").insert({
-      name,
-      section,
-      academic_year: yr,
-      capacity: capRaw ? Number(capRaw) : null,
-      room,
-      class_teacher_id: formTeacher || null,
-    });
+    try {
+      await apiFetch("/classes", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          section: section ?? undefined,
+          academicYear: yr,
+          capacity: capRaw ? Number(capRaw) : undefined,
+          room: room ?? undefined,
+          classTeacherId: formTeacher || undefined,
+        }),
+      });
+    } catch (err) {
+      setSaving(false);
+      return toast.error(err instanceof Error ? err.message : "Could not create class");
+    }
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success(`${name}${section ? ` · ${section}` : ""} created`);
     setOpen(false);
     setFormTeacher("");
@@ -292,7 +261,7 @@ function ClassesPage() {
                       {c.section && <span className="text-muted-foreground"> · {c.section}</span>}
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      AY {c.academic_year}
+                      AY {c.academicYear}
                       {c.room && ` · ${c.room}`}
                     </div>
                   </div>

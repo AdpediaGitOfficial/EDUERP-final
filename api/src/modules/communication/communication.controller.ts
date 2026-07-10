@@ -13,7 +13,7 @@ import {
 import { CommunicationService } from "./communication.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
-import { IsIn, IsOptional, IsString, IsUUID, MinLength } from "class-validator";
+import { IsDateString, IsIn, IsOptional, IsString, IsUUID, MinLength } from "class-validator";
 
 class CreateAnnouncementDto {
   @IsString()
@@ -31,6 +31,27 @@ class CreateAnnouncementDto {
   @IsOptional()
   @IsUUID()
   classId?: string;
+}
+
+class CreateHolidayDto {
+  @IsString()
+  @MinLength(2)
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsDateString()
+  startDate: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @IsOptional()
+  @IsIn(["holiday", "vacation", "exam", "event"])
+  type?: string;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -69,5 +90,10 @@ export class CommunicationController {
   @Get("holidays")
   holidays(@CurrentUser() actor: AuthUser) {
     return this.comms.listHolidays(actor);
+  }
+
+  @Post("holidays")
+  createHoliday(@CurrentUser() actor: AuthUser, @Body() dto: CreateHolidayDto) {
+    return this.comms.createHoliday(actor, dto);
   }
 }

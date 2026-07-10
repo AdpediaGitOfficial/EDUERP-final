@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,21 +47,26 @@ function HolidaysPage() {
 
   const { data: holidays } = useQuery({
     queryKey: ["holidays"],
-    queryFn: async () =>
-      (await supabase.from("holidays").select("*").order("start_date")).data ?? [],
+    queryFn: () => apiGet<any[]>("/holidays"),
   });
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const { error } = await supabase.from("holidays").insert({
-      name: String(fd.get("name")),
-      description: String(fd.get("description") || ""),
-      start_date: String(fd.get("start")),
-      end_date: String(fd.get("end") || fd.get("start")),
-      type: type as any,
-    });
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch("/holidays", {
+        method: "POST",
+        body: JSON.stringify({
+          name: String(fd.get("name")),
+          description: String(fd.get("description") || ""),
+          startDate: String(fd.get("start")),
+          endDate: String(fd.get("end") || fd.get("start")),
+          type,
+        }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not save");
+    }
     toast.success("Holiday added");
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["holidays"] });

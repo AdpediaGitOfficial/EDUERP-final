@@ -1,4 +1,10 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
@@ -121,5 +127,26 @@ export class StudentsService {
         relationship: ps.relationship,
       })),
     };
+  }
+
+  /**
+   * Link a parent profile to a student by admission number.
+   * ps_admin_all is the ONLY write policy on parent_student — under RLS a
+   * parent's own insert silently failed, so this stays admin-only (parents
+   * receive the same rejection the RLS gave them).
+   */
+  async linkParent(actor: AuthUser, admissionNo: string, parentId: string) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const student = await this.prisma.students.findUnique({
+      where: { admission_no: admissionNo },
+      select: { id: true },
+    });
+    if (!student) throw new BadRequestException("No student found with that admission number");
+    await this.prisma.parent_student.upsert({
+      where: { parent_id_student_id: { parent_id: parentId, student_id: student.id } },
+      create: { parent_id: parentId, student_id: student.id },
+      update: {},
+    });
+    return { ok: true, studentId: student.id };
   }
 }

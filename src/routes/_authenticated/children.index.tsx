@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,13 +32,17 @@ function ChildrenPage() {
     queryKey: ["children", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("parent_student")
-        .select(
-          "student_id, students(id, admission_no, profiles(full_name,email), classes(name,section))",
-        )
-        .eq("parent_id", user!.id);
-      return data ?? [];
+      // GET /students is parent-scoped by the API (students_parent_read).
+      const res = await apiGet<{ rows: any[] }>("/students?pageSize=50");
+      return res.rows.map((s) => ({
+        student_id: s.id,
+        students: {
+          id: s.id,
+          admission_no: s.admissionNo,
+          profiles: { full_name: s.fullName, email: s.email },
+          classes: s.class ? { name: s.class.name, section: s.class.section } : null,
+        },
+      }));
     },
   });
 
@@ -47,16 +51,14 @@ function ChildrenPage() {
     if (!user) return;
     const fd = new FormData(e.currentTarget);
     const adm = String(fd.get("adm")).trim();
-    const { data: student } = await supabase
-      .from("students")
-      .select("id")
-      .eq("admission_no", adm)
-      .maybeSingle();
-    if (!student) return toast.error("No student found with that admission number");
-    const { error } = await supabase
-      .from("parent_student")
-      .insert({ parent_id: user.id, student_id: student.id });
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch("/students/link-parent", {
+        method: "POST",
+        body: JSON.stringify({ admissionNo: adm, parentId: user.id }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not link");
+    }
     toast.success("Linked to child");
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["children"] });

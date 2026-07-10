@@ -121,4 +121,28 @@ export class CommunicationService {
     // hol_read_auth: true
     return this.prisma.holidays.findMany({ orderBy: { start_date: "asc" } });
   }
+
+  async createHoliday(
+    actor: AuthUser,
+    data: {
+      name: string;
+      description?: string;
+      startDate: string;
+      endDate?: string;
+      type?: string;
+    },
+  ) {
+    // hol_admin_write
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const row = await this.prisma.holidays.create({
+      data: {
+        name: data.name,
+        description: data.description || null,
+        start_date: new Date(data.startDate),
+        end_date: new Date(data.endDate || data.startDate),
+        type: (data.type ?? "holiday") as never,
+      },
+    });
+    return { id: row.id };
+  }
 }

@@ -1,7 +1,27 @@
-import { Controller, Get, Inject, Param, ParseIntPipe, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import { IsString, IsUUID, MinLength } from "class-validator";
 import { StudentsService } from "./students.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
+
+class LinkParentDto {
+  @IsString()
+  @MinLength(3)
+  admissionNo: string;
+
+  @IsUUID()
+  parentId: string;
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller("students")
@@ -17,6 +37,11 @@ export class StudentsController {
     @Query("classId") classId?: string,
   ) {
     return this.students.list(actor, page ?? 1, Math.min(pageSize ?? 50, 200), q, classId);
+  }
+
+  @Post("link-parent")
+  linkParent(@CurrentUser() actor: AuthUser, @Body() dto: LinkParentDto) {
+    return this.students.linkParent(actor, dto.admissionNo, dto.parentId);
   }
 
   @Get(":id")

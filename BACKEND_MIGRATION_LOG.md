@@ -167,6 +167,34 @@ Ported now: `handle_new_user` (registration). Pending, tied to their modules:
 | N+1 check on migrated endpoints                                                                                                               | **PASS** — list endpoints are 2–3 fixed queries (count + page + roles batch); no per-row queries |
 | Full-app regression (all dashboards, all roles, production data)                                                                              | **PENDING** — requires the remaining modules + frontend cutover; do not claim before then        |
 
+## Frontend data-layer cutover — in progress (module by module)
+
+Auth is fully on the API (previous section). Now flipping each page's data layer
+from `@supabase/supabase-js` to the API client, verified in a real browser against
+the local full stack (Postgres + NestJS + built frontend) before moving on.
+
+Flipped and browser-verified so far (screenshots in `docs/screenshots/nestjs-modules/`):
+
+| Page                 | Endpoint(s)                                                      | Browser check                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Announcements        | `GET/POST /announcements`                                        | admin posts a notice → renders; student sees the audience=all notice (API audience scoping), teachers-only stays hidden                  |
+| Holidays             | `GET/POST /holidays`                                             | admin adds a holiday → renders; student reads it (`hol_read_auth`)                                                                       |
+| Classes (admin)      | `GET /classes` (+ `/years`, `/teacher-options`), `POST /classes` | 100 sections render with real student counts (Grade 8A = 52), 30-day attendance %, class-teacher names, capacity bars — all from the API |
+| My Children (parent) | parent-scoped `GET /students`, `POST /students/link-parent`      | Anika Singh + her class render from the parent-scoped endpoint                                                                           |
+
+Supporting API work this pass: ported the `get_class_stats` DB function into
+`AcademicsService.listClasses` (30-day attendance, present = present|late); added
+class create + year/teacher-option helpers; added holiday create; added
+`POST /students/link-parent` (ps_admin_all — the only write policy, so parent
+self-link is rejected exactly as RLS did). **8/8 module UI checks pass; API suite
+now 63/63** (`cutover.test.ts` covers the new write/aggregate endpoints).
+
+`grep -rn supabase` on the four flipped pages: **0 references** each.
+
+Remaining Supabase-coupled pages (dashboards, students list, attendance, gradebook,
+fees, HR/finance/fleet/assets/library/complaints/reception pages, reports) continue
+on the legacy session and flip in subsequent passes, same discipline.
+
 ## How to run
 
 ```sh

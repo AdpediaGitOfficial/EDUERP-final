@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,12 +38,14 @@ function AnnouncementsPage() {
   const [open, setOpen] = useState(false);
   const [audience, setAudience] = useState("all");
 
-  const { data: items } = useQuery({
+  const { data } = useQuery({
     queryKey: ["announcements"],
-    queryFn: async () =>
-      (await supabase.from("announcements").select("*").order("created_at", { ascending: false }))
-        .data ?? [],
+    queryFn: () =>
+      apiGet<{
+        rows: { id: string; title: string; body: string; audience: string; createdAt: string }[];
+      }>("/announcements?pageSize=100"),
   });
+  const items = data?.rows;
 
   const canPost = user?.primaryRole === "admin" || user?.primaryRole === "teacher";
 
@@ -51,13 +53,18 @@ function AnnouncementsPage() {
     e.preventDefault();
     if (!user) return;
     const fd = new FormData(e.currentTarget);
-    const { error } = await supabase.from("announcements").insert({
-      title: String(fd.get("title")),
-      body: String(fd.get("body")),
-      audience: audience as any,
-      author_id: user.id,
-    });
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch("/announcements", {
+        method: "POST",
+        body: JSON.stringify({
+          title: String(fd.get("title")),
+          body: String(fd.get("body")),
+          audience,
+        }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not post");
+    }
     toast.success("Announcement posted");
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["announcements"] });
@@ -127,7 +134,7 @@ function AnnouncementsPage() {
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {formatDistanceToNow(new Date(a.created_at))} ago
+                  {formatDistanceToNow(new Date(a.createdAt))} ago
                 </p>
                 <p className="mt-3 whitespace-pre-wrap">{a.body}</p>
               </div>
