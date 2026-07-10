@@ -45,10 +45,15 @@ Demo accounts (seeded): `admin|teacher|student|parent@greenwood.test`, password 
 
 ## Deployment
 
-- **Docker**: `docker compose up --build` (see `docker-compose.yml`; the image serves on :3000
-  with a `/api/health` healthcheck).
-- **Any Node host**: `bun run build && node .output/server/index.mjs`.
-- **Vercel/Netlify/Cloudflare**: build with `NITRO_PRESET=vercel|netlify|cloudflare-module`.
+Standard Node.js deployment — no containers required. See **[DEPLOYMENT.md](DEPLOYMENT.md)** for
+the full Linux/Windows guide (Node 22 + PM2 + Nginx + PostgreSQL via Supabase).
+
+- Quick version: `bun run build && node .output/server/index.mjs` (the build output in
+  `.output/` is self-contained — copy it to the server, no `node_modules` needed).
+- Process manager: `pm2 start ecosystem.config.cjs` (config in repo root).
+- Reverse proxy: `deploy/nginx.conf` (TLS termination, gzip, static asset caching,
+  security headers, `/api/health` for load-balancer checks).
+- Managed platforms: build with `NITRO_PRESET=vercel|netlify|cloudflare-module`.
 
 CI (`.github/workflows/ci.yml`) runs lint, build, and typecheck on every push/PR.
 

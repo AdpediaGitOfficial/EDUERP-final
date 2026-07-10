@@ -25,8 +25,8 @@ export default defineConfig(({ command }) => ({
     }),
     // Server build target. `node-server` produces a self-contained Node app in
     // .output/ (run with `node .output/server/index.mjs`) — deployable to any
-    // host or the provided Dockerfile. Swap the preset to target other platforms
-    // (e.g. "vercel", "netlify", "cloudflare-module").
+    // Linux/Windows server (see DEPLOYMENT.md). Swap the preset to target other
+    // platforms (e.g. "vercel", "netlify", "cloudflare-module").
     ...(command === "build" ? [nitro({ preset: process.env.NITRO_PRESET || "node-server" })] : []),
     viteReact(),
   ],

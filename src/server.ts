@@ -44,22 +44,34 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+// Baseline security headers, applied even when no reverse proxy sits in front.
+// (Nginx re-asserts these plus HSTS at the edge — see deploy/nginx.conf.)
+function withSecurityHeaders(response: Response): Response {
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  return response;
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
-    // Lightweight liveness probe for load balancers / container orchestrators.
+    // Lightweight liveness probe for load balancers / process managers.
     if (new URL(request.url).pathname === "/api/health") {
       return Response.json({ status: "ok", uptime: process.uptime() });
     }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response));
     } catch (error) {
       console.error(error);
-      return new Response(renderErrorPage(), {
-        status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      return withSecurityHeaders(
+        new Response(renderErrorPage(), {
+          status: 500,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      );
     }
   },
 };

@@ -260,3 +260,62 @@ The Gap Analysis & Advanced Feature Completion phase requires `School-ERP-Specif
 backend to load pages and run queries as evidence. Neither spec document was attached to this
 session and the backend is network-blocked, so that phase was not started rather than done
 speculatively.
+
+---
+
+## Branch `standard-deployment` — Docker-free standard Node.js deployment
+
+Rework of the deployment layer only; no application/auth/data code paths changed apart from the
+security-header wrapper noted below.
+
+### Removed
+
+- `Dockerfile`, `docker-compose.yml`, and all Docker references in README/vite config. There
+  were no other container scripts to remove.
+
+### Added
+
+- `ecosystem.config.cjs` — PM2 cluster config (one worker per CPU, 512 MB restart guard,
+  zero-downtime `pm2 reload`, log files under `logs/`).
+- `deploy/nginx.conf` — TLS 1.2/1.3 + HTTP/2, HTTP→HTTPS redirect, HSTS + security headers,
+  gzip, immutable disk-served `/assets/*` (bypasses Node), rate limiting on `/_serverFn/` RPCs
+  (path verified against the built server bundle), unlogged `/api/health`.
+- `DEPLOYMENT.md` — full Linux/Windows guide (Node 22 + PM2 + Nginx + PostgreSQL via Supabase),
+  build/update/security/monitoring runbooks.
+- Baseline security headers set by the app itself in `src/server.ts` (nosniff, DENY framing,
+  referrer + permissions policy) so they apply even without the proxy — verified on the
+  production build.
+
+### On the requested stack
+
+- **Next.js**: app is TanStack Start; the deployable artifact is already a plain Node SSR
+  server (`.output/server/index.mjs`), which is what PM2/Nginx front. Framework swap = full
+  rewrite; not done (see "On the fixed tech-stack note" above).
+- **PostgreSQL**: already the database (Supabase = Postgres + Auth + RLS).
+- **Redis**: intentionally not added — JWT bearer auth means no server-side session store, and
+  no server-side cache/queue exists to back. Documented in DEPLOYMENT.md with the extension
+  point if one is added later.
+
+### Route / navigation / API audit
+
+- All 86 static `Link`/`navigate` targets cross-checked against the 89 registered route paths
+  in the generated route tree: **0 broken links**. (TanStack Router also type-checks every
+  typed navigation; `tsc --noEmit` passes.)
+- No raw `<a href="/...">` internal anchors bypassing the router.
+- No duplicate route paths (the doubled `/` in the tree is the root-layout + index pair).
+- API integrations are the Supabase clients + `/_serverFn/` RPCs; both verified working at the
+  transport level on the production build (health check, SSR responses). Live data verification
+  still requires backend network access → `scripts/verify-regression.mjs` (covers the six role
+  dashboards' identity/RBAC chain and seed integrity).
+
+### Verification on this branch
+
+| Check                                               | Result                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `bun run build` (node-server output)                | **PASS**                                                                              |
+| `tsc --noEmit` / `bun run lint`                     | **PASS** (0 errors)                                                                   |
+| Production server boots; `/api/health` ok           | **PASS**                                                                              |
+| Security headers present on responses               | **PASS** (verified with curl)                                                         |
+| Broken links / duplicate routes                     | **PASS** (0 / 0, method above)                                                        |
+| `grep -ri docker` (code + docs, excluding this log) | **PASS** — clean                                                                      |
+| Role dashboards with live data                      | **BLOCKED here** (supabase.co unreachable) — run `node scripts/verify-regression.mjs` |
