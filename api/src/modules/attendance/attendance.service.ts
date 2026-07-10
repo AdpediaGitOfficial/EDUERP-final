@@ -1,0 +1,124 @@
+import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import { Prisma, attendance_status } from "@prisma/client";
+import { PrismaService } from "../../infra/database/prisma.service";
+import type { AuthUser } from "../../common/decorators/current-user.decorator";
+
+/**
+ * RLS translation (api/db/rls-policies-extracted.csv):
+ *   attendance_admin_all     -> admin: read + write, unrestricted
+ *   attendance_teacher_class -> teacher: read + write for rows whose class_id is in
+ *                               their teacher_classes (policy is ALL, so marking too)
+ *   attendance_parent_read   -> parent: rows of children via parent_student
+ *   attendance_self_read     -> student: rows of their own student record
+ */
+@Injectable()
+export class AttendanceService {
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  private scopeFilter(actor: AuthUser): Prisma.attendanceWhereInput | null {
+    if (actor.roles.includes("admin")) return {};
+    if (actor.roles.includes("teacher")) {
+      return { classes: { teacher_classes: { some: { teacher_id: actor.id } } } };
+    }
+    if (actor.roles.includes("parent")) {
+      return { students: { parent_student: { some: { parent_id: actor.id } } } };
+    }
+    if (actor.roles.includes("student")) {
+      return { students: { profile_id: actor.id } };
+    }
+    return null;
+  }
+
+  async list(
+    actor: AuthUser,
+    opts: {
+      studentId?: string;
+      classId?: string;
+      from?: string;
+      to?: string;
+      page?: number;
+      pageSize?: number;
+    },
+  ) {
+    const scope = this.scopeFilter(actor);
+    const page = opts.page ?? 1;
+    const pageSize = Math.min(opts.pageSize ?? 100, 500);
+    if (scope === null) return { total: 0, page, pageSize, rows: [] };
+
+    const where: Prisma.attendanceWhereInput = {
+      AND: [
+        scope,
+        opts.studentId ? { student_id: opts.studentId } : {},
+        opts.classId ? { class_id: opts.classId } : {},
+        opts.from ? { date: { gte: new Date(opts.from) } } : {},
+        opts.to ? { date: { lte: new Date(opts.to) } } : {},
+      ],
+    };
+    const [total, rows] = await Promise.all([
+      this.prisma.attendance.count({ where }),
+      this.prisma.attendance.findMany({
+        where,
+        orderBy: { date: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          students: {
+            select: { id: true, roll_no: true, profiles: { select: { full_name: true } } },
+          },
+        },
+      }),
+    ]);
+    return {
+      total,
+      page,
+      pageSize,
+      rows: rows.map((a) => ({
+        id: a.id,
+        studentId: a.student_id,
+        studentName: a.students?.profiles?.full_name ?? null,
+        rollNo: a.students?.roll_no ?? null,
+        classId: a.class_id,
+        date: a.date,
+        status: a.status,
+        markedBy: a.marked_by,
+      })),
+    };
+  }
+
+  /**
+   * Marking (upsert on the (student_id, date) unique key). Allowed for admin
+   * everywhere and for teachers on their own classes — the exact write surface
+   * of attendance_admin_all + attendance_teacher_class (both cmd=ALL).
+   */
+  async mark(
+    actor: AuthUser,
+    classId: string,
+    date: string,
+    entries: { studentId: string; status: string }[],
+  ) {
+    if (!actor.roles.includes("admin")) {
+      if (!actor.roles.includes("teacher")) throw new ForbiddenException();
+      const assigned = await this.prisma.teacher_classes.findFirst({
+        where: { teacher_id: actor.id, class_id: classId },
+      });
+      if (!assigned) throw new ForbiddenException("Not your class");
+    }
+    const day = new Date(date);
+    await this.prisma.$transaction(
+      entries.map((e) =>
+        this.prisma.attendance.upsert({
+          where: { student_id_date: { student_id: e.studentId, date: day } },
+          create: {
+            student_id: e.studentId,
+            class_id: classId,
+            date: day,
+            status: e.status as attendance_status,
+            marked_by: actor.id,
+          },
+          update: { status: e.status as attendance_status, marked_by: actor.id },
+        }),
+      ),
+    );
+    return { ok: true, marked: entries.length };
+  }
+}

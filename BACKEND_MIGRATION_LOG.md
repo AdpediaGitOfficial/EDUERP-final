@@ -5,10 +5,12 @@ nothing is marked migrated until it is tested against a real database, and the f
 layer for a module is only cut over after its API is verified.
 
 **Honest status up front:** this branch delivers Phases 1–4 fully (extraction, skeleton, auth,
-RLS→guard framework) plus the first two Phase 5 modules (**users**, **students**), all verified
-by 19 passing end-to-end tests against the real schema and seed data. The remaining 13 modules
-and the frontend cutover are **NOT migrated yet** — the frontend still runs entirely on
-`@supabase/supabase-js`, intentionally, so nothing regresses while API modules land one by one.
+RLS→guard framework) plus the first **seven** Phase 5 modules (users, students, staff/teachers,
+classes/academics, attendance, homework/gradebook, fees/payments), all verified by **39 passing
+end-to-end tests** against the real schema and seed data. The remaining 8 modules (HR, Finance,
+Library, Fleet, Assets, Complaints, Communication, Reports/Analytics) and the frontend cutover
+are **NOT migrated yet** — the frontend still runs entirely on `@supabase/supabase-js`,
+intentionally, so nothing regresses while API modules land one by one.
 
 ## Section 1 — Extracted from Supabase (build checklist)
 
@@ -100,11 +102,16 @@ Non-1:1 translations so far (and how they were resolved):
 
 ## Phase 5 — Module-by-module status
 
-| #    | Module                                                                                                                                                              | API                       | Frontend cut over | Verified                                                                                                |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
-| 1    | Users/Profiles                                                                                                                                                      | **Migrated**              | Not yet           | e2e: admin list, self-read, teacher→student/parent profile scope, student→foreign profile 403           |
-| 2    | Students                                                                                                                                                            | **Migrated** (read paths) | Not yet           | e2e: admin 5212, teacher ≤7 classes subset, parent exactly 1 child, student self-only, foreign id → 404 |
-| 3–15 | Staff/Teachers, Classes/Academics, Attendance, Homework/Gradebook, Fees/Payments, HR, Finance, Library, Fleet, Assets, Complaints, Communication, Reports/Analytics | **Not migrated**          | Not yet           | —                                                                                                       |
+| #    | Module                                                                            | API                                  | Frontend cut over | Verified                                                                                                                                                                                      |
+| ---- | --------------------------------------------------------------------------------- | ------------------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Users/Profiles                                                                    | **Migrated**                         | Not yet           | e2e: admin list, self-read, teacher→student/parent profile scope, student→foreign profile 403                                                                                                 |
+| 2    | Students                                                                          | **Migrated** (read paths)            | Not yet           | e2e: admin 5212, teacher ≤7 classes subset, parent exactly 1 child, student self-only, foreign id → 404                                                                                       |
+| 3    | Staff/Teachers                                                                    | **Migrated** (read paths)            | Not yet           | e2e: admin full directory (221 staff, 24+ teachers); teacher self-row only (by-email match, exactly as `teachers_self_read`); student zero teachers; class assignments own-or-admin           |
+| 4    | Classes/Academics                                                                 | **Migrated** (read paths)            | Not yet           | e2e: all 4 roles read 100 sections (`*_read_auth: true`); class detail resolves subjects + student count; timetable filters by teacher                                                        |
+| 5    | Attendance                                                                        | **Migrated** (read + mark)           | Not yet           | e2e: student self-only, parent child-only, teacher class-subset < admin; teacher marks own class (upsert on student+date), foreign class 403, student 403                                     |
+| 6    | Homework/Gradebook                                                                | **Migrated** (core paths)            | Not yet           | e2e: all roles read (`homework_read_auth`); teacher creates, student 403; exam results student self-only / teacher class scope; submissions read+grade scoped                                 |
+| 7    | Fees/Payments                                                                     | **Migrated** (read + record-payment) | Not yet           | e2e: parent/student child-only invariant, admin school-wide totals; teacher payment write 403; admin payment insert fires `update_fee_on_payment` trigger (amount_paid recomputed — verified) |
+| 8–15 | HR, Finance, Library, Fleet, Assets, Complaints, Communication, Reports/Analytics | **Not migrated**                     | Not yet           | —                                                                                                                                                                                             |
 
 Write paths for Students (admit/promote/bulk ops — currently TanStack server functions calling
 `search_students`/`promote_students`/`next_admission_no`) migrate together with the frontend
@@ -125,20 +132,22 @@ Ported now: `handle_new_user` (registration). Pending, tied to their modules:
 
 ## Phase 9 — Regression verification (current state)
 
-`api/test/e2e.test.ts` — **19/19 pass** against the real schema + seed data
+`api/test/e2e.test.ts` + `api/test/modules.test.ts` — **39/39 pass** against the real schema + seed data
 (`npm test` in `api/`, ~2 s):
 
-| Check                                                                       | Result                                                                                           |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Login all 4 demo accounts with migrated hashes                              | **PASS**                                                                                         |
-| Identity-chain names resolve (Anjali Nair / Anika Singh / Priya Singh)      | **PASS**                                                                                         |
-| Wrong password rejected; tokenless `/me` rejected; refresh rotation works   | **PASS**                                                                                         |
-| Students scoping per extracted RLS (admin/teacher/parent/student/no-policy) | **PASS**                                                                                         |
-| Cross-tenant probe: student fetching another student's record → 404         | **PASS**                                                                                         |
-| Parent→child guardian link intact through the new API                       | **PASS**                                                                                         |
-| Users module scoping incl. teacher 403 on admin directory                   | **PASS**                                                                                         |
-| N+1 check on migrated endpoints                                             | **PASS** — list endpoints are 2–3 fixed queries (count + page + roles batch); no per-row queries |
-| Full-app regression (all dashboards, all roles, production data)            | **PENDING** — requires the remaining modules + frontend cutover; do not claim before then        |
+| Check                                                                                                                                         | Result                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Login all 4 demo accounts with migrated hashes                                                                                                | **PASS**                                                                                         |
+| Identity-chain names resolve (Anjali Nair / Anika Singh / Priya Singh)                                                                        | **PASS**                                                                                         |
+| Wrong password rejected; tokenless `/me` rejected; refresh rotation works                                                                     | **PASS**                                                                                         |
+| Students scoping per extracted RLS (admin/teacher/parent/student/no-policy)                                                                   | **PASS**                                                                                         |
+| Cross-tenant probe: student fetching another student's record → 404                                                                           | **PASS**                                                                                         |
+| Modules 3–7 per-role scoping (staff directory, teacher self-read-by-email, attendance mark rights, homework write rights, fee/payment scopes) | **PASS** — 20 additional cases                                                                   |
+| Write-path/trigger coexistence: payment insert recomputes fee status via the still-active DB trigger                                          | **PASS**                                                                                         |
+| Parent→child guardian link intact through the new API                                                                                         | **PASS**                                                                                         |
+| Users module scoping incl. teacher 403 on admin directory                                                                                     | **PASS**                                                                                         |
+| N+1 check on migrated endpoints                                                                                                               | **PASS** — list endpoints are 2–3 fixed queries (count + page + roles batch); no per-row queries |
+| Full-app regression (all dashboards, all roles, production data)                                                                              | **PENDING** — requires the remaining modules + frontend cutover; do not claim before then        |
 
 ## How to run
 
