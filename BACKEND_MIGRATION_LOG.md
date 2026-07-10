@@ -5,12 +5,12 @@ nothing is marked migrated until it is tested against a real database, and the f
 layer for a module is only cut over after its API is verified.
 
 **Honest status up front:** this branch delivers Phases 1–4 fully (extraction, skeleton, auth,
-RLS→guard framework) plus the first **seven** Phase 5 modules (users, students, staff/teachers,
-classes/academics, attendance, homework/gradebook, fees/payments), all verified by **39 passing
-end-to-end tests** against the real schema and seed data. The remaining 8 modules (HR, Finance,
-Library, Fleet, Assets, Complaints, Communication, Reports/Analytics) and the frontend cutover
-are **NOT migrated yet** — the frontend still runs entirely on `@supabase/supabase-js`,
-intentionally, so nothing regresses while API modules land one by one.
+RLS→guard framework) plus **all fifteen Phase 5 modules API-side**, verified by **57 passing end-to-end tests**
+against the real schema and seed data. What is NOT done: the **frontend cutover** — the app
+still runs entirely on `@supabase/supabase-js`, intentionally, per the module-by-module
+discipline (each module's frontend flips only against a reachable backend, verified per role);
+and the deeper write paths listed per module below (admissions pipeline, payroll generation,
+fleet CRUD, etc.) which migrate together with each module's frontend cutover.
 
 ## Section 1 — Extracted from Supabase (build checklist)
 
@@ -102,16 +102,23 @@ Non-1:1 translations so far (and how they were resolved):
 
 ## Phase 5 — Module-by-module status
 
-| #    | Module                                                                            | API                                  | Frontend cut over | Verified                                                                                                                                                                                      |
-| ---- | --------------------------------------------------------------------------------- | ------------------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | Users/Profiles                                                                    | **Migrated**                         | Not yet           | e2e: admin list, self-read, teacher→student/parent profile scope, student→foreign profile 403                                                                                                 |
-| 2    | Students                                                                          | **Migrated** (read paths)            | Not yet           | e2e: admin 5212, teacher ≤7 classes subset, parent exactly 1 child, student self-only, foreign id → 404                                                                                       |
-| 3    | Staff/Teachers                                                                    | **Migrated** (read paths)            | Not yet           | e2e: admin full directory (221 staff, 24+ teachers); teacher self-row only (by-email match, exactly as `teachers_self_read`); student zero teachers; class assignments own-or-admin           |
-| 4    | Classes/Academics                                                                 | **Migrated** (read paths)            | Not yet           | e2e: all 4 roles read 100 sections (`*_read_auth: true`); class detail resolves subjects + student count; timetable filters by teacher                                                        |
-| 5    | Attendance                                                                        | **Migrated** (read + mark)           | Not yet           | e2e: student self-only, parent child-only, teacher class-subset < admin; teacher marks own class (upsert on student+date), foreign class 403, student 403                                     |
-| 6    | Homework/Gradebook                                                                | **Migrated** (core paths)            | Not yet           | e2e: all roles read (`homework_read_auth`); teacher creates, student 403; exam results student self-only / teacher class scope; submissions read+grade scoped                                 |
-| 7    | Fees/Payments                                                                     | **Migrated** (read + record-payment) | Not yet           | e2e: parent/student child-only invariant, admin school-wide totals; teacher payment write 403; admin payment insert fires `update_fee_on_payment` trigger (amount_paid recomputed — verified) |
-| 8–15 | HR, Finance, Library, Fleet, Assets, Complaints, Communication, Reports/Analytics | **Not migrated**                     | Not yet           | —                                                                                                                                                                                             |
+| #   | Module                    | API                                                                             | Frontend cut over | Verified                                                                                                                                                                                                          |
+| --- | ------------------------- | ------------------------------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Users/Profiles            | **Migrated**                                                                    | Not yet           | e2e: admin list, self-read, teacher→student/parent profile scope, student→foreign profile 403                                                                                                                     |
+| 2   | Students                  | **Migrated** (read paths)                                                       | Not yet           | e2e: admin 5212, teacher ≤7 classes subset, parent exactly 1 child, student self-only, foreign id → 404                                                                                                           |
+| 3   | Staff/Teachers            | **Migrated** (read paths)                                                       | Not yet           | e2e: admin full directory (221 staff, 24+ teachers); teacher self-row only (by-email match, exactly as `teachers_self_read`); student zero teachers; class assignments own-or-admin                               |
+| 4   | Classes/Academics         | **Migrated** (read paths)                                                       | Not yet           | e2e: all 4 roles read 100 sections (`*_read_auth: true`); class detail resolves subjects + student count; timetable filters by teacher                                                                            |
+| 5   | Attendance                | **Migrated** (read + mark)                                                      | Not yet           | e2e: student self-only, parent child-only, teacher class-subset < admin; teacher marks own class (upsert on student+date), foreign class 403, student 403                                                         |
+| 6   | Homework/Gradebook        | **Migrated** (core paths)                                                       | Not yet           | e2e: all roles read (`homework_read_auth`); teacher creates, student 403; exam results student self-only / teacher class scope; submissions read+grade scoped                                                     |
+| 7   | Fees/Payments             | **Migrated** (read + record-payment)                                            | Not yet           | e2e: parent/student child-only invariant, admin school-wide totals; teacher payment write 403; admin payment insert fires `update_fee_on_payment` trigger (amount_paid recomputed — verified)                     |
+| 8   | HR                        | **Migrated** (leave read/create/decide, balances, payroll runs, expense claims) | Not yet           | e2e: admin all, own-rows subset for staff, student payroll zero rows, student leave decision 403                                                                                                                  |
+| 9   | Finance                   | **Migrated** (expenses read/create, running ledger)                             | Not yet           | e2e: accountant                                                                                                                                                                                                   | admin only; teacher/parent/student 403 on expenses AND ledger |
+| 10  | Library                   | **Migrated** (catalog, loans, return)                                           | Not yet           | e2e: catalog readable by every role (`lb_read_all`); loans self/child scoped, teacher zero rows, return admin-only. Catalog empty in migration-only dataset (prod seeded out-of-band) — rule asserted, not counts |
+| 11  | Fleet                     | **Migrated** (vehicles/drivers/routes/route-students reads)                     | Not yet           | e2e: fleet_manager                                                                                                                                                                                                | admin                                                         | reception read (admin verified; fleet/reception accounts exist only in prod), teacher/student 403, parent sees only child's routes |
+| 12  | Assets                    | **Migrated** (registry, allocations)                                            | Not yet           | e2e: admin+teacher read (`a_read_staff`), parent/student 403, allocations admin-only                                                                                                                              |
+| 13  | Complaints                | **Migrated** (list/create/status/messages)                                      | Not yet           | e2e: parent files + sees own, admin sees all, non-raiser teacher does NOT see it, status workflow admin-only                                                                                                      |
+| 14  | Communication             | **Migrated** (announcements w/ audience scoping, broadcasts, holidays)          | Not yet           | e2e: teachers-only announcement invisible to student, student create 403, holidays readable by all                                                                                                                |
+| 15  | Reports/Analytics + Audit | **Migrated** (admin dashboard aggregates, audit log)                            | Not yet           | e2e: aggregates match real data (5212 students, 100 classes, fee totals), non-admin 403                                                                                                                           |
 
 Write paths for Students (admit/promote/bulk ops — currently TanStack server functions calling
 `search_students`/`promote_students`/`next_admission_no`) migrate together with the frontend
@@ -132,7 +139,7 @@ Ported now: `handle_new_user` (registration). Pending, tied to their modules:
 
 ## Phase 9 — Regression verification (current state)
 
-`api/test/e2e.test.ts` + `api/test/modules.test.ts` — **39/39 pass** against the real schema + seed data
+`api/test/{e2e,modules,modules2}.test.ts` — **57/57 pass** against the real schema + seed data
 (`npm test` in `api/`, ~2 s):
 
 | Check                                                                                                                                         | Result                                                                                           |

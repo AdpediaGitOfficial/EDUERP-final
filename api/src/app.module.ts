@@ -9,6 +9,14 @@ import { AcademicsModule } from "./modules/academics/academics.module";
 import { AttendanceModule } from "./modules/attendance/attendance.module";
 import { HomeworkModule } from "./modules/homework/homework.module";
 import { FeesModule } from "./modules/fees/fees.module";
+import { LibraryModule } from "./modules/library/library.module";
+import { ComplaintsModule } from "./modules/complaints/complaints.module";
+import { CommunicationModule } from "./modules/communication/communication.module";
+import { HrModule } from "./modules/hr/hr.module";
+import { FinanceModule } from "./modules/finance/finance.module";
+import { FleetModule } from "./modules/fleet/fleet.module";
+import { AssetsModule } from "./modules/assets/assets.module";
+import { ReportsModule } from "./modules/reports/reports.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -23,11 +31,14 @@ import { HealthController } from "./health.controller";
     AttendanceModule,
     HomeworkModule,
     FeesModule,
-    // Remaining modules land one at a time, in dependency order, each verified
-    // against its extracted RLS policies before the next starts — see
-    // BACKEND_MIGRATION_LOG.md for the order and current status:
-    // hr, finance, library, fleet, assets, complaints, communication,
-    // reports, analytics, audit.
+    HrModule,
+    FinanceModule,
+    LibraryModule,
+    FleetModule,
+    AssetsModule,
+    ComplaintsModule,
+    CommunicationModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
 })
