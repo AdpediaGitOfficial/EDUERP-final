@@ -1,0 +1,14 @@
+REVOKE EXECUTE ON FUNCTION public.fleet_renewals_due(integer) FROM anon, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_class_stats(uuid[]) FROM anon, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.is_parent_of_student(uuid) FROM anon, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.is_teacher_of_class(uuid) FROM anon, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.is_teacher_of_student(uuid) FROM anon, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.next_admission_no() FROM anon, PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.promote_students(uuid, uuid, uuid[]) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.fleet_renewals_due(integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_class_stats(uuid[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_parent_of_student(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_teacher_of_class(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_teacher_of_student(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.next_admission_no() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.promote_students(uuid, uuid, uuid[]) TO authenticated;

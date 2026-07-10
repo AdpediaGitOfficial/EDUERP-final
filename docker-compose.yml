@@ -1,0 +1,38 @@
+# Local dev / self-hosted deployment for the Greenwood School ERP (backend Path A: Supabase).
+#
+# Two ways to provide the backend:
+#   1. Supabase Cloud (recommended): point .env at your own Supabase project and run only `web`.
+#   2. Fully local: run the Supabase local stack (Postgres + Auth + PostgREST + Storage) with
+#      the Supabase CLI — `supabase start` in this repo uses supabase/config.toml and applies
+#      supabase/migrations/ automatically — then point .env at the local URLs it prints.
+#      (The full Supabase stack is ~10 services; the CLI manages them better than hand-rolled
+#      compose entries.)
+services:
+  web:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_PROJECT_ID: ${VITE_SUPABASE_PROJECT_ID}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY}
+        VITE_PAYMENTS_CLIENT_TOKEN: ${VITE_PAYMENTS_CLIENT_TOKEN:-}
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_PROJECT_ID: ${SUPABASE_PROJECT_ID}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 3s
+      retries: 3

@@ -1,0 +1,183 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { PageHeader } from "@/components/app-shell";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Plus, Pencil, Trash2, FolderTree } from "lucide-react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { formatMoney } from "@/lib/assets-util";
+
+export const Route = createFileRoute("/_authenticated/assets/categories")({
+  component: Categories,
+});
+
+function Categories() {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<{
+    id: string;
+    name: string;
+    description: string | null;
+  } | null>(null);
+
+  const { data: categories } = useQuery({
+    queryKey: ["assets-cats"],
+    queryFn: async () =>
+      (await supabase.from("asset_categories").select("*").order("name")).data ?? [],
+  });
+  const { data: assets } = useQuery({
+    queryKey: ["assets-for-cats"],
+    queryFn: async () =>
+      (await supabase.from("assets").select("category_id,current_value,purchase_price")).data ?? [],
+  });
+
+  const stats = useMemo(() => {
+    const m = new Map<string, { count: number; value: number }>();
+    for (const a of assets ?? []) {
+      if (!a.category_id) continue;
+      const cur = m.get(a.category_id) ?? { count: 0, value: 0 };
+      cur.count++;
+      cur.value += Number(a.current_value ?? a.purchase_price ?? 0);
+      m.set(a.category_id, cur);
+    }
+    return m;
+  }, [assets]);
+
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const payload = {
+      name: String(fd.get("name") || ""),
+      description: String(fd.get("description") || "") || null,
+    };
+    const q = editing
+      ? await supabase.from("asset_categories").update(payload).eq("id", editing.id)
+      : await supabase.from("asset_categories").insert(payload);
+    if (q.error) return toast.error(q.error.message);
+    toast.success(editing ? "Category updated" : "Category added");
+    setOpen(false);
+    setEditing(null);
+    qc.invalidateQueries({ queryKey: ["assets-cats"] });
+  };
+
+  const del = async (id: string) => {
+    if (!confirm("Delete this category? Assets will keep their name but lose the link.")) return;
+    const { error } = await supabase.from("asset_categories").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Deleted");
+    qc.invalidateQueries({ queryKey: ["assets-cats"] });
+  };
+
+  return (
+    <>
+      <PageHeader
+        title="Categories"
+        subtitle="Group assets to see counts and total book value per category."
+        action={
+          <Dialog
+            open={open}
+            onOpenChange={(o) => {
+              setOpen(o);
+              if (!o) setEditing(null);
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="size-4" /> New category
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editing ? "Edit" : "Add"} category</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={submit} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Name</Label>
+                  <Input name="name" defaultValue={editing?.name ?? ""} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Description</Label>
+                  <Input name="description" defaultValue={editing?.description ?? ""} />
+                </div>
+                <Button type="submit" className="w-full">
+                  Save
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        }
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {(categories ?? []).map((c: any) => {
+          const s = stats.get(c.id) ?? { count: 0, value: 0 };
+          return (
+            <Card key={c.id} className="p-5 rounded-2xl">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-10 rounded-xl bg-primary/10 text-primary grid place-items-center shrink-0">
+                    <FolderTree className="size-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{c.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {c.description ?? "—"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditing({ id: c.id, name: c.name, description: c.description });
+                      setOpen(true);
+                    }}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" onClick={() => del(c.id)}>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">Assets</div>
+                  <div className="font-semibold">{s.count}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Value</div>
+                  <div className="font-semibold">{formatMoney(s.value)}</div>
+                </div>
+              </div>
+              <Link
+                to="/assets/registry"
+                search={{ category: c.id }}
+                className="mt-4 inline-block text-sm text-primary hover:underline"
+              >
+                View assets →
+              </Link>
+            </Card>
+          );
+        })}
+        {(categories ?? []).length === 0 && (
+          <Card className="p-8 rounded-2xl text-center text-muted-foreground col-span-full">
+            No categories yet.
+          </Card>
+        )}
+      </div>
+    </>
+  );
+}
