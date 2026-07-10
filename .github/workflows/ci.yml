@@ -26,3 +26,38 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_ci_placeholder"
       - name: Typecheck
         run: bun run typecheck
+
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: erp
+          POSTGRES_PASSWORD: erp
+          POSTGRES_DB: greenwood
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U erp" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://erp:erp@localhost:5432/greenwood?schema=public
+      JWT_SECRET: ci-secret
+      PGPASSWORD: erp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Grant superuser (alignment script uses session_replication_role)
+        run: psql -h localhost -U erp -d greenwood -c "ALTER ROLE erp SUPERUSER;"
+      - name: Build schema from extracted migrations
+        run: api/db/apply-migrations.sh
+      - name: Install API dependencies
+        run: cd api && npm ci
+      - name: Generate Prisma client
+        run: cd api && npx prisma generate
+      - name: Typecheck API
+        run: cd api && npm run typecheck
+      - name: E2E tests (auth + RLS-scoping against real schema)
+        run: cd api && npm test
