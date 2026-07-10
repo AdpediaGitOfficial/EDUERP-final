@@ -182,12 +182,20 @@ Flipped and browser-verified so far (screenshots in `docs/screenshots/nestjs-mod
 | Classes (admin)      | `GET /classes` (+ `/years`, `/teacher-options`), `POST /classes` | 100 sections render with real student counts (Grade 8A = 52), 30-day attendance %, class-teacher names, capacity bars — all from the API |
 | My Children (parent) | parent-scoped `GET /students`, `POST /students/link-parent`      | Anika Singh + her class render from the parent-scoped endpoint                                                                           |
 
-Supporting API work this pass: ported the `get_class_stats` DB function into
+Ported additionally for the students list: `search_students` (rich filter/sort/
+paginate returning total + rows, role-scoped), `find_duplicate_students`, a
+`row-extras` batch endpoint (30-day attendance, fee status, exam performance,
+guardian contact — scoped to visible ids), and CSV export/promote-preview now
+paging the search endpoint. Bulk write actions (admit/promote/route/status) still
+run through their TanStack server functions on the legacy Supabase session and
+flip in a later pass; students.tsx itself has **0 direct supabase references**.
+
+Supporting API work the classes/children pass: ported the `get_class_stats` DB function into
 `AcademicsService.listClasses` (30-day attendance, present = present|late); added
 class create + year/teacher-option helpers; added holiday create; added
 `POST /students/link-parent` (ps_admin_all — the only write policy, so parent
-self-link is rejected exactly as RLS did). **8/8 module UI checks pass; API suite
-now 63/63** (`cutover.test.ts` covers the new write/aggregate endpoints).
+self-link is rejected exactly as RLS did). module UI checks pass; API suite
+now 69/69 (`cutover.test.ts` covers the new write/aggregate endpoints).
 
 `grep -rn supabase` on the four flipped pages: **0 references** each.
 

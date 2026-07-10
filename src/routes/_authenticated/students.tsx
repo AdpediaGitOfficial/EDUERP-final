@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,11 +72,8 @@ function StudentsPage() {
     enabled: !!user && isTeacher,
     queryKey: ["teacher-class-ids", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("teacher_classes")
-        .select("class_id")
-        .eq("teacher_id", user!.id);
-      return (data ?? []).map((r) => r.class_id);
+      const rows = await apiGet<{ classId: string }[]>(`/teachers/${user!.id}/classes`);
+      return rows.map((r) => r.classId);
     },
   });
 
@@ -84,27 +81,32 @@ function StudentsPage() {
     enabled: !!user,
     queryKey: ["all-classes", isTeacher ? assignedClassIds : "all"],
     queryFn: async () => {
-      let q = supabase.from("classes").select("id,name,section");
-      if (isTeacher) q = q.in("id", assignedClassIds ?? []);
-      return (await q).data ?? [];
+      const all = await apiGet<any[]>("/classes");
+      const rows = all.map((c) => ({ id: c.id, name: c.name, section: c.section }));
+      if (isTeacher) {
+        const set = new Set(assignedClassIds ?? []);
+        return rows.filter((c) => set.has(c.id));
+      }
+      return rows;
     },
   });
   const { data: students } = useQuery({
     enabled: !!user && (!isTeacher || !!assignedClassIds),
     queryKey: ["students-list", isTeacher ? assignedClassIds : "all"],
     queryFn: async () => {
-      let q = supabase
-        .from("students")
-        .select(
-          "id, admission_no, roll_no, admission_date, gender, profile_id, class_id, profiles(full_name,email), classes(name,section)",
-        )
-        .order("admission_date", { ascending: false });
-      if (isTeacher) {
-        if (!assignedClassIds || assignedClassIds.length === 0) return [];
-        q = q.in("class_id", assignedClassIds);
-      }
-      const { data } = await q;
-      return data ?? [];
+      if (isTeacher && (!assignedClassIds || assignedClassIds.length === 0)) return [];
+      const res = await apiGet<{ rows: any[] }>("/students?pageSize=200");
+      return res.rows.map((s) => ({
+        id: s.id,
+        admission_no: s.admissionNo,
+        roll_no: s.rollNo,
+        admission_date: s.admissionDate,
+        gender: s.gender,
+        profile_id: s.profile_id ?? null,
+        class_id: s.class?.id ?? null,
+        profiles: { full_name: s.fullName, email: s.email },
+        classes: s.class ? { name: s.class.name, section: s.class.section } : null,
+      }));
     },
   });
 
@@ -114,54 +116,20 @@ function StudentsPage() {
     enabled: isTeacher && studentIds.length > 0,
     queryKey: ["students-extras", studentIds.join(",")],
     queryFn: async () => {
-      const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-      const [{ data: att }, { data: ex }, { data: fa }, { data: ps }] = await Promise.all([
-        supabase
-          .from("attendance")
-          .select("student_id,status")
-          .in("student_id", studentIds)
-          .gte("date", since),
-        supabase
-          .from("exam_results")
-          .select("student_id,marks_obtained,exams(max_marks)")
-          .in("student_id", studentIds),
-        supabase
-          .from("fee_assignments")
-          .select("student_id,status,amount_due,amount_paid")
-          .in("student_id", studentIds),
-        supabase
-          .from("parent_student")
-          .select(
-            "student_id,relationship,profiles!parent_student_parent_id_fkey(full_name,phone,email)",
-          )
-          .in("student_id", studentIds),
-      ]);
-      const attMap: Record<string, { total: number; present: number }> = {};
-      for (const r of att ?? []) {
-        const m = (attMap[r.student_id] ||= { total: 0, present: 0 });
-        m.total += 1;
-        if (r.status === "present" || r.status === "late") m.present += 1;
-      }
-      const perfMap: Record<string, { got: number; max: number }> = {};
-      for (const r of (ex as any[]) ?? []) {
-        const m = (perfMap[r.student_id] ||= { got: 0, max: 0 });
-        m.got += Number(r.marks_obtained) || 0;
-        m.max += Number(r.exams?.max_marks) || 0;
-      }
-      const feeMap: Record<string, string> = {};
-      for (const r of fa ?? []) feeMap[r.student_id] = r.status;
+      const res = await apiFetch("/students/row-extras", {
+        method: "POST",
+        body: JSON.stringify({ ids: studentIds }),
+      });
+      const data = res
+        ? await res.json()
+        : { attendance: {}, fees: {}, performance: {}, parent: {} };
+      const attMap: Record<string, { total: number; present: number }> = data.attendance ?? {};
+      const perfMap: Record<string, { got: number; max: number }> = data.performance ?? {};
+      const feeMap: Record<string, string> = data.fees ?? {};
       const parentMap: Record<
         string,
         { name: string; phone: string | null; email: string | null; rel: string }
-      > = {};
-      for (const r of (ps as any[]) ?? []) {
-        parentMap[r.student_id] = {
-          name: r.profiles?.full_name ?? "—",
-          phone: r.profiles?.phone ?? null,
-          email: r.profiles?.email ?? null,
-          rel: r.relationship ?? "guardian",
-        };
-      }
+      > = data.parent ?? {};
       return { attMap, perfMap, feeMap, parentMap };
     },
   });
@@ -526,16 +494,27 @@ function AdminStudentsView() {
     [qDebounced, grade, section, gender, status, fromDate, toDate, sort, dir, page, pageSize],
   );
 
-  const { data: rows, isFetching } = useQuery({
+  const { data: result, isFetching } = useQuery({
     queryKey: ["admin-students", params],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("search_students", params as any);
-      if (error) throw error;
-      return (data ?? []) as any[];
+    queryFn: () => {
+      const qs = new URLSearchParams();
+      if (params.p_q) qs.set("q", params.p_q);
+      if (params.p_grade_name) qs.set("gradeName", params.p_grade_name);
+      if (params.p_section) qs.set("section", params.p_section);
+      if (params.p_gender) qs.set("gender", params.p_gender);
+      if (params.p_status) qs.set("status", params.p_status);
+      if (params.p_from_date) qs.set("fromDate", params.p_from_date);
+      if (params.p_to_date) qs.set("toDate", params.p_to_date);
+      qs.set("sort", params.p_sort);
+      qs.set("dir", params.p_dir);
+      qs.set("limit", String(params.p_limit));
+      qs.set("offset", String(params.p_offset));
+      return apiGet<{ total: number; rows: any[] }>(`/students/search?${qs.toString()}`);
     },
   });
+  const rows = result?.rows;
 
-  const total = rows && rows.length > 0 ? Number(rows[0].total_count) : 0;
+  const total = result?.total ?? 0;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -546,46 +525,26 @@ function AdminStudentsView() {
     enabled: rowIds.length > 0,
     queryKey: ["admin-students-extras", rowIds.join(",")],
     queryFn: async () => {
-      const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-      const [{ data: att }, { data: fa }] = await Promise.all([
-        supabase
-          .from("attendance")
-          .select("student_id,status")
-          .in("student_id", rowIds)
-          .gte("date", since),
-        supabase.from("fee_assignments").select("student_id,status").in("student_id", rowIds),
-      ]);
-      const attMap: Record<string, { total: number; present: number }> = {};
-      for (const r of att ?? []) {
-        const m = (attMap[r.student_id] ||= { total: 0, present: 0 });
-        m.total += 1;
-        if (r.status === "present" || r.status === "late") m.present += 1;
-      }
-      const feeMap: Record<string, string> = {};
-      for (const r of fa ?? []) {
-        // 'paid' beats 'partial' beats 'pending'
-        const cur = feeMap[r.student_id];
-        if (
-          !cur ||
-          (cur === "pending" && r.status !== "pending") ||
-          (cur === "partial" && r.status === "paid")
-        ) {
-          feeMap[r.student_id] = r.status;
-        }
-      }
-      return { attMap, feeMap };
+      const res = await apiFetch("/students/row-extras", {
+        method: "POST",
+        body: JSON.stringify({ ids: rowIds }),
+      });
+      const data = res ? await res.json() : { attendance: {}, fees: {} };
+      return { attMap: data.attendance ?? {}, feeMap: data.fees ?? {} };
     },
   });
 
   const { data: classes } = useQuery({
     queryKey: ["all-classes-admin"],
-    queryFn: async () =>
-      (await supabase.from("classes").select("id,name,section").order("name")).data ?? [],
+    queryFn: async () => {
+      const all = await apiGet<any[]>("/classes");
+      return all.map((c) => ({ id: c.id, name: c.name, section: c.section }));
+    },
   });
   const { data: routes } = useQuery({
     queryKey: ["all-transport-routes"],
     queryFn: async () =>
-      (await supabase.from("transport_routes").select("id,name").order("name")).data ?? [],
+      (await apiGet<any[]>("/fleet/routes")).map((r) => ({ id: r.id, name: r.name })),
   });
 
   const gradeOptions = useMemo(() => {
@@ -660,36 +619,50 @@ function AdminStudentsView() {
 
   const selectionCount = selectAllMatching ? total : selected.size;
 
-  const fetchAllMatchingIds = async (): Promise<string[]> => {
-    // Pull ids in pages of 1000
-    const ids: string[] = [];
-    const chunk = 1000;
-    for (let offset = 0; offset < total; offset += chunk) {
-      const { data } = await supabase.rpc("search_students", {
-        ...params,
-        p_limit: chunk,
-        p_offset: offset,
-      } as any);
-      (data ?? []).forEach((r: any) => ids.push(r.id));
-    }
-    return ids;
+  const searchQS = (limit: number, offset: number) => {
+    const qs = new URLSearchParams();
+    if (params.p_q) qs.set("q", params.p_q);
+    if (params.p_grade_name) qs.set("gradeName", params.p_grade_name);
+    if (params.p_section) qs.set("section", params.p_section);
+    if (params.p_gender) qs.set("gender", params.p_gender);
+    if (params.p_status) qs.set("status", params.p_status);
+    if (params.p_from_date) qs.set("fromDate", params.p_from_date);
+    if (params.p_to_date) qs.set("toDate", params.p_to_date);
+    qs.set("sort", params.p_sort);
+    qs.set("dir", params.p_dir);
+    qs.set("limit", String(limit));
+    qs.set("offset", String(offset));
+    return qs.toString();
   };
 
-  const exportSelected = async () => {
-    const ids = selectAllMatching ? await fetchAllMatchingIds() : Array.from(selected);
-    if (!ids.length) return toast.error("Select at least one student");
-    // Reuse the current filter but pull full rows for selection
-    let allRows: any[] = [];
-    for (let i = 0; i < ids.length; i += 1000) {
-      const slice = ids.slice(i, i + 1000);
-      const { data } = await supabase
-        .from("students")
-        .select(
-          "admission_no, roll_no, admission_date, gender, status, profiles(full_name,email), classes(name,section)",
-        )
-        .in("id", slice);
-      allRows = allRows.concat(data ?? []);
+  const fetchAllMatching = async (): Promise<any[]> => {
+    const out: any[] = [];
+    const chunk = 200; // API page cap
+    for (let offset = 0; offset < total; offset += chunk) {
+      const res = await apiGet<{ rows: any[] }>(`/students/search?${searchQS(chunk, offset)}`);
+      out.push(...res.rows);
     }
+    return out;
+  };
+
+  const fetchAllMatchingIds = async (): Promise<string[]> =>
+    (await fetchAllMatching()).map((r) => r.id);
+
+  const exportSelected = async () => {
+    const matching = await fetchAllMatching();
+    const selectedSet = selectAllMatching ? null : selected;
+    const allRows = (selectedSet ? matching.filter((r) => selectedSet.has(r.id)) : matching).map(
+      (r) => ({
+        admission_no: r.admission_no,
+        roll_no: r.roll_no,
+        admission_date: r.admission_date,
+        gender: r.gender,
+        status: r.status,
+        profiles: { full_name: r.full_name, email: r.email },
+        classes: r.class_name ? { name: r.class_name, section: r.class_section } : null,
+      }),
+    );
+    if (!allRows.length) return toast.error("Select at least one student");
     const header = [
       "Admission #",
       "Full Name",
@@ -1138,12 +1111,17 @@ function PromoteDialog({
       setPreview([]);
       return;
     }
-    supabase
-      .from("students")
-      .select("id, admission_no, profiles(full_name)")
-      .eq("class_id", from)
-      .eq("status", "active")
-      .then(({ data }) => setPreview(data ?? []));
+    apiGet<{ rows: any[] }>(`/students/search?classId=${from}&status=active&limit=200`)
+      .then((res) =>
+        setPreview(
+          res.rows.map((s) => ({
+            id: s.id,
+            admission_no: s.admission_no,
+            profiles: { full_name: s.full_name },
+          })),
+        ),
+      )
+      .catch(() => setPreview([]));
   }, [from]);
 
   const submit = async () => {
@@ -1336,10 +1314,7 @@ function DuplicatesDialog({
   const { data: dups, isFetching } = useQuery({
     enabled: open,
     queryKey: ["student-duplicates"],
-    queryFn: async () => {
-      const { data } = await supabase.rpc("find_duplicate_students");
-      return (data ?? []) as any[];
-    },
+    queryFn: () => apiGet<any[]>("/students/duplicates"),
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

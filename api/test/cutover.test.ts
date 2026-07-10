@@ -123,3 +123,64 @@ describe("students: link-parent (ps_admin_all only)", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("students: search_students port + row-extras + duplicates", () => {
+  it("admin search returns total + page rows with the RPC field shape", async () => {
+    const res = await get("/students/search?limit=20&sort=admission_date&dir=desc", "admin");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBeGreaterThan(5000);
+    expect(res.body.rows.length).toBe(20);
+    const r = res.body.rows[0];
+    for (const k of ["id", "admission_no", "full_name", "class_name", "status"]) {
+      expect(r).toHaveProperty(k);
+    }
+  });
+
+  it("search filters (grade) narrow the total", async () => {
+    const all = await get("/students/search?limit=1", "admin");
+    const g8 = await get("/students/search?gradeName=Grade%208&limit=1", "admin");
+    expect(g8.body.total).toBeGreaterThan(0);
+    expect(g8.body.total).toBeLessThan(all.body.total);
+  });
+
+  it("search name sort is applied", async () => {
+    const asc = await get("/students/search?sort=name&dir=asc&limit=5", "admin");
+    const names = asc.body.rows.map((r: any) => r.full_name);
+    const sorted = [...names].sort((a, b) => a.localeCompare(b));
+    expect(names).toEqual(sorted);
+  });
+
+  it("search is role-scoped: teacher subset, student self-only", async () => {
+    const teacher = await get("/students/search?limit=200", "teacher");
+    const admin = await get("/students/search?limit=1", "admin");
+    expect(teacher.body.total).toBeGreaterThan(0);
+    expect(teacher.body.total).toBeLessThan(admin.body.total);
+    const student = await get("/students/search?limit=10", "student");
+    expect(student.body.total).toBe(1);
+  });
+
+  it("row-extras returns the four maps for visible ids only", async () => {
+    const page = await get("/students/search?limit=5", "admin");
+    const ids = page.body.rows.map((r: any) => r.id);
+    const res = await post("/students/row-extras", "admin", { ids });
+    expect(res.status).toBe(201);
+    for (const k of ["attendance", "fees", "performance", "parent"]) {
+      expect(res.body).toHaveProperty(k);
+    }
+    const foreign = page.body.rows.find((r: any) => r.full_name !== "Anika Singh").id;
+    const asStudent = await post("/students/row-extras", "student", { ids: [foreign] });
+    expect(asStudent.status).toBe(201);
+    expect(Object.keys(asStudent.body.attendance)).not.toContain(foreign);
+  });
+
+  it("duplicates is admin-only and reports name collisions", async () => {
+    const res = await get("/students/duplicates", "admin");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    if (res.body.length) {
+      expect(res.body[0].count).toBeGreaterThan(1);
+      expect(res.body[0].student_ids.length).toBe(res.body[0].count);
+    }
+    expect((await get("/students/duplicates", "teacher")).status).toBe(403);
+  });
+});
