@@ -113,6 +113,9 @@ export class AuthService {
     fullName?: string;
     role: string;
     phone?: string | null;
+    nationalId?: string | null;
+    address?: string | null;
+    occupation?: string | null;
   }): Promise<{ userId: string }> {
     const email = params.email.toLowerCase();
     const existing = await this.prisma.users.findUnique({ where: { email } });
@@ -137,8 +140,22 @@ export class AuthService {
       });
       await tx.profiles.upsert({
         where: { id },
-        create: { id, full_name: name, email, phone: params.phone ?? null },
-        update: { full_name: name, ...(params.phone ? { phone: params.phone } : {}) },
+        create: {
+          id,
+          full_name: name,
+          email,
+          phone: params.phone ?? null,
+          national_id: params.nationalId ?? null,
+          address: params.address ?? null,
+          occupation: params.occupation ?? null,
+        },
+        update: {
+          full_name: name,
+          ...(params.phone ? { phone: params.phone } : {}),
+          ...(params.nationalId ? { national_id: params.nationalId } : {}),
+          ...(params.address ? { address: params.address } : {}),
+          ...(params.occupation ? { occupation: params.occupation } : {}),
+        },
       });
       // Force the requested role (the legacy on_auth_user_created trigger may
       // have seeded 'student'); overwrite for an accurate assignment.

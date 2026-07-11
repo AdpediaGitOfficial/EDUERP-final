@@ -25,6 +25,7 @@ import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedReceptionRouteImport } from './routes/_authenticated/reception'
 import { Route as AuthenticatedProgressHubRouteImport } from './routes/_authenticated/progress-hub'
 import { Route as AuthenticatedPaymentsRouteImport } from './routes/_authenticated/payments'
+import { Route as AuthenticatedParentsRouteImport } from './routes/_authenticated/parents'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
 import { Route as AuthenticatedHrRouteImport } from './routes/_authenticated/hr'
 import { Route as AuthenticatedHolidaysRouteImport } from './routes/_authenticated/holidays'
@@ -45,6 +46,7 @@ import { Route as AuthenticatedAnnouncementsRouteImport } from './routes/_authen
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedTeachersIndexRouteImport } from './routes/_authenticated/teachers.index'
 import { Route as AuthenticatedReceptionIndexRouteImport } from './routes/_authenticated/reception.index'
+import { Route as AuthenticatedParentsIndexRouteImport } from './routes/_authenticated/parents.index'
 import { Route as AuthenticatedHrIndexRouteImport } from './routes/_authenticated/hr.index'
 import { Route as AuthenticatedFleetIndexRouteImport } from './routes/_authenticated/fleet.index'
 import { Route as AuthenticatedFinanceIndexRouteImport } from './routes/_authenticated/finance.index'
@@ -56,6 +58,8 @@ import { Route as AuthenticatedTeachersTeacherIdRouteImport } from './routes/_au
 import { Route as AuthenticatedReceptionVisitorsRouteImport } from './routes/_authenticated/reception.visitors'
 import { Route as AuthenticatedReceptionTransportRouteImport } from './routes/_authenticated/reception.transport'
 import { Route as AuthenticatedReceptionAdmissionsRouteImport } from './routes/_authenticated/reception.admissions'
+import { Route as AuthenticatedParentsMappingRouteImport } from './routes/_authenticated/parents.mapping'
+import { Route as AuthenticatedParentsParentIdRouteImport } from './routes/_authenticated/parents.$parentId'
 import { Route as AuthenticatedHrTravelRouteImport } from './routes/_authenticated/hr.travel'
 import { Route as AuthenticatedHrTrainingRouteImport } from './routes/_authenticated/hr.training'
 import { Route as AuthenticatedHrShiftsRouteImport } from './routes/_authenticated/hr.shifts'
@@ -192,6 +196,11 @@ const AuthenticatedPaymentsRoute = AuthenticatedPaymentsRouteImport.update({
   path: '/payments',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedParentsRoute = AuthenticatedParentsRouteImport.update({
+  id: '/parents',
+  path: '/parents',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
   id: '/library',
   path: '/library',
@@ -298,6 +307,12 @@ const AuthenticatedReceptionIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedReceptionRoute,
   } as any)
+const AuthenticatedParentsIndexRoute =
+  AuthenticatedParentsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedParentsRoute,
+  } as any)
 const AuthenticatedHrIndexRoute = AuthenticatedHrIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -360,6 +375,18 @@ const AuthenticatedReceptionAdmissionsRoute =
     id: '/admissions',
     path: '/admissions',
     getParentRoute: () => AuthenticatedReceptionRoute,
+  } as any)
+const AuthenticatedParentsMappingRoute =
+  AuthenticatedParentsMappingRouteImport.update({
+    id: '/mapping',
+    path: '/mapping',
+    getParentRoute: () => AuthenticatedParentsRoute,
+  } as any)
+const AuthenticatedParentsParentIdRoute =
+  AuthenticatedParentsParentIdRouteImport.update({
+    id: '/$parentId',
+    path: '/$parentId',
+    getParentRoute: () => AuthenticatedParentsRoute,
   } as any)
 const AuthenticatedHrTravelRoute = AuthenticatedHrTravelRouteImport.update({
   id: '/travel',
@@ -682,6 +709,7 @@ export interface FileRoutesByFullPath {
   '/holidays': typeof AuthenticatedHolidaysRoute
   '/hr': typeof AuthenticatedHrRouteWithChildren
   '/library': typeof AuthenticatedLibraryRoute
+  '/parents': typeof AuthenticatedParentsRouteWithChildren
   '/payments': typeof AuthenticatedPaymentsRoute
   '/progress-hub': typeof AuthenticatedProgressHubRoute
   '/reception': typeof AuthenticatedReceptionRouteWithChildren
@@ -734,6 +762,8 @@ export interface FileRoutesByFullPath {
   '/hr/shifts': typeof AuthenticatedHrShiftsRoute
   '/hr/training': typeof AuthenticatedHrTrainingRoute
   '/hr/travel': typeof AuthenticatedHrTravelRoute
+  '/parents/$parentId': typeof AuthenticatedParentsParentIdRoute
+  '/parents/mapping': typeof AuthenticatedParentsMappingRoute
   '/reception/admissions': typeof AuthenticatedReceptionAdmissionsRoute
   '/reception/transport': typeof AuthenticatedReceptionTransportRoute
   '/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
@@ -745,6 +775,7 @@ export interface FileRoutesByFullPath {
   '/finance/': typeof AuthenticatedFinanceIndexRoute
   '/fleet/': typeof AuthenticatedFleetIndexRoute
   '/hr/': typeof AuthenticatedHrIndexRoute
+  '/parents/': typeof AuthenticatedParentsIndexRoute
   '/reception/': typeof AuthenticatedReceptionIndexRoute
   '/teachers/': typeof AuthenticatedTeachersIndexRoute
   '/assets/detail/$assetId': typeof AuthenticatedAssetsDetailAssetIdRoute
@@ -825,6 +856,8 @@ export interface FileRoutesByTo {
   '/hr/shifts': typeof AuthenticatedHrShiftsRoute
   '/hr/training': typeof AuthenticatedHrTrainingRoute
   '/hr/travel': typeof AuthenticatedHrTravelRoute
+  '/parents/$parentId': typeof AuthenticatedParentsParentIdRoute
+  '/parents/mapping': typeof AuthenticatedParentsMappingRoute
   '/reception/admissions': typeof AuthenticatedReceptionAdmissionsRoute
   '/reception/transport': typeof AuthenticatedReceptionTransportRoute
   '/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
@@ -836,6 +869,7 @@ export interface FileRoutesByTo {
   '/finance': typeof AuthenticatedFinanceIndexRoute
   '/fleet': typeof AuthenticatedFleetIndexRoute
   '/hr': typeof AuthenticatedHrIndexRoute
+  '/parents': typeof AuthenticatedParentsIndexRoute
   '/reception': typeof AuthenticatedReceptionIndexRoute
   '/teachers': typeof AuthenticatedTeachersIndexRoute
   '/assets/detail/$assetId': typeof AuthenticatedAssetsDetailAssetIdRoute
@@ -875,6 +909,7 @@ export interface FileRoutesById {
   '/_authenticated/holidays': typeof AuthenticatedHolidaysRoute
   '/_authenticated/hr': typeof AuthenticatedHrRouteWithChildren
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
+  '/_authenticated/parents': typeof AuthenticatedParentsRouteWithChildren
   '/_authenticated/payments': typeof AuthenticatedPaymentsRoute
   '/_authenticated/progress-hub': typeof AuthenticatedProgressHubRoute
   '/_authenticated/reception': typeof AuthenticatedReceptionRouteWithChildren
@@ -927,6 +962,8 @@ export interface FileRoutesById {
   '/_authenticated/hr/shifts': typeof AuthenticatedHrShiftsRoute
   '/_authenticated/hr/training': typeof AuthenticatedHrTrainingRoute
   '/_authenticated/hr/travel': typeof AuthenticatedHrTravelRoute
+  '/_authenticated/parents/$parentId': typeof AuthenticatedParentsParentIdRoute
+  '/_authenticated/parents/mapping': typeof AuthenticatedParentsMappingRoute
   '/_authenticated/reception/admissions': typeof AuthenticatedReceptionAdmissionsRoute
   '/_authenticated/reception/transport': typeof AuthenticatedReceptionTransportRoute
   '/_authenticated/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
@@ -938,6 +975,7 @@ export interface FileRoutesById {
   '/_authenticated/finance/': typeof AuthenticatedFinanceIndexRoute
   '/_authenticated/fleet/': typeof AuthenticatedFleetIndexRoute
   '/_authenticated/hr/': typeof AuthenticatedHrIndexRoute
+  '/_authenticated/parents/': typeof AuthenticatedParentsIndexRoute
   '/_authenticated/reception/': typeof AuthenticatedReceptionIndexRoute
   '/_authenticated/teachers/': typeof AuthenticatedTeachersIndexRoute
   '/_authenticated/assets/detail/$assetId': typeof AuthenticatedAssetsDetailAssetIdRoute
@@ -977,6 +1015,7 @@ export interface FileRouteTypes {
     | '/holidays'
     | '/hr'
     | '/library'
+    | '/parents'
     | '/payments'
     | '/progress-hub'
     | '/reception'
@@ -1029,6 +1068,8 @@ export interface FileRouteTypes {
     | '/hr/shifts'
     | '/hr/training'
     | '/hr/travel'
+    | '/parents/$parentId'
+    | '/parents/mapping'
     | '/reception/admissions'
     | '/reception/transport'
     | '/reception/visitors'
@@ -1040,6 +1081,7 @@ export interface FileRouteTypes {
     | '/finance/'
     | '/fleet/'
     | '/hr/'
+    | '/parents/'
     | '/reception/'
     | '/teachers/'
     | '/assets/detail/$assetId'
@@ -1120,6 +1162,8 @@ export interface FileRouteTypes {
     | '/hr/shifts'
     | '/hr/training'
     | '/hr/travel'
+    | '/parents/$parentId'
+    | '/parents/mapping'
     | '/reception/admissions'
     | '/reception/transport'
     | '/reception/visitors'
@@ -1131,6 +1175,7 @@ export interface FileRouteTypes {
     | '/finance'
     | '/fleet'
     | '/hr'
+    | '/parents'
     | '/reception'
     | '/teachers'
     | '/assets/detail/$assetId'
@@ -1169,6 +1214,7 @@ export interface FileRouteTypes {
     | '/_authenticated/holidays'
     | '/_authenticated/hr'
     | '/_authenticated/library'
+    | '/_authenticated/parents'
     | '/_authenticated/payments'
     | '/_authenticated/progress-hub'
     | '/_authenticated/reception'
@@ -1221,6 +1267,8 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/shifts'
     | '/_authenticated/hr/training'
     | '/_authenticated/hr/travel'
+    | '/_authenticated/parents/$parentId'
+    | '/_authenticated/parents/mapping'
     | '/_authenticated/reception/admissions'
     | '/_authenticated/reception/transport'
     | '/_authenticated/reception/visitors'
@@ -1232,6 +1280,7 @@ export interface FileRouteTypes {
     | '/_authenticated/finance/'
     | '/_authenticated/fleet/'
     | '/_authenticated/hr/'
+    | '/_authenticated/parents/'
     | '/_authenticated/reception/'
     | '/_authenticated/teachers/'
     | '/_authenticated/assets/detail/$assetId'
@@ -1367,6 +1416,13 @@ declare module '@tanstack/react-router' {
       path: '/payments'
       fullPath: '/payments'
       preLoaderRoute: typeof AuthenticatedPaymentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/parents': {
+      id: '/_authenticated/parents'
+      path: '/parents'
+      fullPath: '/parents'
+      preLoaderRoute: typeof AuthenticatedParentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/library': {
@@ -1509,6 +1565,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedReceptionIndexRouteImport
       parentRoute: typeof AuthenticatedReceptionRoute
     }
+    '/_authenticated/parents/': {
+      id: '/_authenticated/parents/'
+      path: '/'
+      fullPath: '/parents/'
+      preLoaderRoute: typeof AuthenticatedParentsIndexRouteImport
+      parentRoute: typeof AuthenticatedParentsRoute
+    }
     '/_authenticated/hr/': {
       id: '/_authenticated/hr/'
       path: '/'
@@ -1585,6 +1648,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/reception/admissions'
       preLoaderRoute: typeof AuthenticatedReceptionAdmissionsRouteImport
       parentRoute: typeof AuthenticatedReceptionRoute
+    }
+    '/_authenticated/parents/mapping': {
+      id: '/_authenticated/parents/mapping'
+      path: '/mapping'
+      fullPath: '/parents/mapping'
+      preLoaderRoute: typeof AuthenticatedParentsMappingRouteImport
+      parentRoute: typeof AuthenticatedParentsRoute
+    }
+    '/_authenticated/parents/$parentId': {
+      id: '/_authenticated/parents/$parentId'
+      path: '/$parentId'
+      fullPath: '/parents/$parentId'
+      preLoaderRoute: typeof AuthenticatedParentsParentIdRouteImport
+      parentRoute: typeof AuthenticatedParentsRoute
     }
     '/_authenticated/hr/travel': {
       id: '/_authenticated/hr/travel'
@@ -2143,6 +2220,21 @@ const AuthenticatedHrRouteWithChildren = AuthenticatedHrRoute._addFileChildren(
   AuthenticatedHrRouteChildren,
 )
 
+interface AuthenticatedParentsRouteChildren {
+  AuthenticatedParentsParentIdRoute: typeof AuthenticatedParentsParentIdRoute
+  AuthenticatedParentsMappingRoute: typeof AuthenticatedParentsMappingRoute
+  AuthenticatedParentsIndexRoute: typeof AuthenticatedParentsIndexRoute
+}
+
+const AuthenticatedParentsRouteChildren: AuthenticatedParentsRouteChildren = {
+  AuthenticatedParentsParentIdRoute: AuthenticatedParentsParentIdRoute,
+  AuthenticatedParentsMappingRoute: AuthenticatedParentsMappingRoute,
+  AuthenticatedParentsIndexRoute: AuthenticatedParentsIndexRoute,
+}
+
+const AuthenticatedParentsRouteWithChildren =
+  AuthenticatedParentsRoute._addFileChildren(AuthenticatedParentsRouteChildren)
+
 interface AuthenticatedReceptionRouteChildren {
   AuthenticatedReceptionAdmissionsRoute: typeof AuthenticatedReceptionAdmissionsRoute
   AuthenticatedReceptionTransportRoute: typeof AuthenticatedReceptionTransportRoute
@@ -2198,6 +2290,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHolidaysRoute: typeof AuthenticatedHolidaysRoute
   AuthenticatedHrRoute: typeof AuthenticatedHrRouteWithChildren
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
+  AuthenticatedParentsRoute: typeof AuthenticatedParentsRouteWithChildren
   AuthenticatedPaymentsRoute: typeof AuthenticatedPaymentsRoute
   AuthenticatedProgressHubRoute: typeof AuthenticatedProgressHubRoute
   AuthenticatedReceptionRoute: typeof AuthenticatedReceptionRouteWithChildren
@@ -2233,6 +2326,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHolidaysRoute: AuthenticatedHolidaysRoute,
   AuthenticatedHrRoute: AuthenticatedHrRouteWithChildren,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
+  AuthenticatedParentsRoute: AuthenticatedParentsRouteWithChildren,
   AuthenticatedPaymentsRoute: AuthenticatedPaymentsRoute,
   AuthenticatedProgressHubRoute: AuthenticatedProgressHubRoute,
   AuthenticatedReceptionRoute: AuthenticatedReceptionRouteWithChildren,

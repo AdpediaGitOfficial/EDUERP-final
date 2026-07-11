@@ -51,6 +51,7 @@ const NAV: NavItem[] = [
   { to: "/users", label: "Users", icon: Users, roles: ["admin"] },
   { to: "/teachers", label: "Teachers", icon: Users, roles: ["admin"] },
   { to: "/students", label: "Students", icon: GraduationCap, roles: ["admin", "teacher"] },
+  { to: "/parents", label: "Parents", icon: Contact, roles: ["admin", "reception"] },
   { to: "/classes", label: "Classes", icon: School, roles: ["admin"] },
   { to: "/timetable", label: "Timetable", icon: CalendarDays, roles: ["teacher", "student"] },
   { to: "/attendance", label: "Attendance", icon: ClipboardCheck, roles: ["teacher"] },
