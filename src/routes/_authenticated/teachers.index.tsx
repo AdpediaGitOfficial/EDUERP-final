@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -22,13 +22,13 @@ export const Route = createFileRoute("/_authenticated/teachers/")({
 
 type Teacher = {
   id: string;
-  full_name: string;
+  fullName: string;
   email: string;
   phone: string | null;
   subject: string;
   qualification: string | null;
-  experience_years: number;
-  joined_date: string;
+  experienceYears: number;
+  joinedDate: string;
   status: string;
 };
 
@@ -46,12 +46,8 @@ function TeachersPage() {
   const { data: teachers } = useQuery({
     queryKey: ["teachers-list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("teachers" as never)
-        .select("*")
-        .order("full_name");
-      if (error) throw error;
-      return (data ?? []) as unknown as Teacher[];
+      const res = await apiGet<{ rows: Teacher[] }>("/teachers?pageSize=200");
+      return res.rows;
     },
   });
 
@@ -61,7 +57,7 @@ function TeachersPage() {
     const s = q.toLowerCase();
     return list.filter(
       (t) =>
-        t.full_name.toLowerCase().includes(s) ||
+        t.fullName.toLowerCase().includes(s) ||
         t.email.toLowerCase().includes(s) ||
         t.subject.toLowerCase().includes(s),
     );
@@ -138,10 +134,10 @@ function TeachersPage() {
                       className="flex items-center gap-3"
                     >
                       <div className="size-9 rounded-full bg-primary/10 text-primary grid place-items-center text-xs font-semibold">
-                        {initials(t.full_name)}
+                        {initials(t.fullName)}
                       </div>
                       <div>
-                        <div className="font-medium hover:underline">{t.full_name}</div>
+                        <div className="font-medium hover:underline">{t.fullName}</div>
                         <div className="text-xs text-muted-foreground">{t.email}</div>
                       </div>
                     </Link>
@@ -150,10 +146,10 @@ function TeachersPage() {
                     <Badge variant="secondary">{t.subject}</Badge>
                   </td>
                   <td className="p-3 text-muted-foreground">{t.qualification ?? "—"}</td>
-                  <td className="p-3">{t.experience_years} yrs</td>
+                  <td className="p-3">{t.experienceYears} yrs</td>
                   <td className="p-3 text-muted-foreground">{t.phone ?? "—"}</td>
                   <td className="p-3 text-muted-foreground">
-                    {new Date(t.joined_date).toLocaleDateString("en-IN", {
+                    {new Date(t.joinedDate).toLocaleDateString("en-IN", {
                       day: "2-digit",
                       month: "short",
                       year: "numeric",

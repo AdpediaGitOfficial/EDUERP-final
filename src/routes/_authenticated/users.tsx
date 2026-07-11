@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { createUserByAdmin } from "@/lib/create-user.functions";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,18 +43,24 @@ function UsersPage() {
   const { data: users } = useQuery({
     queryKey: ["users-list"],
     queryFn: async () => {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id,full_name,email,phone,created_at")
-        .order("created_at", { ascending: false });
-      const { data: roles } = await supabase.from("user_roles").select("user_id,role");
-      const byUser = new Map<string, AppRole[]>();
-      (roles ?? []).forEach((r) => {
-        const arr = byUser.get(r.user_id) ?? [];
-        arr.push(r.role as AppRole);
-        byUser.set(r.user_id, arr);
-      });
-      return (profiles ?? []).map((p) => ({ ...p, roles: byUser.get(p.id) ?? [] }));
+      const res = await apiGet<{
+        rows: {
+          id: string;
+          fullName: string;
+          email: string;
+          phone: string | null;
+          roles: string[];
+          createdAt: string;
+        }[];
+      }>("/users?pageSize=200");
+      return res.rows.map((u) => ({
+        id: u.id,
+        full_name: u.fullName,
+        email: u.email,
+        phone: u.phone,
+        created_at: u.createdAt,
+        roles: (u.roles as AppRole[]) ?? [],
+      }));
     },
   });
 

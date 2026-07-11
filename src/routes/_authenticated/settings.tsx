@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import { toast } from "sonner";
 import { useState } from "react";
 import { ROLE_LABEL } from "@/lib/roles";
@@ -23,15 +23,15 @@ function SettingsPage() {
   const save = async () => {
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        full_name: name || user.fullName,
-        phone: phone || null,
-      })
-      .eq("id", user.id);
+    const res = await apiFetch("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify({ fullName: name || user.fullName, phone: phone || null }),
+    });
     setSaving(false);
-    if (error) return toast.error(error.message);
+    if (!res || !res.ok) {
+      const b = res ? await res.json().catch(() => null) : null;
+      return toast.error(b?.message ?? "Could not save");
+    }
     toast.success("Saved");
   };
 
