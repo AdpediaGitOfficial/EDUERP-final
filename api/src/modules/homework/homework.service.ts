@@ -171,6 +171,191 @@ export class HomeworkService {
     };
   }
 
+  /**
+   * Student assignments view: homework for the student's own class joined with
+   * their own submission. homework_read_auth (any authenticated read) +
+   * "students read own submissions" (own submission rows only).
+   */
+  async studentAssignments(actor: AuthUser) {
+    const student = await this.prisma.students.findFirst({
+      where: { profile_id: actor.id },
+      select: { id: true, class_id: true, classes: { select: { name: true, section: true } } },
+    });
+    if (!student?.class_id) return { student: null, items: [] };
+
+    const hw = await this.prisma.homework.findMany({
+      where: { class_id: student.class_id },
+      orderBy: { due_date: "asc" },
+      include: {
+        subjects: { select: { id: true, name: true } },
+        homework_submissions: { where: { student_id: student.id } },
+      },
+    });
+
+    // teacher_id -> users (auth schema); names live in public.profiles by id.
+    const teacherIds = Array.from(new Set(hw.map((h) => h.teacher_id).filter(Boolean) as string[]));
+    const profs = teacherIds.length
+      ? await this.prisma.profiles.findMany({
+          where: { id: { in: teacherIds } },
+          select: { id: true, full_name: true },
+        })
+      : [];
+    const teacherName = new Map(profs.map((p) => [p.id, p.full_name]));
+
+    const items = hw.map((h) => {
+      const sub = h.homework_submissions[0] ?? null;
+      return {
+        id: h.id,
+        title: h.title,
+        description: h.description,
+        assigned_date: h.assigned_date,
+        due_date: h.due_date,
+        priority: h.priority ?? "medium",
+        attachment_url: h.attachment_url,
+        attachment_type: h.attachment_type,
+        max_marks: h.max_marks,
+        subjects: h.subjects ? { id: h.subjects.id, name: h.subjects.name } : null,
+        teacher: { full_name: h.teacher_id ? (teacherName.get(h.teacher_id) ?? null) : null },
+        submission: sub
+          ? {
+              id: sub.id,
+              status: sub.status,
+              submitted_at: sub.submitted_at,
+              attachment_url: sub.attachment_url,
+              note: sub.note,
+              marks: sub.marks,
+              remarks: sub.remarks,
+            }
+          : null,
+      };
+    });
+
+    return {
+      student: {
+        id: student.id,
+        classes: student.classes
+          ? { name: student.classes.name, section: student.classes.section }
+          : null,
+      },
+      items,
+    };
+  }
+
+  /** "students insert/update own submissions" — the student writes only their own row. */
+  async submitAssignment(
+    actor: AuthUser,
+    homeworkId: string,
+    attachmentUrl?: string,
+    note?: string,
+  ) {
+    const student = await this.prisma.students.findFirst({
+      where: { profile_id: actor.id },
+      select: { id: true },
+    });
+    if (!student) throw new NotFoundException("Student profile not found");
+    await this.prisma.homework_submissions.upsert({
+      where: { homework_id_student_id: { homework_id: homeworkId, student_id: student.id } },
+      create: {
+        homework_id: homeworkId,
+        student_id: student.id,
+        status: "submitted",
+        submitted_at: new Date(),
+        attachment_url: attachmentUrl || null,
+        note: note || null,
+      },
+      update: {
+        status: "submitted",
+        submitted_at: new Date(),
+        attachment_url: attachmentUrl || null,
+        note: note || null,
+      },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * exams_read_staff: admin|teacher read. Teachers see exams only for their own
+   * classes (the gradebook picker is already class-scoped); admins see any class.
+   */
+  async listExams(actor: AuthUser, classId: string) {
+    if (!actor.roles.some((r) => r === "admin" || r === "teacher")) throw new ForbiddenException();
+    if (actor.roles.includes("teacher") && !actor.roles.includes("admin")) {
+      const owns = await this.prisma.teacher_classes.count({
+        where: { class_id: classId, teacher_id: actor.id },
+      });
+      if (owns === 0) return []; // RLS: teacher can't see other classes' exams
+    }
+    const rows = await this.prisma.exams.findMany({
+      where: { class_id: classId },
+      orderBy: { exam_date: "desc" },
+      include: { subjects: { select: { name: true } } },
+    });
+    return rows.map((e) => ({
+      id: e.id,
+      name: e.name,
+      examDate: e.exam_date,
+      maxMarks: e.max_marks,
+      term: e.term,
+      subjectId: e.subject_id,
+      subjectName: e.subjects?.name ?? null,
+    }));
+  }
+
+  /** exams_admin_all — only admins write exams (teachers are read-only per RLS). */
+  async createExam(
+    actor: AuthUser,
+    data: {
+      classId: string;
+      subjectId?: string;
+      name: string;
+      examDate?: string;
+      maxMarks?: number;
+      term?: string;
+    },
+  ) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const row = await this.prisma.exams.create({
+      data: {
+        class_id: data.classId,
+        subject_id: data.subjectId || null,
+        name: data.name,
+        exam_date: data.examDate ? new Date(data.examDate) : null,
+        max_marks: new Prisma.Decimal(data.maxMarks ?? 100),
+        term: data.term || null,
+      },
+    });
+    return { id: row.id };
+  }
+
+  /**
+   * results_admin_all — only admins write exam results (teachers/parents/students
+   * are read-only per RLS). Bulk upsert on the (exam_id, student_id) unique key,
+   * mirroring the client's onConflict upsert.
+   */
+  async saveExamResults(
+    actor: AuthUser,
+    examId: string,
+    entries: { studentId: string; marks: number }[],
+  ) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const exam = await this.prisma.exams.findUnique({ where: { id: examId } });
+    if (!exam) throw new NotFoundException("Exam not found");
+    await this.prisma.$transaction(
+      entries.map((e) =>
+        this.prisma.exam_results.upsert({
+          where: { exam_id_student_id: { exam_id: examId, student_id: e.studentId } },
+          create: {
+            exam_id: examId,
+            student_id: e.studentId,
+            marks_obtained: new Prisma.Decimal(e.marks),
+          },
+          update: { marks_obtained: new Prisma.Decimal(e.marks) },
+        }),
+      ),
+    );
+    return { saved: entries.length };
+  }
+
   private submissionRow(s: any) {
     return {
       id: s.id,

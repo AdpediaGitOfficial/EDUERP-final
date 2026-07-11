@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { RequireRole } from "@/components/require-role";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,56 +81,15 @@ function AssignmentsInner() {
     enabled: !!user,
     queryKey: ["student-assignments", user?.id],
     queryFn: async () => {
-      const { data: student } = await supabase
-        .from("students")
-        .select("id, class_id, classes(name, section)")
-        .eq("profile_id", user!.id)
-        .maybeSingle();
-      if (!student?.class_id) return { student: null, items: [] as Assignment[] };
-
-      const { data: hw } = await supabase
-        .from("homework")
-        .select(
-          "id,title,description,assigned_date,due_date,priority,attachment_url,attachment_type,max_marks,teacher_id,subject_id,subjects(id,name)",
-        )
-        .eq("class_id", student.class_id)
-        .order("due_date", { ascending: true });
-
-      const list = hw ?? [];
-      const teacherIds = Array.from(new Set(list.map((h: any) => h.teacher_id).filter(Boolean)));
-      const ids = list.map((h: any) => h.id);
-
-      const [{ data: profs }, { data: subs }] = await Promise.all([
-        teacherIds.length
-          ? supabase.from("profiles").select("id, full_name").in("id", teacherIds)
-          : Promise.resolve({ data: [] as any[] }),
-        ids.length
-          ? supabase
-              .from("homework_submissions")
-              .select("id,homework_id,status,submitted_at,attachment_url,note,marks,remarks")
-              .in("homework_id", ids)
-              .eq("student_id", student.id)
-          : Promise.resolve({ data: [] as any[] }),
-      ]);
-
-      const teacherMap = new Map((profs ?? []).map((p: any) => [p.id, p]));
-      const subMap = new Map((subs ?? []).map((s: any) => [s.homework_id, s]));
-
-      const items: Assignment[] = list.map((h: any) => {
-        const sub = subMap.get(h.id) ?? null;
+      const res = await apiGet<{ student: any; items: Assignment[] }>("/assignments");
+      if (!res.student) return { student: null, items: [] as Assignment[] };
+      // Derive the client-only "overdue" pseudo-status for unsubmitted, past-due work.
+      const items: Assignment[] = res.items.map((h: any) => {
+        const sub = h.submission ?? null;
         const overdue = !sub && new Date(h.due_date) < new Date(new Date().toDateString());
         return {
-          id: h.id,
-          title: h.title,
-          description: h.description,
-          assigned_date: h.assigned_date,
-          due_date: h.due_date,
+          ...h,
           priority: (h.priority as any) ?? "medium",
-          attachment_url: h.attachment_url,
-          attachment_type: h.attachment_type,
-          max_marks: h.max_marks,
-          subjects: h.subjects,
-          teacher: teacherMap.get(h.teacher_id) ?? null,
           submission: sub
             ? sub
             : overdue
@@ -146,31 +105,20 @@ function AssignmentsInner() {
               : null,
         };
       });
-
-      return { student, items };
+      return { student: res.student, items };
     },
   });
 
   const submit = useMutation({
     mutationFn: async (payload: { homeworkId: string; attachment_url: string; note: string }) => {
-      const { data: student } = await supabase
-        .from("students")
-        .select("id")
-        .eq("profile_id", user!.id)
-        .maybeSingle();
-      if (!student) throw new Error("Student profile not found");
-      const { error } = await supabase.from("homework_submissions").upsert(
-        {
-          homework_id: payload.homeworkId,
-          student_id: student.id,
-          status: "submitted",
-          submitted_at: new Date().toISOString(),
-          attachment_url: payload.attachment_url || null,
-          note: payload.note || null,
-        },
-        { onConflict: "homework_id,student_id" },
-      );
-      if (error) throw error;
+      await apiFetch("/assignments/submit", {
+        method: "POST",
+        body: JSON.stringify({
+          homeworkId: payload.homeworkId,
+          attachmentUrl: payload.attachment_url || undefined,
+          note: payload.note || undefined,
+        }),
+      });
     },
     onSuccess: () => {
       toast.success("Submission uploaded");

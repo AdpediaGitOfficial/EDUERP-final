@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
@@ -33,21 +33,27 @@ export const Route = createFileRoute("/_authenticated/gradebook")({
 function GradebookPage() {
   const { user } = useCurrentUser();
   const qc = useQueryClient();
+  const isAdmin = (user?.roles ?? []).includes("admin");
   const [classId, setClassId] = useState<string>("");
   const [examId, setExamId] = useState<string>("");
   const [openNew, setOpenNew] = useState(false);
   const [newSubjectId, setNewSubjectId] = useState<string>("");
   const [marks, setMarks] = useState<Record<string, string>>({});
 
+  // exams/exam_results are admin-write under RLS (exams_admin_all, results_admin_all);
+  // teachers get read-only. Admins pick from all classes, teachers from their own.
   const { data: classes } = useQuery({
     enabled: !!user,
-    queryKey: ["teacher-gb-classes", user?.id],
+    queryKey: ["gb-classes", user?.id, isAdmin],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("teacher_classes")
-        .select("classes(id, name, section)")
-        .eq("teacher_id", user!.id);
-      return (data ?? []).map((r: any) => r.classes).filter(Boolean);
+      if (isAdmin) {
+        const rows = await apiGet<{ id: string; name: string; section: string }[]>("/classes");
+        return rows.map((r) => ({ id: r.id, name: r.name, section: r.section }));
+      }
+      const rows = await apiGet<{ classId: string; name: string; section: string }[]>(
+        `/teachers/${user!.id}/classes`,
+      );
+      return rows.map((r) => ({ id: r.classId, name: r.name, section: r.section }));
     },
   });
   useEffect(() => {
@@ -57,22 +63,24 @@ function GradebookPage() {
   const { data: subjects } = useQuery({
     enabled: !!classId,
     queryKey: ["gb-subjects", classId],
-    queryFn: async () =>
-      (await supabase.from("subjects").select("id,name").eq("class_id", classId).order("name"))
-        .data ?? [],
+    queryFn: async () => apiGet<{ id: string; name: string }[]>(`/subjects?classId=${classId}`),
   });
 
   const { data: exams } = useQuery({
     enabled: !!classId,
     queryKey: ["gb-exams", classId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("exams")
-          .select("id, name, exam_date, max_marks, subjects(name)")
-          .eq("class_id", classId)
-          .order("exam_date", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<
+        { id: string; name: string; examDate: string; maxMarks: number; subjectName: string }[]
+      >(`/exams?classId=${classId}`);
+      return rows.map((e) => ({
+        id: e.id,
+        name: e.name,
+        exam_date: e.examDate,
+        max_marks: e.maxMarks,
+        subjects: e.subjectName ? { name: e.subjectName } : null,
+      }));
+    },
   });
   useEffect(() => {
     if (exams?.length && !examId) setExamId(exams[0].id);
@@ -83,26 +91,28 @@ function GradebookPage() {
   const { data: students } = useQuery({
     enabled: !!classId,
     queryKey: ["gb-students", classId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("students")
-          .select("id, roll_no, admission_no, profiles(full_name)")
-          .eq("class_id", classId)
-          .order("roll_no")
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>(`/students?classId=${classId}&pageSize=200`);
+      return res.rows
+        .map((s) => ({
+          id: s.id,
+          roll_no: s.rollNo,
+          admission_no: s.admissionNo,
+          profiles: { full_name: s.fullName },
+        }))
+        .sort((a, b) =>
+          (a.roll_no ?? "").localeCompare(b.roll_no ?? "", undefined, { numeric: true }),
+        );
+    },
   });
 
   const { data: results } = useQuery({
     enabled: !!examId,
     queryKey: ["gb-results", examId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("exam_results")
-          .select("student_id, marks_obtained")
-          .eq("exam_id", examId)
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>(`/exam-results?examId=${examId}&pageSize=500`);
+      return res.rows.map((r) => ({ student_id: r.studentId, marks_obtained: r.marksObtained }));
+    },
   });
 
   useEffect(() => {
@@ -117,37 +127,43 @@ function GradebookPage() {
     e.preventDefault();
     if (!classId) return;
     const fd = new FormData(e.currentTarget);
-    const { data, error } = await supabase
-      .from("exams")
-      .insert({
-        class_id: classId,
-        subject_id: newSubjectId || null,
-        name: String(fd.get("name")),
-        exam_date: String(fd.get("date") || format(new Date(), "yyyy-MM-dd")),
-        max_marks: Number(fd.get("max") || 100),
-        term: String(fd.get("term") || ""),
-      })
-      .select("id")
-      .single();
-    if (error) return toast.error(error.message);
-    toast.success("Exam created");
-    setOpenNew(false);
-    setNewSubjectId("");
-    setExamId(data!.id);
-    qc.invalidateQueries({ queryKey: ["gb-exams", classId] });
+    try {
+      const { id } = await apiFetch<{ id: string }>("/exams", {
+        method: "POST",
+        body: JSON.stringify({
+          classId,
+          subjectId: newSubjectId || undefined,
+          name: String(fd.get("name")),
+          examDate: String(fd.get("date") || format(new Date(), "yyyy-MM-dd")),
+          maxMarks: Number(fd.get("max") || 100),
+          term: String(fd.get("term") || ""),
+        }),
+      });
+      toast.success("Exam created");
+      setOpenNew(false);
+      setNewSubjectId("");
+      setExamId(id);
+      qc.invalidateQueries({ queryKey: ["gb-exams", classId] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create exam");
+    }
   };
 
   const saveMarks = async () => {
     if (!examId) return;
-    const rows = Object.entries(marks)
+    const entries = Object.entries(marks)
       .filter(([, v]) => v !== "" && v !== null)
-      .map(([student_id, v]) => ({ exam_id: examId, student_id, marks_obtained: Number(v) }));
-    const { error } = await supabase
-      .from("exam_results")
-      .upsert(rows, { onConflict: "exam_id,student_id" });
-    if (error) return toast.error(error.message);
-    toast.success(`Saved ${rows.length} marks`);
-    qc.invalidateQueries({ queryKey: ["gb-results", examId] });
+      .map(([studentId, v]) => ({ studentId, marks: Number(v) }));
+    try {
+      await apiFetch("/exam-results", {
+        method: "POST",
+        body: JSON.stringify({ examId, entries }),
+      });
+      toast.success(`Saved ${entries.length} marks`);
+      qc.invalidateQueries({ queryKey: ["gb-results", examId] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save marks");
+    }
   };
 
   return (

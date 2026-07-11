@@ -294,3 +294,79 @@ describe("fees: admin structures + bulk assign", () => {
     expect(denied.status).toBe(403);
   });
 });
+
+describe("gradebook: exams + exam_results (admin-write per RLS)", () => {
+  const grade8a = "4a99fe58-59b1-4503-b833-213f4e16d92b";
+
+  it("admin creates an exam and saves marks; teacher is read-only", async () => {
+    // exams_read_staff: both admin and teacher can read a class's exams.
+    const teacherList = await get(`/exams?classId=${grade8a}`, "teacher");
+    expect(teacherList.status).toBe(200);
+    expect(Array.isArray(teacherList.body)).toBe(true);
+
+    // exams_admin_all: only admin writes.
+    const created = await post("/exams", "admin", {
+      classId: grade8a,
+      name: `Cutover Exam ${process.env.VITEST_WORKER_ID ?? "0"}`,
+      maxMarks: 50,
+    });
+    expect(created.status).toBe(201);
+    const examId = created.body.id;
+    expect(examId).toBeTruthy();
+
+    // Teacher cannot create exams (exams_admin_all).
+    expect((await post("/exams", "teacher", { classId: grade8a, name: "nope" })).status).toBe(403);
+
+    // results_admin_all: admin bulk-upserts marks.
+    const students = await get(`/students?classId=${grade8a}&pageSize=1`, "admin");
+    const studentId = students.body.rows[0].id;
+    const saved = await post("/exam-results", "admin", {
+      examId,
+      entries: [{ studentId, marks: 42 }],
+    });
+    expect(saved.status).toBe(201);
+    expect(saved.body.saved).toBe(1);
+
+    // Re-upsert (idempotent on exam_id+student_id) with a new mark.
+    const resaved = await post("/exam-results", "admin", {
+      examId,
+      entries: [{ studentId, marks: 45 }],
+    });
+    expect(resaved.status).toBe(201);
+
+    const results = await get(`/exam-results?examId=${examId}`, "admin");
+    expect(results.body.rows.find((r: any) => r.studentId === studentId).marksObtained).toBe("45");
+
+    // Teacher cannot write results (results_admin_all).
+    expect(
+      (await post("/exam-results", "teacher", { examId, entries: [{ studentId, marks: 1 }] }))
+        .status,
+    ).toBe(403);
+  });
+});
+
+describe("assignments: student self-view + self-submit", () => {
+  it("student lists own-class homework with submissions and submits one", async () => {
+    const list = await get("/assignments", "student");
+    expect(list.status).toBe(200);
+    expect(list.body.student).toBeTruthy();
+    expect(Array.isArray(list.body.items)).toBe(true);
+    expect(list.body.items.length).toBeGreaterThan(0);
+    // Each item carries the fields the assignments UI renders.
+    const a = list.body.items[0];
+    expect(a).toHaveProperty("priority");
+    expect(a).toHaveProperty("teacher");
+    expect(a).toHaveProperty("submission");
+
+    // "students insert/update own submissions" — self-submit succeeds.
+    const submitted = await post("/assignments/submit", "student", {
+      homeworkId: a.id,
+      note: "cutover test submission",
+    });
+    expect(submitted.status).toBe(201);
+
+    const after = await get("/assignments", "student");
+    const updated = after.body.items.find((x: any) => x.id === a.id);
+    expect(updated.submission.status).toBe("submitted");
+  });
+});
