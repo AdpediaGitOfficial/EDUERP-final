@@ -200,3 +200,62 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   if (!res) throw new Error("Not authenticated");
   return (await res.json()) as T;
 }
+
+export type UploadedFileMeta = {
+  key: string;
+  url: string;
+  name: string;
+  size: number;
+  mime: string;
+};
+
+/**
+ * Upload a file to POST /files (multipart). The browser sets the multipart
+ * content-type + boundary, so we must NOT send our JSON content-type here.
+ * Refreshes once on 401, like apiFetch. Returns the stored file's metadata
+ * (`url` is what you save on the owning record).
+ */
+export async function apiUpload(
+  file: File,
+  category: string,
+  path = "/files",
+): Promise<UploadedFileMeta> {
+  const attempt = () => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("category", category);
+    return fetch(`${API_URL}${path}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { Authorization: `Bearer ${getApiToken()}` },
+      body: fd,
+    });
+  };
+
+  let res = await attempt();
+  if (res.status === 401) {
+    const refreshed = await apiRefresh();
+    if (!refreshed) throw new Error("Not authenticated");
+    res = await attempt();
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message || `Upload failed (${res.status})`);
+  }
+  return (await res.json()) as UploadedFileMeta;
+}
+
+/**
+ * Fetch a stored file (the authed GET /files/:key) and return a blob object URL
+ * for inline display or download. The download endpoint requires the bearer
+ * token, which a plain <img src>/<a href> can't send — so we fetch it here and
+ * hand back an object URL. Remember to URL.revokeObjectURL(url) when done.
+ * Returns null if the session is gone or the file is missing.
+ */
+export async function apiFileObjectUrl(pathOrUrl: string): Promise<string | null> {
+  const path = pathOrUrl.replace(/^\/api/, ""); // "/files/…"
+  const res = await apiFetch(path);
+  if (!res) return null;
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}

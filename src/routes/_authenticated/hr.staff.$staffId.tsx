@@ -1,16 +1,31 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/lib/api/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { apiGet, apiPost, apiFileObjectUrl } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { FileUpload } from "@/components/file-upload";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { badgeClass, fmtDate, money, niceLabel } from "@/lib/module-util";
 
 export const Route = createFileRoute("/_authenticated/hr/staff/$staffId")({ component: Page });
 
 function Page() {
   const { staffId } = Route.useParams();
+  const qc = useQueryClient();
+  const { user } = useCurrentUser();
+  const canManage = !!user?.roles.some((r) => r === "admin" || r === "hr");
+  const [docType, setDocType] = useState("document");
+
+  const openFile = async (url: string) => {
+    const obj = await apiFileObjectUrl(url);
+    if (obj) window.open(obj, "_blank", "noopener");
+  };
+
   const { data } = useQuery({
     queryKey: ["staff-detail", staffId],
     queryFn: () =>
@@ -270,6 +285,31 @@ function Page() {
           </Card>
         </TabsContent>
         <TabsContent value="documents" className="pt-4">
+          {canManage && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Input
+                value={docType}
+                onChange={(e) => setDocType(e.target.value)}
+                placeholder="Document type (e.g. contract)"
+                className="h-9 w-56"
+                aria-label="Document type"
+              />
+              <FileUpload
+                category="staff-documents"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"
+                label="Upload document"
+                disabled={!docType.trim()}
+                onUploaded={async (meta) => {
+                  await apiPost(`/hr/staff/${staffId}/documents`, {
+                    docType: docType.trim() || "document",
+                    title: meta.name,
+                    fileUrl: meta.url,
+                  });
+                  await qc.invalidateQueries({ queryKey: ["staff-detail", staffId] });
+                }}
+              />
+            </div>
+          )}
           <Card className="rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
@@ -279,6 +319,7 @@ function Page() {
                     <th className="p-3">Title</th>
                     <th className="p-3">Uploaded</th>
                     <th className="p-3">Expiry</th>
+                    <th className="p-3">File</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -288,11 +329,20 @@ function Page() {
                       <td className="p-3">{d.title}</td>
                       <td className="p-3">{fmtDate(d.uploaded_at)}</td>
                       <td className="p-3">{d.expiry_date ? fmtDate(d.expiry_date) : "—"}</td>
+                      <td className="p-3">
+                        {d.file_url ? (
+                          <Button variant="ghost" size="sm" onClick={() => openFile(d.file_url)}>
+                            View
+                          </Button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {(!docs || docs.length === 0) && (
                     <tr>
-                      <td colSpan={4} className="p-6 text-center text-muted-foreground">
+                      <td colSpan={5} className="p-6 text-center text-muted-foreground">
                         No documents.
                       </td>
                     </tr>
