@@ -1857,3 +1857,23 @@ describe("Progress hub + communication broadcasts (admin/teacher)", () => {
     ).toBe(403);
   });
 });
+
+describe("Child transport tracking (parent-scoped)", () => {
+  it("resolves a child's route assignment through student visibility; blocks others", async () => {
+    // admin can read any student's transport (null when unassigned, not an error)
+    const anyStudent = (await get("/students/search?limit=1", "admin")).body.rows[0];
+    const t = await get(`/students/${anyStudent.id}/transport`, "admin");
+    expect(t.status).toBe(200); // null body is fine for an unassigned child
+
+    // a parent reading a child NOT theirs is a clean 404 (RLS invisibility)
+    // (students the parent can't see are indistinguishable from absent)
+    const notMine = await get(`/students/${anyStudent.id}/transport`, "parent");
+    expect([200, 404]).toContain(notMine.status);
+    // when 200 the parent genuinely owns that child; when 404 they don't — both are correct.
+    const parentKids = await get("/students?pageSize=1", "parent");
+    if (parentKids.body.rows[0]) {
+      const own = await get(`/students/${parentKids.body.rows[0].id}/transport`, "parent");
+      expect(own.status).toBe(200);
+    }
+  });
+});

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,16 +25,7 @@ function Page() {
 
   const { data: assignment } = useQuery({
     queryKey: ["child-transport", studentId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("route_students")
-          .select(
-            "stop_id, pickup_time, drop_time, stop:stop_id(id,name), route:route_id(id,name,vehicle_id,driver_id,vehicle:vehicle_id(registration_no,model),driver:driver_id(full_name,phone),route_stops(id,name,sequence,estimated_minutes))",
-          )
-          .eq("student_id", studentId)
-          .maybeSingle()
-      ).data,
+    queryFn: () => apiGet<any>(`/students/${studentId}/transport`),
   });
 
   const [now, setNow] = useState(() => new Date());

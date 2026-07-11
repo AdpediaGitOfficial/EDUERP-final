@@ -303,6 +303,66 @@ export class StudentsService {
   }
 
   /**
+   * A child's transport assignment (route + bus + driver + stops), for the
+   * parent tracking page. Authorized through the same student scope
+   * (students_parent_read etc.) — route_students itself has no parent RLS
+   * policy, so the old client's direct query returned nothing for a parent;
+   * gating on child-visibility here makes the feature work as intended.
+   */
+  async transport(actor: AuthUser, studentId: string) {
+    const scope = this.scopeFilter(actor);
+    if (scope === null) throw new ForbiddenException();
+    const student = await this.prisma.students.findFirst({
+      where: { AND: [{ id: studentId }, scope] },
+      select: { id: true },
+    });
+    if (!student) throw new NotFoundException();
+
+    const a = await this.prisma.route_students.findFirst({
+      where: { student_id: studentId },
+      include: {
+        route_stops: { select: { id: true, name: true } },
+        transport_routes: {
+          include: {
+            fleet_vehicles: { select: { registration_no: true, model: true } },
+            drivers: { select: { full_name: true, phone: true } },
+            route_stops: {
+              select: { id: true, name: true, sequence: true, estimated_minutes: true },
+              orderBy: { sequence: "asc" },
+            },
+          },
+        },
+      },
+    });
+    if (!a) return null;
+    const r = a.transport_routes;
+    return {
+      stop_id: a.stop_id,
+      pickup_time: a.pickup_time,
+      drop_time: a.drop_time,
+      stop: a.route_stops ? { id: a.route_stops.id, name: a.route_stops.name } : null,
+      route: r
+        ? {
+            id: r.id,
+            name: r.name,
+            vehicle_id: r.vehicle_id,
+            driver_id: r.driver_id,
+            vehicle: r.fleet_vehicles
+              ? { registration_no: r.fleet_vehicles.registration_no, model: r.fleet_vehicles.model }
+              : null,
+            driver: r.drivers ? { full_name: r.drivers.full_name, phone: r.drivers.phone } : null,
+            route_stops: r.route_stops.map((s) => ({
+              id: s.id,
+              name: s.name,
+              sequence: s.sequence,
+              estimated_minutes: s.estimated_minutes,
+            })),
+          }
+        : null,
+    };
+  }
+
+  /**
    * Port of find_duplicate_students: students sharing a (case-insensitive) name.
    * Admin-only (the page gates it to admins; it scans the whole student body).
    */
