@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -185,11 +186,11 @@ function Allocation() {
                 </tr>
               ))}
               {(active ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                    No active allocations.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={6}
+                  title="No active allocations"
+                  hint="Allocate an available asset to a staff member or room."
+                />
               )}
             </tbody>
           </table>

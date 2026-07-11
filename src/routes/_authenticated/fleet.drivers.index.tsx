@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,11 +139,11 @@ function Page() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr>
-                  <td className="p-6 text-center text-muted-foreground" colSpan={7}>
-                    No drivers found.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={7}
+                  title="No drivers found"
+                  hint="Add a driver and assign them to a vehicle."
+                />
               )}
             </tbody>
           </table>

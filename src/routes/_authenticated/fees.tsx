@@ -2,6 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { EmptyRow, EmptyState } from "@/components/empty-state";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
@@ -371,11 +372,11 @@ function AdminFees() {
                       </tr>
                     ))}
                   {(assignments ?? []).length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                        No fee assignments yet.
-                      </td>
-                    </tr>
+                    <EmptyRow
+                      colSpan={7}
+                      title="No fee assignments yet"
+                      hint="Assign a fee structure to a class to bill students."
+                    />
                   )}
                 </tbody>
               </table>
@@ -1035,8 +1036,12 @@ function ChildFeeSection({
           <IndianRupee className="size-4" /> Quarterly fee breakdown
         </div>
         {assignments.length === 0 ? (
-          <div className="rounded-xl border p-6 text-center text-sm text-muted-foreground">
-            No fees have been assigned to this student yet.
+          <div className="rounded-xl border">
+            <EmptyState
+              compact
+              title="No fees assigned yet"
+              hint="This student has no fee assignments."
+            />
           </div>
         ) : (
           <ol className="space-y-3">

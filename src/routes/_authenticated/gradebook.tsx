@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -317,11 +318,11 @@ function GradebookPage() {
                 );
               })}
               {(students ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                    Pick a class to see students.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={4}
+                  title="Pick a class to see students"
+                  hint="Choose a class and exam above to enter marks."
+                />
               )}
             </tbody>
           </table>

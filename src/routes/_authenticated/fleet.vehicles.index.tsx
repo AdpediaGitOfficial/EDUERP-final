@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -174,11 +175,11 @@ function Page() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr>
-                  <td className="p-6 text-center text-muted-foreground" colSpan={10}>
-                    No vehicles found.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={10}
+                  title="No vehicles found"
+                  hint="Add a vehicle to start building your fleet."
+                />
               )}
             </tbody>
           </table>

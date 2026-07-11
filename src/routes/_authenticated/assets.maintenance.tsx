@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,11 +139,11 @@ function MaintenanceView() {
                 </tr>
               ))}
               {(upcoming ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                    No scheduled maintenance.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={4}
+                  title="No scheduled maintenance"
+                  hint="Upcoming service jobs will show here."
+                />
               )}
             </tbody>
           </table>
@@ -175,11 +176,7 @@ function MaintenanceView() {
                 </tr>
               ))}
               {(completed ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={3} className="p-8 text-center text-muted-foreground">
-                    No records.
-                  </td>
-                </tr>
+                <EmptyRow colSpan={3} title="No completed maintenance yet" />
               )}
             </tbody>
           </table>
@@ -241,11 +238,11 @@ function MaintenanceView() {
                 );
               })}
               {(amcs ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                    No AMC contracts.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={6}
+                  title="No AMC contracts"
+                  hint="Annual maintenance contracts will be listed here."
+                />
               )}
             </tbody>
           </table>

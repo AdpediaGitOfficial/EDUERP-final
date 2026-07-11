@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -297,11 +298,11 @@ function Page() {
                 </tr>
               ))}
               {(!overdue || overdue.length === 0) && (
-                <tr>
-                  <td colSpan={5} className="p-6 text-center text-muted-foreground text-sm">
-                    No overdue accounts.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={5}
+                  title="No overdue accounts"
+                  hint="Every invoice in this period is on track."
+                />
               )}
             </tbody>
           </table>

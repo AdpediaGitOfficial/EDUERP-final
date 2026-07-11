@@ -2,6 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
@@ -61,11 +62,11 @@ function PaymentsPage() {
                 </tr>
               ))}
               {(data ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                    No payments yet.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={6}
+                  title="No payments yet"
+                  hint="Recorded and online payments will show up here."
+                />
               )}
             </tbody>
           </table>

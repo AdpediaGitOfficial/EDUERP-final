@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { createUserByAdmin } from "@/lib/create-user.functions";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -190,11 +191,11 @@ function UsersPage() {
                 </tr>
               ))}
               {(users ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                    No users yet.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={4}
+                  title="No users yet"
+                  hint="Add your first user to get started."
+                />
               )}
             </tbody>
           </table>

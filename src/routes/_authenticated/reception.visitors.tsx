@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -117,8 +118,12 @@ function Page() {
               </li>
             ))}
             {active.length === 0 && (
-              <li className="p-6 text-center text-sm text-muted-foreground">
-                No visitors currently in.
+              <li>
+                <EmptyState
+                  compact
+                  title="No visitors currently in"
+                  hint="Check in a visitor to see them here."
+                />
               </li>
             )}
           </ul>
