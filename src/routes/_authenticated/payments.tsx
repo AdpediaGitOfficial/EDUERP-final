@@ -3,9 +3,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { apiGet } from "@/lib/api/client";
+import { apiGet, apiFileObjectUrl } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
 import { format } from "date-fns";
+
+async function openReceipt(paymentId: string) {
+  const url = await apiFileObjectUrl(`/payments/${paymentId}/receipt.pdf`);
+  if (url) window.open(url, "_blank", "noopener");
+  else toast.error("Could not open the receipt");
+}
 
 export const Route = createFileRoute("/_authenticated/payments")({
   component: () => (
@@ -50,6 +59,7 @@ function PaymentsPage() {
                 <th className="p-3 font-medium">Method</th>
                 <th className="p-3 font-medium">Reference</th>
                 <th className="p-3 font-medium">Amount</th>
+                <th className="p-3 font-medium">Receipt</th>
               </tr>
             </thead>
             <tbody>
@@ -63,11 +73,21 @@ function PaymentsPage() {
                   <td className="p-3 capitalize">{p.method}</td>
                   <td className="p-3 text-muted-foreground">{p.reference || "—"}</td>
                   <td className="p-3 font-medium">₹{Number(p.amount).toFixed(2)}</td>
+                  <td className="p-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openReceipt(p.id)}
+                      aria-label={`Download receipt ${p.receipt_no}`}
+                    >
+                      <Download className="size-4" /> PDF
+                    </Button>
+                  </td>
                 </tr>
               ))}
               {(data ?? []).length === 0 && (
                 <EmptyRow
-                  colSpan={6}
+                  colSpan={7}
                   title="No payments yet"
                   hint="Recorded and online payments will show up here."
                 />

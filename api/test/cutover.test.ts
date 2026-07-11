@@ -2158,6 +2158,35 @@ describe("File storage: upload / download / attach", () => {
   });
 });
 
+describe("PDF receipts", () => {
+  const asPdf = (r: keyof typeof ACCOUNTS, path: string) =>
+    request(http)
+      .get(`/api${path}`)
+      .set("Authorization", `Bearer ${tokens[r]}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(Buffer.from(c)));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+
+  it("streams a valid PDF receipt to admin; teacher 404; non-uuid 400; unauth 401", async () => {
+    const paymentId = (await get("/payments?pageSize=1", "admin")).body.rows[0].id;
+
+    const pdf = await asPdf("admin", `/payments/${paymentId}/receipt.pdf`);
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers["content-type"]).toContain("application/pdf");
+    expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe("%PDF-");
+
+    // Teacher has no payment visibility → 404 (invisibility, not 403).
+    expect((await get(`/payments/${paymentId}/receipt.pdf`, "teacher")).status).toBe(404);
+    // Malformed id → 400 (PrismaExceptionFilter), not 500.
+    expect((await get("/payments/not-a-uuid/receipt.pdf", "admin")).status).toBe(400);
+    // Unauthenticated → 401.
+    expect((await request(http).get(`/api/payments/${paymentId}/receipt.pdf`)).status).toBe(401);
+  });
+});
+
 describe("Auth: password reset flow (B40 final cutover)", () => {
   it("forgot-password mints a single-use token; reset changes the password then the token is spent", async () => {
     // Unknown email: still 200, no token leaked (no account enumeration).

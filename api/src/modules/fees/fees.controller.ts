@@ -3,16 +3,20 @@ import {
   Controller,
   Get,
   Inject,
+  Param,
   ParseIntPipe,
   Post,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { FeesService } from "./fees.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
+import { streamReceiptPdf } from "../../common/pdf/receipt-pdf";
 import {
   IsBoolean,
   IsDateString,
@@ -24,6 +28,8 @@ import {
   Min,
   MinLength,
 } from "class-validator";
+
+const SCHOOL_NAME = process.env.SCHOOL_NAME || "Greenwood International School";
 
 class CreateStructureDto {
   @IsString()
@@ -141,6 +147,14 @@ export class FeesController {
     @Query("pageSize", new ParseIntPipe({ optional: true })) pageSize?: number,
   ) {
     return this.fees.listPayments(actor, { studentId, source, page, pageSize });
+  }
+
+  // Downloadable PDF receipt for a payment (scoped: admin/accountant, or the
+  // parent/student the payment belongs to).
+  @Get("payments/:id/receipt.pdf")
+  async receiptPdf(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Res() res: Response) {
+    const data = await this.fees.getPaymentForReceipt(actor, id);
+    streamReceiptPdf(res, { schoolName: SCHOOL_NAME, ...data });
   }
 
   // Offline payment recorded by staff (cash / UPI / card / bank / cheque).

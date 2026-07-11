@@ -216,6 +216,50 @@ export class FeesService {
     };
   }
 
+  /**
+   * Load a single payment for its receipt, scoped like the list (admin/accountant
+   * see all; parent/student see their own; everyone else 404 via invisibility).
+   * Includes the class name for the receipt header.
+   */
+  async getPaymentForReceipt(actor: AuthUser, id: string) {
+    let scope: Prisma.paymentsWhereInput | null = null;
+    if (actor.roles.some((r) => r === "admin" || r === "accountant")) scope = {};
+    else if (actor.roles.includes("parent")) {
+      scope = { students: { parent_student: { some: { parent_id: actor.id } } } };
+    } else if (actor.roles.includes("student")) {
+      scope = { students: { profile_id: actor.id } };
+    }
+    if (scope === null) throw new NotFoundException();
+
+    const p = await this.prisma.payments.findFirst({
+      where: { AND: [{ id }, scope] },
+      include: {
+        students: {
+          select: {
+            admission_no: true,
+            profiles: { select: { full_name: true } },
+            classes: { select: { name: true, section: true } },
+          },
+        },
+        fee_assignments: { select: { title: true } },
+      },
+    });
+    if (!p) throw new NotFoundException();
+    const cls = p.students?.classes;
+    return {
+      receiptNo: p.receipt_no,
+      paidAt: p.paid_at,
+      studentName: p.students?.profiles?.full_name ?? null,
+      admissionNo: p.students?.admission_no ?? null,
+      className: cls ? `${cls.name}${cls.section ? " · " + cls.section : ""}` : null,
+      feeTitle: p.fee_assignments?.title ?? null,
+      amount: Number(p.amount),
+      method: p.method,
+      reference: p.reference,
+      recordedBy: null as string | null,
+    };
+  }
+
   /** Shared row/receipt shape so offline and online payments render identically. */
   private paymentRow(p: any) {
     return {
