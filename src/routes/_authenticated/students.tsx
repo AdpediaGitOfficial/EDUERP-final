@@ -1,9 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { apiFetch, apiGet } from "@/lib/api/client";
+import { apiFetch, apiGet, apiPost } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,12 +43,6 @@ import {
   GraduationCap,
   AlertTriangle,
 } from "lucide-react";
-import { admitStudent } from "@/lib/admit-student.functions";
-import {
-  promoteStudents,
-  bulkAssignRoute,
-  bulkSetStudentStatus,
-} from "@/lib/students-bulk.functions";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -67,7 +60,6 @@ function StudentsPage() {
   const [classId, setClassId] = useState<string>("");
   const [gender, setGender] = useState<string>("");
   const [saving, setSaving] = useState(false);
-  const admit = useServerFn(admitStudent);
 
   const { data: assignedClassIds } = useQuery({
     enabled: !!user && isTeacher,
@@ -169,14 +161,12 @@ function StudentsPage() {
       return toast.error("Enter a real first and last name (e.g. Aarav Kumar)");
     setSaving(true);
     try {
-      const res = await admit({
-        data: {
-          fullName,
-          email,
-          classId: classId || null,
-          rollNo: rollNo || null,
-          gender: (gender as "male" | "female" | "other") || null,
-        },
+      const res = await apiPost<{ admissionNo: string; tempPassword: string }>("/students/admit", {
+        fullName,
+        email,
+        classId: classId || null,
+        rollNo: rollNo || null,
+        gender: (gender as "male" | "female" | "other") || null,
       });
       toast.success(
         `Admitted ${fullName} (${res.admissionNo}). Temp password: ${res.tempPassword}`,
@@ -1132,7 +1122,6 @@ function PromoteDialog({
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<any[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  const promote = useServerFn(promoteStudents);
 
   useEffect(() => {
     if (!from) {
@@ -1157,8 +1146,10 @@ function PromoteDialog({
     if (from === to) return toast.error("From and To must differ");
     setBusy(true);
     try {
-      const res = await promote({
-        data: { fromClassId: from, toClassId: to, exclude: Array.from(excluded) },
+      const res = await apiPost<{ moved: number }>("/students/promote", {
+        fromClassId: from,
+        toClassId: to,
+        exclude: Array.from(excluded),
       });
       toast.success(`Promoted ${res.moved} students`);
       onDone();
@@ -1280,14 +1271,16 @@ function AssignRouteDialog({
 }) {
   const [routeId, setRouteId] = useState("");
   const [busy, setBusy] = useState(false);
-  const assign = useServerFn(bulkAssignRoute);
   const submit = async () => {
     if (!routeId) return toast.error("Pick a route");
     setBusy(true);
     try {
       const ids = await getStudentIds();
       if (!ids.length) throw new Error("No students selected");
-      const res = await assign({ data: { routeId, studentIds: ids } });
+      const res = await apiPost<{ assigned: number }>("/students/bulk-assign-route", {
+        routeId,
+        studentIds: ids,
+      });
       toast.success(`Assigned ${res.assigned} students to route`);
       onDone();
       onOpenChange(false);

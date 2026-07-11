@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { apiLogin, apiRegister, getApiToken } from "@/lib/api/client";
+import { apiLogin, apiRegister, apiRequestPasswordReset, getApiToken } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,13 +27,7 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (getApiToken()) {
-      navigate({ to: "/dashboard", replace: true });
-      return;
-    }
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard", replace: true });
-    });
+    if (getApiToken()) navigate({ to: "/dashboard", replace: true });
   }, [navigate]);
 
   const submit = async (e: React.FormEvent) => {
@@ -42,33 +35,18 @@ function AuthPage() {
     setLoading(true);
     try {
       if (mode === "signin") {
-        // Primary session: the NestJS API (identity/RBAC + migrated modules).
         await apiLogin(email, password);
-        // Legacy session: Supabase, for modules not yet cut over. Best-effort —
-        // its absence only affects legacy pages, never the login itself.
-        await supabase.auth.signInWithPassword({ email, password }).catch(() => undefined);
         toast.success("Welcome back");
         navigate({ to: "/dashboard", replace: true });
       } else if (mode === "signup") {
         await apiRegister(email, password, fullName);
-        await supabase.auth
-          .signUp({
-            email,
-            password,
-            options: {
-              emailRedirectTo: `${window.location.origin}/dashboard`,
-              data: { full_name: fullName },
-            },
-          })
-          .catch(() => undefined);
-        toast.success("Account created — check your email if confirmation is required.");
+        toast.success("Account created — welcome to Greenwood.");
         navigate({ to: "/dashboard", replace: true });
       } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`,
-        });
-        if (error) throw error;
-        toast.success("Password reset email sent.");
+        // The API never reveals whether the address has an account, so the
+        // message is deliberately unconditional.
+        await apiRequestPasswordReset(email);
+        toast.success("If that email has an account, a reset link is on its way.");
         setMode("signin");
       }
     } catch (err) {

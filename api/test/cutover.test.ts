@@ -1994,3 +1994,141 @@ describe("Teacher detail bundle (admin/HR teacher page, 17 tables)", () => {
     expect(Array.isArray(d.body.payroll)).toBe(true);
   });
 });
+
+describe("Auth: password reset flow (B40 final cutover)", () => {
+  it("forgot-password mints a single-use token; reset changes the password then the token is spent", async () => {
+    // Unknown email: still 200, no token leaked (no account enumeration).
+    const unknown = await request(http)
+      .post("/api/auth/forgot-password")
+      .send({ email: "nobody-xyz@greenwood.test" });
+    expect(unknown.status).toBe(201);
+    expect(unknown.body.ok).toBe(true);
+    expect(unknown.body.token).toBeUndefined();
+
+    // Real account: non-production returns the token so the flow completes.
+    const req = await request(http)
+      .post("/api/auth/forgot-password")
+      .send({ email: ACCOUNTS.admin });
+    expect(req.status).toBe(201);
+    expect(typeof req.body.token).toBe("string");
+    const token = req.body.token as string;
+
+    // Reset back to the SAME password (keeps the suite's cached admin login valid).
+    const done = await request(http)
+      .post("/api/auth/reset-password")
+      .send({ token, password: PASSWORD });
+    expect(done.status).toBe(201);
+    expect(typeof done.body.accessToken).toBe("string");
+    expect(done.body.user.email).toBe(ACCOUNTS.admin);
+
+    // Single-use: the same token can't be replayed.
+    const replay = await request(http)
+      .post("/api/auth/reset-password")
+      .send({ token, password: PASSWORD });
+    expect(replay.status).toBe(401);
+
+    // Garbage token -> 401.
+    const bad = await request(http)
+      .post("/api/auth/reset-password")
+      .send({ token: "not-a-jwt", password: PASSWORD });
+    expect(bad.status).toBe(401);
+
+    // The admin login still works with the original password.
+    const relogin = await request(http)
+      .post("/api/auth/login")
+      .send({ email: ACCOUNTS.admin, password: PASSWORD });
+    expect(relogin.status).toBe(201);
+    expect(typeof relogin.body.accessToken).toBe("string");
+  });
+});
+
+describe("Admin writes ported off Supabase server-functions (B40)", () => {
+  const stamp = Date.now();
+
+  it("admin creates a teacher account; teacher role is forbidden", async () => {
+    expect(
+      (
+        await post("/users", "teacher", {
+          fullName: "Cutover Teacher",
+          email: `cutover-teacher-${stamp}@greenwood.test`,
+          password: "Greenwood@2026",
+          role: "teacher",
+        })
+      ).status,
+    ).toBe(403);
+
+    const res = await post("/users", "admin", {
+      fullName: "Cutover Teacher",
+      email: `cutover-teacher-${stamp}@greenwood.test`,
+      password: "Greenwood@2026",
+      role: "teacher",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.ok).toBe(true);
+    expect(typeof res.body.userId).toBe("string");
+    // The new account can sign in.
+    const login = await request(http)
+      .post("/api/auth/login")
+      .send({ email: `cutover-teacher-${stamp}@greenwood.test`, password: "Greenwood@2026" });
+    expect(login.status).toBe(201);
+  });
+
+  it("admin admits a student with a generated admission number + temp password; teacher 403", async () => {
+    expect(
+      (
+        await post("/students/admit", "teacher", {
+          fullName: "Cutover Student",
+          email: `cutover-student-${stamp}@greenwood.test`,
+        })
+      ).status,
+    ).toBe(403);
+
+    const res = await post("/students/admit", "admin", {
+      fullName: "Cutover Student",
+      email: `cutover-student-${stamp}@greenwood.test`,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.admissionNo).toMatch(/^ADM-\d{4}-\d{5}$/);
+    expect(typeof res.body.tempPassword).toBe("string");
+  });
+
+  it("promote is admin-only and returns a moved count (from==to is a harmless no-op update)", async () => {
+    const classes = (await get("/classes", "admin")).body as any[];
+    const c = classes[0];
+    expect(
+      (await post("/students/promote", "teacher", { fromClassId: c.id, toClassId: c.id })).status,
+    ).toBe(403);
+    const res = await post("/students/promote", "admin", { fromClassId: c.id, toClassId: c.id });
+    expect(res.status).toBe(201);
+    expect(typeof res.body.moved).toBe("number");
+  });
+
+  it("bulk-status is admin-only; setting active->active updates the given ids", async () => {
+    const rows = (await get("/students?pageSize=5", "admin")).body.rows as any[];
+    const ids = rows.slice(0, 2).map((r) => r.id);
+    expect(
+      (await post("/students/bulk-status", "teacher", { studentIds: ids, status: "active" }))
+        .status,
+    ).toBe(403);
+    const res = await post("/students/bulk-status", "admin", { studentIds: ids, status: "active" });
+    expect(res.status).toBe(201);
+    expect(res.body.updated).toBe(ids.length);
+  });
+
+  it("bulk-assign-route is admin-only and upserts route memberships (idempotent)", async () => {
+    const routes = (await get("/fleet/routes", "admin")).body as any[];
+    const rows = (await get("/students?pageSize=5", "admin")).body.rows as any[];
+    if (!routes.length || rows.length < 1) return; // seed guard
+    const routeId = routes[0].id;
+    const ids = rows.slice(0, 2).map((r) => r.id);
+    expect(
+      (await post("/students/bulk-assign-route", "teacher", { routeId, studentIds: ids })).status,
+    ).toBe(403);
+    const res = await post("/students/bulk-assign-route", "admin", { routeId, studentIds: ids });
+    expect(res.status).toBe(201);
+    expect(res.body.assigned).toBe(ids.length);
+    // Re-running upserts the same rows without error.
+    const again = await post("/students/bulk-assign-route", "admin", { routeId, studentIds: ids });
+    expect(again.status).toBe(201);
+  });
+});

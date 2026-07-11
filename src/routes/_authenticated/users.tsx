@@ -1,11 +1,9 @@
 import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { createUserByAdmin } from "@/lib/create-user.functions";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { apiGet } from "@/lib/api/client";
+import { apiGet, apiPost } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,7 +65,6 @@ function UsersPage() {
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState<AppRole>("student");
   const [saving, setSaving] = useState(false);
-  const createUser = useServerFn(createUserByAdmin);
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -78,7 +75,7 @@ function UsersPage() {
     const phone = String(form.get("phone") ?? "").trim();
     setSaving(true);
     try {
-      await createUser({ data: { fullName, email, password, role, phone: phone || null } });
+      await apiPost("/users", { fullName, email, password, role, phone: phone || null });
       toast.success(`Account created for ${fullName}. Share the credentials with them.`);
       setOpen(false);
       await qc.invalidateQueries({ queryKey: ["users-list"] });

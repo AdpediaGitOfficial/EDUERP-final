@@ -11,7 +11,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
-import { LoginDto, RegisterDto } from "./dto";
+import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from "./dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 
@@ -41,6 +41,18 @@ export class AuthController {
   @Post("register")
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const { user, tokens } = await this.auth.register(dto.email, dto.password, dto.fullName);
+    setRefreshCookie(res, tokens.refreshToken);
+    return { accessToken: tokens.accessToken, user };
+  }
+
+  @Post("forgot-password")
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.auth.requestPasswordReset(dto.email);
+  }
+
+  @Post("reset-password")
+  async resetPassword(@Body() dto: ResetPasswordDto, @Res({ passthrough: true }) res: Response) {
+    const { user, tokens } = await this.auth.resetPassword(dto.token, dto.password);
     setRefreshCookie(res, tokens.refreshToken);
     return { accessToken: tokens.accessToken, user };
   }

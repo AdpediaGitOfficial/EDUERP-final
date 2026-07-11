@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { apiMe, getApiToken, getApiUser, onApiAuthChange } from "@/lib/api/client";
 import type { AppRole } from "@/lib/roles";
 import { pickPrimaryRole } from "@/lib/roles";
@@ -20,8 +19,8 @@ export function useCurrentUser() {
     let mounted = true;
 
     const load = async () => {
-      // Primary: the NestJS API session — identity + roles come from /auth/me
-      // (cached copy renders immediately, then revalidates).
+      // The NestJS API session is the sole identity source. Render the cached
+      // copy immediately, then revalidate against /auth/me.
       if (getApiToken()) {
         const cached = getApiUser();
         if (cached && mounted) {
@@ -29,51 +28,24 @@ export function useCurrentUser() {
           setLoading(false);
         }
         const fresh = await apiMe();
-        if (fresh && mounted) {
-          setUser(toCurrentUser(fresh.id, fresh.email, fresh.fullName, fresh.roles));
-          setLoading(false);
-        }
-        if (fresh || cached) return;
-      }
-
-      // Legacy fallback: a pre-cutover Supabase session.
-      const { data: sessionData } = await supabase.auth.getSession();
-      const authUser = sessionData.session?.user;
-      if (!authUser) {
         if (mounted) {
-          setUser(null);
+          setUser(fresh ? toCurrentUser(fresh.id, fresh.email, fresh.fullName, fresh.roles) : null);
           setLoading(false);
         }
         return;
       }
-      const [{ data: profile }, { data: roleRows }] = await Promise.all([
-        supabase.from("profiles").select("full_name,email").eq("id", authUser.id).maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", authUser.id),
-      ]);
-      const roles = (roleRows ?? []).map((r) => r.role as AppRole);
+
       if (mounted) {
-        setUser({
-          id: authUser.id,
-          email: authUser.email ?? null,
-          fullName: profile?.full_name || authUser.email?.split("@")[0] || "User",
-          roles,
-          primaryRole: pickPrimaryRole(roles),
-        });
+        setUser(null);
         setLoading(false);
       }
     };
 
     load();
     const unsubApi = onApiAuthChange(load);
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
-        load();
-      }
-    });
     return () => {
       mounted = false;
       unsubApi();
-      sub.subscription.unsubscribe();
     };
   }, []);
 

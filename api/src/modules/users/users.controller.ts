@@ -6,14 +6,51 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from "@nestjs/common";
+import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { UsersService } from "./users.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
+
+const APP_ROLES = [
+  "admin",
+  "teacher",
+  "student",
+  "parent",
+  "hr",
+  "accountant",
+  "reception",
+  "fleet_manager",
+] as const;
+
+class CreateUserDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  fullName: string;
+
+  @IsEmail()
+  @MaxLength(255)
+  email: string;
+
+  @IsString()
+  @MinLength(6)
+  @MaxLength(72)
+  password: string;
+
+  @IsIn(APP_ROLES)
+  role: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+}
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("users")
@@ -29,6 +66,12 @@ export class UsersController {
     @Query("q") q?: string,
   ) {
     return this.users.listUsers(actor, page ?? 1, Math.min(pageSize ?? 50, 200), q);
+  }
+
+  @Post()
+  @Roles("admin")
+  create(@CurrentUser() actor: AuthUser, @Body() dto: CreateUserDto) {
+    return this.users.createUser(actor, dto);
   }
 
   @Patch("me")

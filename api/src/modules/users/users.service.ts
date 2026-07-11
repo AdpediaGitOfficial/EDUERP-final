@@ -1,6 +1,15 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../infra/database/prisma.service";
+import { AuthService } from "../auth/auth.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
+
+export type CreateUserInput = {
+  fullName: string;
+  email: string;
+  password: string;
+  role: string;
+  phone?: string | null;
+};
 
 /**
  * RLS translation for profiles / user_roles (see api/db/rls-policies-extracted.csv):
@@ -14,7 +23,47 @@ import type { AuthUser } from "../../common/decorators/current-user.decorator";
  */
 @Injectable()
 export class UsersService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuthService) private readonly auth: AuthService,
+  ) {}
+
+  /**
+   * Admin creates a user (port of `createUserByAdmin`). Provisions the account
+   * with the chosen role, then — for student/teacher roles — creates the linked
+   * domain record, rolling the auth user back if that insert fails so no
+   * orphaned account is left behind (same guarantee as the old server function).
+   */
+  async createUser(actor: AuthUser, input: CreateUserInput) {
+    if (!actor.roles.includes("admin"))
+      throw new ForbiddenException("Only administrators can create users.");
+    const { userId } = await this.auth.provisionAccount({
+      email: input.email,
+      password: input.password,
+      fullName: input.fullName,
+      role: input.role,
+      phone: input.phone ?? null,
+    });
+    try {
+      if (input.role === "student") {
+        await this.prisma.students.create({ data: { profile_id: userId } });
+      } else if (input.role === "teacher") {
+        await this.prisma.teachers.create({
+          data: {
+            full_name: input.fullName,
+            email: input.email,
+            phone: input.phone ?? null,
+            subject: "General",
+            status: "active",
+          },
+        });
+      }
+      return { ok: true, userId };
+    } catch (e) {
+      await this.auth.deleteAccount(userId);
+      throw e;
+    }
+  }
 
   async listUsers(actor: AuthUser, page = 1, pageSize = 50, q?: string) {
     if (!actor.roles.includes("admin")) throw new ForbiddenException("Admin only");

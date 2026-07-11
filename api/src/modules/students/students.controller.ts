@@ -9,7 +9,17 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { IsString, IsUUID, MinLength } from "class-validator";
+import {
+  ArrayMinSize,
+  IsArray,
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 import { StudentsService } from "./students.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
@@ -21,6 +31,67 @@ class LinkParentDto {
 
   @IsUUID()
   parentId: string;
+}
+
+class AdmitStudentDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  fullName: string;
+
+  @IsEmail()
+  @MaxLength(255)
+  email: string;
+
+  @IsOptional()
+  @IsUUID()
+  classId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  rollNo?: string | null;
+
+  @IsOptional()
+  @IsIn(["male", "female", "other"])
+  gender?: "male" | "female" | "other" | null;
+}
+
+class PromoteDto {
+  @IsUUID()
+  fromClassId: string;
+
+  @IsUUID()
+  toClassId: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID("all", { each: true })
+  exclude?: string[];
+}
+
+class BulkAssignRouteDto {
+  @IsUUID()
+  routeId: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID("all", { each: true })
+  studentIds: string[];
+
+  @IsOptional()
+  @IsUUID()
+  stopId?: string | null;
+}
+
+class BulkStatusDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID("all", { each: true })
+  studentIds: string[];
+
+  @IsIn(["active", "inactive", "alumni"])
+  status: "active" | "inactive" | "alumni";
 }
 
 @UseGuards(JwtAuthGuard)
@@ -84,6 +155,26 @@ export class StudentsController {
   @Post("link-parent")
   linkParent(@CurrentUser() actor: AuthUser, @Body() dto: LinkParentDto) {
     return this.students.linkParent(actor, dto.admissionNo, dto.parentId);
+  }
+
+  @Post("admit")
+  admit(@CurrentUser() actor: AuthUser, @Body() dto: AdmitStudentDto) {
+    return this.students.admit(actor, dto);
+  }
+
+  @Post("promote")
+  promote(@CurrentUser() actor: AuthUser, @Body() dto: PromoteDto) {
+    return this.students.promote(actor, dto.fromClassId, dto.toClassId, dto.exclude ?? []);
+  }
+
+  @Post("bulk-assign-route")
+  bulkAssignRoute(@CurrentUser() actor: AuthUser, @Body() dto: BulkAssignRouteDto) {
+    return this.students.bulkAssignRoute(actor, dto.routeId, dto.studentIds, dto.stopId ?? null);
+  }
+
+  @Post("bulk-status")
+  bulkStatus(@CurrentUser() actor: AuthUser, @Body() dto: BulkStatusDto) {
+    return this.students.bulkSetStatus(actor, dto.studentIds, dto.status);
   }
 
   @Get(":id/dashboard")

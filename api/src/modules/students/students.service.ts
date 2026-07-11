@@ -6,8 +6,26 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { randomBytes } from "node:crypto";
 import { PrismaService } from "../../infra/database/prisma.service";
+import { AuthService } from "../auth/auth.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
+
+/** 8-char alphanumeric suffix for a one-time temp password. */
+function randomSuffix(): string {
+  return randomBytes(6)
+    .toString("base64url")
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 8);
+}
+
+export type AdmitStudentInput = {
+  fullName: string;
+  email: string;
+  classId?: string | null;
+  rollNo?: string | null;
+  gender?: "male" | "female" | "other" | null;
+};
 
 /**
  * RLS translation for students (api/db/rls-policies-extracted.csv):
@@ -20,7 +38,109 @@ import type { AuthUser } from "../../common/decorators/current-user.decorator";
  */
 @Injectable()
 export class StudentsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuthService) private readonly auth: AuthService,
+  ) {}
+
+  /**
+   * Admit a new student (port of `admitStudent`). Admin-only. Generates the
+   * standardized admission number via the DB `next_admission_no()` (kept
+   * verbatim so the ADM-YYYY-NNNNN format and sequence are unchanged),
+   * provisions an email-confirmed account with a random temp password + the
+   * student role, then inserts the students row — rolling the account back if
+   * that insert fails. Returns the temp password so the admin can hand it over.
+   */
+  async admit(actor: AuthUser, input: AdmitStudentInput) {
+    if (!actor.roles.includes("admin"))
+      throw new ForbiddenException("Only administrators can admit students.");
+
+    const rows = await this.prisma.$queryRaw<{ next_admission_no: string }[]>`
+      SELECT public.next_admission_no() AS next_admission_no`;
+    const admissionNo = rows[0]?.next_admission_no;
+    if (!admissionNo) throw new BadRequestException("Failed to generate admission number");
+
+    const tempPassword = `Welcome-${randomSuffix()}!`;
+    const { userId } = await this.auth.provisionAccount({
+      email: input.email,
+      password: tempPassword,
+      fullName: input.fullName,
+      role: "student",
+    });
+
+    try {
+      await this.prisma.students.create({
+        data: {
+          profile_id: userId,
+          class_id: input.classId || null,
+          admission_no: admissionNo,
+          roll_no: input.rollNo || null,
+          gender: input.gender ?? null,
+        },
+      });
+    } catch (e) {
+      await this.auth.deleteAccount(userId);
+      throw e;
+    }
+
+    return { ok: true, userId, tempPassword, admissionNo };
+  }
+
+  /**
+   * Bulk-promote active students from one class to another (port of the
+   * `promote_students` RPC). Admin-only; excludes the given ids; returns the
+   * number moved. Reproduces the SQL effect (the DB function itself gates on
+   * Supabase's auth.uid() and can't be called from this session).
+   */
+  async promote(actor: AuthUser, fromClassId: string, toClassId: string, exclude: string[] = []) {
+    if (!actor.roles.includes("admin"))
+      throw new ForbiddenException("Only admins can promote students.");
+    const res = await this.prisma.students.updateMany({
+      where: {
+        class_id: fromClassId,
+        status: "active",
+        ...(exclude.length ? { id: { notIn: exclude } } : {}),
+      },
+      data: { class_id: toClassId },
+    });
+    return { moved: res.count };
+  }
+
+  /** Bulk-assign a transport route to students (port of `bulkAssignRoute`). */
+  async bulkAssignRoute(
+    actor: AuthUser,
+    routeId: string,
+    studentIds: string[],
+    stopId?: string | null,
+  ) {
+    if (!actor.roles.includes("admin"))
+      throw new ForbiddenException("Only admins can assign transport routes.");
+    await this.prisma.$transaction(
+      studentIds.map((sid) =>
+        this.prisma.route_students.upsert({
+          where: { route_id_student_id: { route_id: routeId, student_id: sid } },
+          create: { route_id: routeId, student_id: sid, stop_id: stopId ?? null },
+          update: { stop_id: stopId ?? null },
+        }),
+      ),
+    );
+    return { assigned: studentIds.length };
+  }
+
+  /** Bulk-set student status (port of `bulkSetStudentStatus`). */
+  async bulkSetStatus(
+    actor: AuthUser,
+    studentIds: string[],
+    status: "active" | "inactive" | "alumni",
+  ) {
+    if (!actor.roles.includes("admin"))
+      throw new ForbiddenException("Only admins can change student status.");
+    const res = await this.prisma.students.updateMany({
+      where: { id: { in: studentIds } },
+      data: { status },
+    });
+    return { updated: res.count };
+  }
 
   private scopeFilter(actor: AuthUser): Prisma.studentsWhereInput | null {
     if (actor.roles.includes("admin")) return {};

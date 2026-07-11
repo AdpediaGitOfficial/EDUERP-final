@@ -1,10 +1,10 @@
-// HTTP client for the NestJS API (the Supabase replacement).
+// HTTP client for the NestJS API — the sole backend for the app.
 //
-// Coexistence model (see BACKEND_MIGRATION_LOG.md): during the module-by-module
-// cutover the app holds TWO sessions — this API session (used by migrated
-// modules and by identity/RBAC resolution) and the legacy Supabase session
-// (used by not-yet-migrated modules). Both are established at login with the
-// same credentials; when the last module flips, the Supabase client is removed.
+// The module-by-module cutover (see BACKEND_MIGRATION_LOG.md) is complete: every
+// page and every write goes through this API session (JWT access token in
+// localStorage + an httpOnly refresh cookie). The legacy dual-session era, when
+// the app also held a second backend session for not-yet-migrated modules, is
+// over — this is now the only client.
 
 export type ApiUser = {
   id: string;
@@ -102,6 +102,35 @@ export async function apiRegister(
   return data.user as ApiUser;
 }
 
+/**
+ * Request a password-reset link. Always resolves — the API never reveals whether
+ * the address has an account.
+ */
+export async function apiRequestPasswordReset(email: string): Promise<void> {
+  await rawRequest("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  }).catch(() => undefined);
+}
+
+/**
+ * Complete a password reset with the token from the emailed link. On success the
+ * API returns a fresh session, so the user lands signed in.
+ */
+export async function apiResetPassword(token: string, password: string): Promise<ApiUser> {
+  const res = await rawRequest("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message || "This reset link is invalid or has expired");
+  }
+  const data = await res.json();
+  storeSession(data.accessToken, data.user);
+  return data.user as ApiUser;
+}
+
 export async function apiRefresh(): Promise<ApiUser | null> {
   const res = await rawRequest("/auth/refresh", { method: "POST" });
   if (!res.ok) {
@@ -158,6 +187,16 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 /** Convenience JSON GET for React Query queryFns. */
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await apiFetch(path);
+  if (!res) throw new Error("Not authenticated");
+  return (await res.json()) as T;
+}
+
+/** Convenience JSON POST for React Query mutationFns. */
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const res = await apiFetch(path, {
+    method: "POST",
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
   if (!res) throw new Error("Not authenticated");
   return (await res.json()) as T;
 }
