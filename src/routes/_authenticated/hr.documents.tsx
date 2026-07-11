@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,13 +11,7 @@ export const Route = createFileRoute("/_authenticated/hr/documents")({ component
 function Page() {
   const { data } = useQuery({
     queryKey: ["hr-docs"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("staff_documents")
-          .select("*, staff:staff_id(full_name, employee_code, department)")
-          .order("uploaded_at", { ascending: false })
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/documents"),
   });
   return (
     <>

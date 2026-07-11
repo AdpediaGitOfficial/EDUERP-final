@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,14 +24,8 @@ const REPORTS = [
 function Page() {
   const [selected, setSelected] = useState<(typeof REPORTS)[number]>(REPORTS[0]);
   const { data } = useQuery({
-    queryKey: ["report", selected.table],
-    queryFn: async () =>
-      (
-        await supabase
-          .from(selected.table as any)
-          .select("*")
-          .limit(500)
-      ).data ?? [],
+    queryKey: ["report", selected.key],
+    queryFn: () => apiGet<any[]>(`/hr/reports/${selected.key}`),
   });
   const rows = (data ?? []) as any[];
   const cols = rows[0]

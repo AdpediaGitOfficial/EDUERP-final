@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,19 +32,11 @@ function Page() {
   const qc = useQueryClient();
   const { data: programs } = useQuery({
     queryKey: ["training-programs"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("training_programs")
-          .select("*")
-          .order("start_date", { ascending: false })
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/training/programs"),
   });
   const { data: attendance } = useQuery({
     queryKey: ["training-attendance-all"],
-    queryFn: async () =>
-      (await supabase.from("training_attendance").select("program_id, staff_id, attended, rating"))
-        .data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/training/attendance"),
   });
 
   const upcoming = (programs ?? []).filter(
@@ -64,8 +56,14 @@ function Page() {
   });
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("training_programs").insert(form);
-      if (error) throw error;
+      const res = await apiFetch("/hr/training/programs", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
+      if (!res || !res.ok) {
+        const b = res ? await res.json().catch(() => null) : null;
+        throw new Error(b?.message ?? "Could not create program");
+      }
     },
     onSuccess: () => {
       toast.success("Program created");

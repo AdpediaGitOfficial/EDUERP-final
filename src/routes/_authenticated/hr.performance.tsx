@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Star } from "lucide-react";
@@ -10,13 +10,7 @@ export const Route = createFileRoute("/_authenticated/hr/performance")({ compone
 function Page() {
   const { data } = useQuery({
     queryKey: ["performance-reviews"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_performance_reviews")
-          .select("*, teacher:teacher_id(full_name, employee_code)")
-          .order("period", { ascending: false })
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/performance-reviews"),
   });
   const avg =
     data && data.length

@@ -128,6 +128,16 @@ class WorkflowStatusDto {
   @IsString() @MinLength(1) status: string;
 }
 
+class TrainingProgramDto {
+  @IsString() @MinLength(1) title: string;
+  @IsOptional() @IsString() program_type?: string;
+  @IsOptional() @IsString() provider?: string;
+  @IsOptional() @IsString() start_date?: string;
+  @IsOptional() @IsString() end_date?: string;
+  @IsOptional() @IsNumber() cost?: number;
+  @IsOptional() @IsArray() @IsString({ each: true }) skill_tags?: string[];
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller("hr")
 export class HrController {
@@ -392,5 +402,39 @@ export class HrController {
     @Body() dto: WorkflowStatusDto,
   ) {
     return this.hr.setOvertimeStatus(actor, id, dto.status);
+  }
+
+  // ---- Documents ----------------------------------------------------------
+  @Get("documents")
+  listDocuments(@CurrentUser() actor: AuthUser) {
+    return this.hr.listDocuments(actor);
+  }
+
+  // ---- Performance reviews ------------------------------------------------
+  @Get("performance-reviews")
+  listPerformanceReviews(@CurrentUser() actor: AuthUser) {
+    return this.hr.listPerformanceReviews(actor);
+  }
+
+  // ---- Training -----------------------------------------------------------
+  @Get("training/programs")
+  listTrainingPrograms() {
+    return this.hr.listTrainingPrograms();
+  }
+
+  @Get("training/attendance")
+  listTrainingAttendance(@CurrentUser() actor: AuthUser) {
+    return this.hr.listTrainingAttendance(actor);
+  }
+
+  @Post("training/programs")
+  createTrainingProgram(@CurrentUser() actor: AuthUser, @Body() dto: TrainingProgramDto) {
+    return this.hr.createTrainingProgram(actor, dto);
+  }
+
+  // ---- Reports ------------------------------------------------------------
+  @Get("reports/:key")
+  report(@CurrentUser() actor: AuthUser, @Param("key") key: string) {
+    return this.hr.report(actor, key);
   }
 }

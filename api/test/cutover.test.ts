@@ -1592,3 +1592,40 @@ describe("HR Workforce ops: shifts, exit, travel, overtime (hr|admin)", () => {
     }
   });
 });
+
+describe("HR Records: documents, performance, training, reports (hr|admin)", () => {
+  it("documents/performance are hr|admin; training read open; report keys work", async () => {
+    // document vault + performance reviews are hr|admin
+    expect((await get("/hr/documents", "teacher")).status).toBe(403);
+    expect((await get("/hr/performance-reviews", "teacher")).status).toBe(403);
+    const docs = await get("/hr/documents", "admin");
+    expect(docs.status).toBe(200);
+    expect(Array.isArray(docs.body)).toBe(true);
+    const reviews = await get("/hr/performance-reviews", "admin");
+    expect(reviews.status).toBe(200);
+    expect(Array.isArray(reviews.body)).toBe(true);
+
+    // training programs list is open (tr_read); attendance + create are hr|admin
+    expect((await get("/hr/training/programs", "teacher")).status).toBe(200);
+    expect((await get("/hr/training/attendance", "teacher")).status).toBe(403);
+    expect((await post("/hr/training/programs", "teacher", { title: "Nope" })).status).toBe(403);
+    const made = await post("/hr/training/programs", "admin", {
+      title: `Jest Program ${Date.now()}`,
+      program_type: "course",
+      start_date: "2027-03-01",
+      end_date: "2027-03-03",
+      cost: 5000,
+      skill_tags: ["pedagogy"],
+    });
+    expect(made.status).toBe(201);
+
+    // cross-module reports: hr|admin, keyed; unknown key -> 400
+    expect((await get("/hr/reports/employees", "teacher")).status).toBe(403);
+    for (const key of ["employees", "payroll", "leave", "recruitment", "training", "expenses"]) {
+      const r = await get(`/hr/reports/${key}`, "admin");
+      expect(r.status).toBe(200);
+      expect(Array.isArray(r.body)).toBe(true);
+    }
+    expect((await get("/hr/reports/does-not-exist", "admin")).status).toBe(400);
+  });
+});

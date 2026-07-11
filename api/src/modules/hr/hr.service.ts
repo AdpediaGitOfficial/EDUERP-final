@@ -1049,4 +1049,127 @@ export class HrService {
       })),
     };
   }
+
+  // ==== Document vault (hr_admin_sd = hr|admin) ============================
+  async listDocuments(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.staff_documents.findMany({
+      orderBy: { uploaded_at: "desc" },
+      include: {
+        staff: { select: { full_name: true, employee_code: true, department: true } },
+      },
+    });
+    return rows.map((d) => ({
+      id: d.id,
+      doc_type: d.doc_type,
+      title: d.title,
+      uploaded_at: d.uploaded_at ? d.uploaded_at.toISOString() : null,
+      expiry_date: this.dstr(d.expiry_date),
+      staff: d.staff ?? null,
+    }));
+  }
+
+  // ==== Performance reviews (adm_hr_tpr = hr|admin) ========================
+  async listPerformanceReviews(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.teacher_performance_reviews.findMany({
+      orderBy: { period: "desc" },
+      include: { teachers: { select: { full_name: true } } },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      period: r.period,
+      rating: r.rating == null ? null : this.num(r.rating),
+      notes: r.notes,
+      teacher: r.teachers ?? null,
+    }));
+  }
+
+  // ==== Training (tr_read open / tr_write + tra_hr = hr|admin) =============
+  async listTrainingPrograms() {
+    const rows = await this.prisma.training_programs.findMany({
+      orderBy: { start_date: "desc" },
+    });
+    return rows.map((p) => ({
+      id: p.id,
+      title: p.title,
+      program_type: p.program_type,
+      provider: p.provider,
+      start_date: this.dstr(p.start_date),
+      end_date: this.dstr(p.end_date),
+      cost: this.num(p.cost),
+      skill_tags: p.skill_tags ?? [],
+    }));
+  }
+
+  async listTrainingAttendance(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.training_attendance.findMany({
+      select: { program_id: true, staff_id: true, attended: true, rating: true },
+    });
+    return rows.map((a) => ({
+      program_id: a.program_id,
+      staff_id: a.staff_id,
+      attended: a.attended,
+      rating: a.rating == null ? null : this.num(a.rating),
+    }));
+  }
+
+  async createTrainingProgram(
+    actor: AuthUser,
+    input: {
+      title: string;
+      program_type?: string;
+      provider?: string;
+      start_date?: string;
+      end_date?: string;
+      cost?: number;
+      skill_tags?: string[];
+    },
+  ) {
+    this.requireHr(actor);
+    const row = await this.prisma.training_programs.create({
+      data: {
+        title: input.title,
+        program_type: input.program_type || "workshop",
+        provider: input.provider || null,
+        start_date: input.start_date ? this.dateOnly(input.start_date) : null,
+        end_date: input.end_date ? this.dateOnly(input.end_date) : null,
+        cost: input.cost ?? 0,
+        skill_tags: input.skill_tags ?? [],
+      },
+    });
+    return { id: row.id };
+  }
+
+  // ==== Cross-module reports (hr|admin) — generic table export ============
+  async report(actor: AuthUser, key: string) {
+    this.requireHr(actor);
+    const take = 500;
+    switch (key) {
+      case "employees":
+        return this.prisma.staff.findMany({ take, orderBy: { employee_code: "asc" } });
+      case "attendance":
+        return this.prisma.teacher_attendance.findMany({ take, orderBy: { date: "desc" } });
+      case "payroll":
+        return this.prisma.payroll_runs.findMany({ take, orderBy: { created_at: "desc" } });
+      case "leave":
+        return this.prisma.leave_requests.findMany({ take, orderBy: { created_at: "desc" } });
+      case "performance":
+        return this.prisma.teacher_performance_reviews.findMany({
+          take,
+          orderBy: { period: "desc" },
+        });
+      case "recruitment":
+        return this.prisma.candidates.findMany({ take, orderBy: { created_at: "desc" } });
+      case "training":
+        return this.prisma.training_programs.findMany({ take, orderBy: { start_date: "desc" } });
+      case "resignation":
+        return this.prisma.resignations.findMany({ take, orderBy: { submitted_at: "desc" } });
+      case "expenses":
+        return this.prisma.expense_claims.findMany({ take, orderBy: { created_at: "desc" } });
+      default:
+        throw new BadRequestException("Unknown report.");
+    }
+  }
 }
