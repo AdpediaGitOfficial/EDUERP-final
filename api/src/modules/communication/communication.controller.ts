@@ -33,6 +33,23 @@ class CreateAnnouncementDto {
   classId?: string;
 }
 
+class SendBroadcastDto {
+  @IsIn(["all_parents", "all_teachers", "class", "everyone"])
+  audience: string;
+
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
+
+  @IsString()
+  @MinLength(1)
+  subject: string;
+
+  @IsString()
+  @MinLength(1)
+  body: string;
+}
+
 class CreateHolidayDto {
   @IsString()
   @MinLength(2)
@@ -85,6 +102,16 @@ export class CommunicationController {
     @Query("pageSize", new ParseIntPipe({ optional: true })) pageSize?: number,
   ) {
     return this.comms.listBroadcasts(actor, page ?? 1, Math.min(pageSize ?? 50, 200));
+  }
+
+  @Get("broadcasts/outbox")
+  outbox(@CurrentUser() actor: AuthUser) {
+    return this.comms.outbox(actor);
+  }
+
+  @Post("broadcasts/send")
+  sendBroadcast(@CurrentUser() actor: AuthUser, @Body() dto: SendBroadcastDto) {
+    return this.comms.sendBroadcast(actor, dto);
   }
 
   @Get("holidays")

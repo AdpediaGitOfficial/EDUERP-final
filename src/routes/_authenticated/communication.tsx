@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,26 +41,12 @@ function Page() {
 
   const { data: classes } = useQuery({
     queryKey: ["comm-classes"],
-    queryFn: async () =>
-      (await supabase.from("classes").select("id,name,section").order("name")).data ?? [],
+    queryFn: () => apiGet<any[]>("/classes"),
   });
 
   const { data: broadcasts } = useQuery({
     queryKey: ["comm-broadcasts"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("broadcasts")
-          .select("id,subject,body,audience_type,audience_ref,created_at,sender_id")
-          .order("created_at", { ascending: false })
-          .limit(50)
-      ).data ?? [],
-  });
-
-  const { data: recipients } = useQuery({
-    queryKey: ["comm-recipients"],
-    queryFn: async () =>
-      (await supabase.from("broadcast_recipients").select("broadcast_id,read_at")).data ?? [],
+    queryFn: () => apiGet<any[]>("/broadcasts/outbox"),
   });
 
   const send = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -70,58 +56,29 @@ function Page() {
     const subject = String(fd.get("subject") || "").trim();
     const body = String(fd.get("body") || "").trim();
     if (!subject || !body) return toast.error("Subject and message are required");
+    if (audience === "class" && !classId) return toast.error("Pick a class");
     setSending(true);
+    const form = e.currentTarget;
     try {
-      // Resolve target users
-      let userIds: string[] = [];
-      if (audience === "all_parents" || audience === "everyone") {
-        const { data } = await supabase.from("user_roles").select("user_id").eq("role", "parent");
-        userIds.push(...(data ?? []).map((r) => r.user_id));
-      }
-      if (audience === "all_teachers" || audience === "everyone") {
-        const { data } = await supabase.from("user_roles").select("user_id").eq("role", "teacher");
-        userIds.push(...(data ?? []).map((r) => r.user_id));
-      }
-      if (audience === "class") {
-        if (!classId) {
-          setSending(false);
-          return toast.error("Pick a class");
-        }
-        const { data: sts } = await supabase.from("students").select("id").eq("class_id", classId);
-        const sIds = (sts ?? []).map((s) => s.id);
-        if (sIds.length) {
-          const { data: ps } = await supabase
-            .from("parent_student")
-            .select("parent_id")
-            .in("student_id", sIds);
-          userIds.push(...(ps ?? []).map((r) => r.parent_id));
-        }
-      }
-      userIds = Array.from(new Set(userIds));
-
-      const { data: bc, error } = await supabase
-        .from("broadcasts")
-        .insert({
-          sender_id: user.id,
+      const res = await apiFetch("/broadcasts/send", {
+        method: "POST",
+        body: JSON.stringify({
+          audience,
+          classId: audience === "class" ? classId : undefined,
           subject,
           body,
-          audience_type: audience,
-          audience_ref: audience === "class" ? classId : null,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-
-      if (userIds.length) {
-        const rows = userIds.map((uid) => ({ broadcast_id: bc.id, user_id: uid }));
-        await supabase.from("broadcast_recipients").insert(rows);
+        }),
+      });
+      if (!res || !res.ok) {
+        const b = res ? await res.json().catch(() => null) : null;
+        throw new Error(b?.message ?? "Failed to send");
       }
+      const out = await res.json();
       toast.success(
-        `Broadcast sent to ${userIds.length} recipient${userIds.length === 1 ? "" : "s"}`,
+        `Broadcast sent to ${out.recipients} recipient${out.recipients === 1 ? "" : "s"}`,
       );
-      (e.target as HTMLFormElement).reset();
+      form.reset();
       qc.invalidateQueries({ queryKey: ["comm-broadcasts"] });
-      qc.invalidateQueries({ queryKey: ["comm-recipients"] });
     } catch (err: any) {
       toast.error(err.message ?? "Failed to send");
     } finally {
@@ -129,10 +86,7 @@ function Page() {
     }
   };
 
-  const statsFor = (bid: string) => {
-    const rs = (recipients ?? []).filter((r) => r.broadcast_id === bid);
-    return { total: rs.length, read: rs.filter((r) => r.read_at).length };
-  };
+  const statsFor = (b: any) => ({ total: b.recipientCount ?? 0, read: b.readCount ?? 0 });
 
   return (
     <AppShell>
@@ -208,7 +162,7 @@ function Page() {
           <div className="p-4 border-b font-medium">Sent history</div>
           <ul className="divide-y max-h-[70vh] overflow-y-auto">
             {(broadcasts ?? []).map((b) => {
-              const s = statsFor(b.id);
+              const s = statsFor(b);
               return (
                 <li key={b.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">

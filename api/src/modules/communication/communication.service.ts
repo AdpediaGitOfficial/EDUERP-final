@@ -145,4 +145,122 @@ export class CommunicationService {
     });
     return { id: row.id };
   }
+
+  // ==== Broadcast outbox + send (b_admin_all / b_teacher_own) ==============
+  /** Sent broadcasts with per-message recipient + read stats. */
+  async outbox(actor: AuthUser) {
+    const isAdmin = actor.roles.includes("admin");
+    if (!isAdmin && !actor.roles.includes("teacher")) throw new ForbiddenException();
+    const where: Prisma.broadcastsWhereInput = isAdmin ? {} : { sender_id: actor.id };
+    const rows = await this.prisma.broadcasts.findMany({
+      where,
+      orderBy: { created_at: "desc" },
+      take: 50,
+      include: { _count: { select: { broadcast_recipients: true } } },
+    });
+    const ids = rows.map((r) => r.id);
+    const readByBroadcast = new Map<string, number>();
+    if (ids.length) {
+      const grouped = await this.prisma.broadcast_recipients.groupBy({
+        by: ["broadcast_id"],
+        where: { broadcast_id: { in: ids }, read_at: { not: null } },
+        _count: { _all: true },
+      });
+      for (const g of grouped) readByBroadcast.set(g.broadcast_id as string, g._count._all);
+    }
+    return rows.map((b) => ({
+      id: b.id,
+      subject: b.subject,
+      body: b.body,
+      audience_type: b.audience_type,
+      created_at: b.created_at ? b.created_at.toISOString() : null,
+      recipientCount: b._count.broadcast_recipients,
+      readCount: readByBroadcast.get(b.id) ?? 0,
+    }));
+  }
+
+  /**
+   * Send a broadcast. Resolves the audience to recipient user-ids and stores a
+   * constraint-valid audience_type (all_parents | all_staff | class | user).
+   * The old client used all_teachers/everyone, which violate
+   * broadcasts_audience_type_check — mapped here to all_staff / user.
+   */
+  async sendBroadcast(
+    actor: AuthUser,
+    input: { audience: string; classId?: string; subject: string; body: string },
+  ) {
+    const isAdmin = actor.roles.includes("admin");
+    if (!isAdmin && !actor.roles.includes("teacher")) throw new ForbiddenException();
+    if (!input.subject?.trim() || !input.body?.trim())
+      throw new ForbiddenException("Subject and message are required.");
+
+    const parentIds = async () =>
+      (await this.prisma.user_roles.findMany({ where: { role: "parent" as never } })).map(
+        (r) => r.user_id,
+      );
+    const teacherIds = async () =>
+      (await this.prisma.user_roles.findMany({ where: { role: "teacher" as never } })).map(
+        (r) => r.user_id,
+      );
+
+    let userIds: string[] = [];
+    let audienceType: string;
+    let audienceRef: string | null = null;
+
+    switch (input.audience) {
+      case "all_parents":
+        userIds = await parentIds();
+        audienceType = "all_parents";
+        break;
+      case "all_teachers":
+        userIds = await teacherIds();
+        audienceType = "all_staff";
+        break;
+      case "everyone":
+        userIds = [...(await parentIds()), ...(await teacherIds())];
+        audienceType = "user";
+        break;
+      case "class": {
+        if (!input.classId) throw new ForbiddenException("Pick a class.");
+        const students = await this.prisma.students.findMany({
+          where: { class_id: input.classId },
+          select: { id: true },
+        });
+        const sIds = students.map((s) => s.id);
+        if (sIds.length) {
+          const ps = await this.prisma.parent_student.findMany({
+            where: { student_id: { in: sIds } },
+            select: { parent_id: true },
+          });
+          userIds = ps.map((p) => p.parent_id);
+        }
+        audienceType = "class";
+        audienceRef = input.classId;
+        break;
+      }
+      default:
+        throw new ForbiddenException("Unknown audience.");
+    }
+
+    // Only real auth accounts can receive (broadcast_recipients.user_id -> auth.users).
+    const unique = Array.from(new Set(userIds)).filter(Boolean);
+    const accounts = unique.length
+      ? await this.prisma.users.findMany({ where: { id: { in: unique } }, select: { id: true } })
+      : [];
+    const recipients = accounts.map((a) => a.id);
+
+    const broadcast = await this.prisma.broadcasts.create({
+      data: {
+        sender_id: actor.id,
+        audience_type: audienceType,
+        audience_ref: audienceRef,
+        subject: input.subject,
+        body: input.body,
+        ...(recipients.length
+          ? { broadcast_recipients: { create: recipients.map((user_id) => ({ user_id })) } }
+          : {}),
+      },
+    });
+    return { id: broadcast.id, recipients: recipients.length };
+  }
 }

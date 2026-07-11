@@ -18,6 +18,7 @@ import { FleetModule } from "./modules/fleet/fleet.module";
 import { AssetsModule } from "./modules/assets/assets.module";
 import { EssModule } from "./modules/ess/ess.module";
 import { AccessModule } from "./modules/access/access.module";
+import { ProgressModule } from "./modules/progress/progress.module";
 import { ReceptionModule } from "./modules/reception/reception.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { HealthController } from "./health.controller";
@@ -41,6 +42,7 @@ import { HealthController } from "./health.controller";
     AssetsModule,
     EssModule,
     AccessModule,
+    ProgressModule,
     ComplaintsModule,
     CommunicationModule,
     ReceptionModule,

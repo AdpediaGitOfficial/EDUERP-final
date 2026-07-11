@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -53,25 +53,12 @@ function Page() {
 
   const { data: students } = useQuery({
     queryKey: ["ph-students"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("students")
-          .select("id,admission_no,roll_no,profiles(full_name),classes(name,section)")
-          .order("admission_no")
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/progress/students"),
   });
 
   const { data: notes } = useQuery({
     queryKey: ["ph-notes"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("progress_notes")
-          .select("id,note,tone,note_date,student_id,students(admission_no,profiles(full_name))")
-          .order("note_date", { ascending: false })
-          .limit(50)
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/progress/notes"),
   });
 
   const filtered = useMemo(() => {
@@ -80,7 +67,7 @@ function Page() {
     return (students ?? [])
       .filter(
         (s: any) =>
-          (s.profiles?.full_name ?? "").toLowerCase().includes(t) ||
+          (s.full_name ?? "").toLowerCase().includes(t) ||
           (s.admission_no ?? "").toLowerCase().includes(t),
       )
       .slice(0, 30);
@@ -90,13 +77,14 @@ function Page() {
     e.preventDefault();
     if (!user || !noteStudent) return toast.error("Pick a student");
     const fd = new FormData(e.currentTarget);
-    const { error } = await supabase.from("progress_notes").insert({
-      student_id: noteStudent,
-      teacher_id: user.id,
-      note: String(fd.get("note") || ""),
-      tone,
+    const res = await apiFetch("/progress/notes", {
+      method: "POST",
+      body: JSON.stringify({ student_id: noteStudent, note: String(fd.get("note") || ""), tone }),
     });
-    if (error) return toast.error(error.message);
+    if (!res || !res.ok) {
+      const b = res ? await res.json().catch(() => null) : null;
+      return toast.error(b?.message ?? "Could not add note");
+    }
     toast.success("Note added");
     setOpenNote(false);
     setNoteStudent("");
@@ -139,7 +127,7 @@ function Page() {
                     <SelectContent className="max-h-72">
                       {(students ?? []).map((s: any) => (
                         <SelectItem key={s.id} value={s.id}>
-                          {s.profiles?.full_name} · {s.admission_no}
+                          {s.full_name} · {s.admission_no}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -193,12 +181,10 @@ function Page() {
             {filtered.map((s: any) => (
               <li key={s.id} className="p-3 flex items-center gap-3 hover:bg-muted/40">
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{s.profiles?.full_name}</div>
+                  <div className="font-medium truncate">{s.full_name}</div>
                   <div className="text-xs text-muted-foreground font-mono">
                     {s.admission_no}
-                    {s.classes
-                      ? ` · ${s.classes.name}${s.classes.section ? ` ${s.classes.section}` : ""}`
-                      : ""}
+                    {s.className ? ` · ${s.className}` : ""}
                   </div>
                 </div>
                 <Link
@@ -235,7 +221,7 @@ function Page() {
                           params={{ studentId: n.student_id }}
                           className="font-medium text-sm hover:underline"
                         >
-                          {n.students?.profiles?.full_name}
+                          {n.student_name}
                         </Link>
                         <Badge className={`${TONE_META[n.tone] ?? ""} border-0 capitalize`}>
                           {n.tone}

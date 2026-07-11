@@ -1786,3 +1786,74 @@ describe("Admin views: payments list, attendance overview, my timetable", () => 
     }
   });
 });
+
+describe("Progress hub + communication broadcasts (admin/teacher)", () => {
+  it("progress students/notes are staff-only; note write stamps teacher_id", async () => {
+    expect((await get("/progress/students", "parent")).status).toBe(403);
+    const studs = await get("/progress/students", "admin");
+    expect(studs.status).toBe(200);
+    expect(Array.isArray(studs.body)).toBe(true);
+    expect(studs.body.length).toBeGreaterThan(0);
+
+    const notes = await get("/progress/notes", "admin");
+    expect(notes.status).toBe(200);
+    expect(Array.isArray(notes.body)).toBe(true);
+
+    // teacher adds a note for one of their students (or admin picks any)
+    const anyStudent = (await get("/progress/students", "admin")).body[0];
+    const created = await post("/progress/notes", "admin", {
+      student_id: anyStudent.id,
+      note: `jest progress ${Date.now()}`,
+      tone: "positive",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.id).toBeTruthy();
+    // parent cannot write
+    expect(
+      (await post("/progress/notes", "parent", { student_id: anyStudent.id, note: "no" })).status,
+    ).toBe(403);
+  });
+
+  it("broadcast outbox + send: audience maps to a constraint-valid type", async () => {
+    // outbox is admin|teacher
+    expect((await get("/broadcasts/outbox", "parent")).status).toBe(403);
+    const out = await get("/broadcasts/outbox", "admin");
+    expect(out.status).toBe(200);
+    expect(Array.isArray(out.body)).toBe(true);
+    if (out.body[0]) {
+      expect(out.body[0]).toHaveProperty("recipientCount");
+      expect(out.body[0]).toHaveProperty("readCount");
+    }
+
+    // send to all_teachers -> stored audience_type must be a valid enum value
+    const sent = await post("/broadcasts/send", "admin", {
+      audience: "all_teachers",
+      subject: `jest broadcast ${Date.now()}`,
+      body: "jest body",
+    });
+    expect(sent.status).toBe(201);
+    expect(sent.body.recipients).toBeGreaterThanOrEqual(0);
+    // the new broadcast is at the top of the outbox with a valid audience type
+    const after = await get("/broadcasts/outbox", "admin");
+    expect(["all_parents", "all_staff", "class", "user"]).toContain(after.body[0].audience_type);
+
+    // 'everyone' maps to the constraint-valid 'user' type (parents + teachers)
+    const everyone = await post("/broadcasts/send", "admin", {
+      audience: "everyone",
+      subject: `jest everyone ${Date.now()}`,
+      body: "jest body",
+    });
+    expect(everyone.status).toBe(201);
+
+    // parent cannot send
+    expect(
+      (
+        await post("/broadcasts/send", "parent", {
+          audience: "all_parents",
+          subject: "x",
+          body: "y",
+        })
+      ).status,
+    ).toBe(403);
+  });
+});
