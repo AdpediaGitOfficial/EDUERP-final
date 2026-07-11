@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
+  Param,
   ParseIntPipe,
   Post,
   Query,
@@ -11,7 +13,15 @@ import {
 import { FinanceService } from "./finance.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
-import { IsDateString, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  MinLength,
+} from "class-validator";
 
 class CreateExpenseDto {
   @IsString()
@@ -34,10 +44,51 @@ class CreateExpenseDto {
   vendor?: string;
 }
 
+class ReconcileDto {
+  @IsUUID()
+  paymentId: string;
+
+  @IsString()
+  @MinLength(1)
+  bankRef: string;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller("finance")
 export class FinanceController {
   constructor(@Inject(FinanceService) private readonly finance: FinanceService) {}
+
+  @Get("dashboard")
+  dashboard(
+    @CurrentUser() actor: AuthUser,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.finance.dashboard(actor, from, to);
+  }
+
+  @Get("reconciliation/payments")
+  reconPayments(
+    @CurrentUser() actor: AuthUser,
+    @Query("limit", new ParseIntPipe({ optional: true })) limit?: number,
+  ) {
+    return this.finance.paymentsForReconciliation(actor, limit ?? 50);
+  }
+
+  @Get("reconciliation")
+  reconciliations(@CurrentUser() actor: AuthUser) {
+    return this.finance.listReconciliations(actor);
+  }
+
+  @Post("reconciliation")
+  reconcile(@CurrentUser() actor: AuthUser, @Body() dto: ReconcileDto) {
+    return this.finance.reconcile(actor, dto.paymentId, dto.bankRef);
+  }
+
+  @Delete("reconciliation/:paymentId")
+  unreconcile(@CurrentUser() actor: AuthUser, @Param("paymentId") paymentId: string) {
+    return this.finance.unreconcile(actor, paymentId);
+  }
 
   @Get("expenses")
   expenses(

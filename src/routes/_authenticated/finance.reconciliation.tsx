@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,33 +16,45 @@ function Page() {
   const [refs, setRefs] = useState<Record<string, string>>({});
   const { data: payments } = useQuery({
     queryKey: ["recon-payments"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("payments")
-          .select("id,amount,payment_date,method,status,transaction_id")
-          .order("payment_date", { ascending: false })
-          .limit(50)
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/finance/reconciliation/payments?limit=50");
+      // Keep the field names this table renders (payment_date <- paidAt).
+      return rows.map((p) => ({
+        id: p.id,
+        amount: p.amount,
+        payment_date: p.paidAt,
+        method: p.method,
+        status: p.status,
+      }));
+    },
   });
   const { data: recs } = useQuery({
     queryKey: ["recon-list"],
-    queryFn: async () =>
-      (await supabase.from("payment_reconciliations").select("payment_id, bank_ref, reconciled_at"))
-        .data ?? [],
+    queryFn: async () => {
+      const rows =
+        await apiGet<{ paymentId: string; bankRef: string; reconciledAt: string }[]>(
+          "/finance/reconciliation",
+        );
+      return rows.map((r) => ({
+        payment_id: r.paymentId,
+        bank_ref: r.bankRef,
+        reconciled_at: r.reconciledAt,
+      }));
+    },
   });
   const recMap = new Map((recs ?? []).map((r: any) => [r.payment_id, r]));
 
   const reconcile = useMutation({
     mutationFn: async ({ paymentId, bankRef }: { paymentId: string; bankRef: string }) =>
-      await supabase
-        .from("payment_reconciliations")
-        .insert({ payment_id: paymentId, bank_ref: bankRef }),
+      apiFetch("/finance/reconciliation", {
+        method: "POST",
+        body: JSON.stringify({ paymentId, bankRef }),
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["recon-list"] }),
   });
   const unreconcile = useMutation({
     mutationFn: async (paymentId: string) =>
-      await supabase.from("payment_reconciliations").delete().eq("payment_id", paymentId),
+      apiFetch(`/finance/reconciliation/${paymentId}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["recon-list"] }),
   });
 

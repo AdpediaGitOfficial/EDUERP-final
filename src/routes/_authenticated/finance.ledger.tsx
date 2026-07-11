@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,46 +13,24 @@ export const Route = createFileRoute("/_authenticated/finance/ledger")({ compone
 type Row = { date: string; kind: "income" | "expense"; desc: string; amount: number };
 
 function Page() {
-  const { data: payments } = useQuery({
-    queryKey: ["ledger-payments"],
+  const { data: entries } = useQuery({
+    queryKey: ["finance-ledger"],
     queryFn: async () =>
-      (
-        await supabase
-          .from("payments")
-          .select("id,amount,payment_date,method,status")
-          .eq("status", "successful")
-          .order("payment_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: expenses } = useQuery({
-    queryKey: ["ledger-expenses"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("expenses")
-          .select("id,amount,category,expense_date,vendor")
-          .order("expense_date", { ascending: false })
-      ).data ?? [],
+      apiGet<
+        { id: string; kind: "credit" | "debit"; amount: number; date: string; label: string }[]
+      >("/finance/ledger?limit=1000"),
   });
 
   const rows: Row[] = useMemo(() => {
-    const r: Row[] = [];
-    for (const p of payments ?? [])
-      r.push({
-        date: (p as any).payment_date ?? "",
-        kind: "income",
-        desc: `Fee payment (${(p as any).method ?? "cash"})`,
-        amount: Number((p as any).amount || 0),
-      });
-    for (const e of expenses ?? [])
-      r.push({
-        date: (e as any).expense_date ?? "",
-        kind: "expense",
-        desc: `${(e as any).category} — ${(e as any).vendor ?? ""}`,
-        amount: Number((e as any).amount || 0),
-      });
-    return r.sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [payments, expenses]);
+    return (entries ?? [])
+      .map((e) => ({
+        date: e.date ?? "",
+        kind: (e.kind === "credit" ? "income" : "expense") as Row["kind"],
+        desc: e.label,
+        amount: Number(e.amount || 0),
+      }))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [entries]);
 
   const income = rows.filter((r) => r.kind === "income").reduce((a, r) => a + r.amount, 0);
   const expTotal = rows.filter((r) => r.kind === "expense").reduce((a, r) => a + r.amount, 0);

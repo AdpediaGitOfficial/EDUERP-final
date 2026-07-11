@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,13 +31,23 @@ function Page() {
   });
   const { data } = useQuery({
     queryKey: ["expenses"],
-    queryFn: async () =>
-      (await supabase.from("expenses").select("*").order("expense_date", { ascending: false }))
-        .data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/finance/expenses?pageSize=200");
+      return res.rows;
+    },
   });
   const add = useMutation({
     mutationFn: async () =>
-      await supabase.from("expenses").insert({ ...form, amount: Number(form.amount) }),
+      apiFetch("/finance/expenses", {
+        method: "POST",
+        body: JSON.stringify({
+          category: form.category,
+          amount: Number(form.amount),
+          expenseDate: form.expense_date,
+          notes: form.notes || undefined,
+          vendor: form.vendor || undefined,
+        }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["expenses"] });
       setOpen(false);

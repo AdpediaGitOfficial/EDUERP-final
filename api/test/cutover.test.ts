@@ -425,3 +425,77 @@ describe("HR: dashboard + leave/payroll/expense reads and approvals", () => {
     // above returns early; CI runs against a fresh schema every time.
   });
 });
+
+describe("Finance: dashboard, ledger, expenses, reconciliation", () => {
+  it("dashboard aggregates revenue/outstanding/trend/byClass/overdue; non-finance rejected", async () => {
+    const dash = await get("/finance/dashboard?from=2026-01-01&to=2026-12-31", "admin");
+    expect(dash.status).toBe(200);
+    expect(typeof dash.body.revenue).toBe("number");
+    expect(typeof dash.body.outstanding).toBe("number");
+    expect(dash.body.trend.length).toBe(6);
+    expect(Array.isArray(dash.body.byClass)).toBe(true);
+    expect(Array.isArray(dash.body.overdue)).toBe(true);
+    expect(dash.body.efficiency).toHaveProperty("thisPct");
+    // acc_admin_exp / accountant|admin — a teacher has no finance visibility.
+    expect((await get("/finance/dashboard", "teacher")).status).toBe(403);
+  });
+
+  it("ledger only counts successful income; expenses list + create work", async () => {
+    const ledger = await get("/finance/ledger?limit=10", "admin");
+    expect(ledger.status).toBe(200);
+    expect(Array.isArray(ledger.body)).toBe(true);
+    for (const e of ledger.body) expect(["credit", "debit"]).toContain(e.kind);
+
+    const created = await post("/finance/expenses", "admin", {
+      category: "utilities",
+      amount: 1234,
+      expenseDate: "2026-07-01",
+      vendor: "Cutover Vendor",
+    });
+    expect(created.status).toBe(201);
+    const list = await get("/finance/expenses?pageSize=5", "admin");
+    expect(list.body).toHaveProperty("rows");
+    expect(
+      (
+        await post("/finance/expenses", "teacher", {
+          category: "utilities",
+          amount: 1,
+          expenseDate: "2026-07-01",
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("reconcile is an idempotent upsert; unreconcile removes it", async () => {
+    const payments = await get("/finance/reconciliation/payments?limit=1", "admin");
+    expect(payments.status).toBe(200);
+    if (!payments.body.length) return;
+    const paymentId = payments.body[0].id;
+
+    const rec = await post("/finance/reconciliation", "admin", {
+      paymentId,
+      bankRef: "CUTOVER-REF-1",
+    });
+    expect(rec.status).toBe(201);
+    // Idempotent — a second reconcile updates rather than 500s on the unique key.
+    expect(
+      (await post("/finance/reconciliation", "admin", { paymentId, bankRef: "CUTOVER-REF-2" }))
+        .status,
+    ).toBe(201);
+
+    const list = await get("/finance/reconciliation", "admin");
+    expect(list.body.find((r: any) => r.paymentId === paymentId)?.bankRef).toBe("CUTOVER-REF-2");
+
+    const del = await request(http)
+      .delete(`/api/finance/reconciliation/${paymentId}`)
+      .set("Authorization", `Bearer ${tokens.admin}`);
+    expect(del.status).toBe(200);
+    const after = await get("/finance/reconciliation", "admin");
+    expect(after.body.find((r: any) => r.paymentId === paymentId)).toBeUndefined();
+
+    // A teacher cannot reconcile.
+    expect(
+      (await post("/finance/reconciliation", "teacher", { paymentId, bankRef: "no" })).status,
+    ).toBe(403);
+  });
+});

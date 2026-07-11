@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,178 +65,43 @@ function Page() {
   const [custom, setCustom] = useState({ from: "", to: "" });
   const range = useMemo(() => periodRange(period, custom), [period, custom]);
 
-  const { data: payments } = useQuery({
-    queryKey: ["fin-payments"],
-    queryFn: async () =>
-      (await supabase.from("payments").select("id,amount,status,paid_at").limit(5000)).data ?? [],
-  });
-  const { data: fees } = useQuery({
-    queryKey: ["fin-fees"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("fee_assignments")
-          .select("id,student_id,amount_due,amount_paid,status,due_date")
-          .limit(10000)
-      ).data ?? [],
-  });
-  const { data: expenses } = useQuery({
-    queryKey: ["fin-exp"],
-    queryFn: async () =>
-      (await supabase.from("expenses").select("id,amount,expense_date").limit(5000)).data ?? [],
-  });
-  const { data: payroll } = useQuery({
-    queryKey: ["fin-payroll"],
-    queryFn: async () =>
-      (await supabase.from("payroll_runs").select("id,net_salary,status,month").limit(5000)).data ??
-      [],
-  });
-
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const inRange = (d?: string | null) => {
-    if (!d) return false;
-    const t = new Date(d).getTime();
-    return t >= range.from.getTime() && t <= range.to.getTime();
-  };
-
-  const revenue = (payments ?? [])
-    .filter((p: any) => p.status === "successful" && inRange(p.paid_at))
-    .reduce((a: number, p: any) => a + Number(p.amount || 0), 0);
-  const outstanding = (fees ?? []).reduce(
-    (a: number, f: any) => a + Math.max(0, Number(f.amount_due) - Number(f.amount_paid || 0)),
-    0,
-  );
-  const todaysCollections = (payments ?? [])
-    .filter((p: any) => p.status === "successful" && (p.paid_at ?? "").slice(0, 10) === todayStr)
-    .reduce((a: number, p: any) => a + Number(p.amount || 0), 0);
-  const refunds = (payments ?? [])
-    .filter((p: any) => p.status === "refunded" && inRange(p.paid_at))
-    .reduce((a: number, p: any) => a + Number(p.amount || 0), 0);
-  const payrollPeriod = (payroll ?? [])
-    .filter((p: any) => p.status === "paid" && inRange(p.month))
-    .reduce((a: number, p: any) => a + Number(p.net_salary || 0), 0);
-  const expensePeriod = (expenses ?? [])
-    .filter((e: any) => inRange(e.expense_date))
-    .reduce((a: number, e: any) => a + Number(e.amount || 0), 0);
-
-  // 6-month revenue trend
-  const trend = useMemo(() => {
-    const now = new Date();
-    const buckets: { key: string; label: string; revenue: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      buckets.push({
-        key: d.toISOString().slice(0, 7),
-        label: d.toLocaleString("en-IN", { month: "short" }),
-        revenue: 0,
-      });
-    }
-    for (const p of (payments ?? []) as any[]) {
-      if (p.status !== "successful" || !p.paid_at) continue;
-      const k = p.paid_at.slice(0, 7);
-      const b = buckets.find((x) => x.key === k);
-      if (b) b.revenue += Number(p.amount || 0);
-    }
-    return buckets;
-  }, [payments]);
-
-  // Collection efficiency: this term vs last term
-  const efficiency = useMemo(() => {
-    const now = new Date();
-    const m = now.getMonth();
-    const thisTerm = {
-      from: m < 6 ? new Date(now.getFullYear(), 0, 1) : new Date(now.getFullYear(), 6, 1),
-      to:
-        m < 6
-          ? new Date(now.getFullYear(), 5, 30, 23, 59, 59)
-          : new Date(now.getFullYear(), 11, 31, 23, 59, 59),
-    };
-    const lastTerm =
-      m < 6
-        ? {
-            from: new Date(now.getFullYear() - 1, 6, 1),
-            to: new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59),
-          }
-        : {
-            from: new Date(now.getFullYear(), 0, 1),
-            to: new Date(now.getFullYear(), 5, 30, 23, 59, 59),
-          };
-    const collected = (r: { from: Date; to: Date }) =>
-      (payments ?? [])
-        .filter(
-          (p: any) =>
-            p.status === "successful" &&
-            p.paid_at &&
-            new Date(p.paid_at) >= r.from &&
-            new Date(p.paid_at) <= r.to,
-        )
-        .reduce((a: number, p: any) => a + Number(p.amount || 0), 0);
-    const invoiced =
-      (fees ?? []).reduce((a: number, f: any) => a + Number(f.amount_due || 0), 0) || 1;
-    const cThis = collected(thisTerm),
-      cLast = collected(lastTerm);
-    return { thisPct: (cThis / invoiced) * 100, lastPct: (cLast / invoiced) * 100 };
-  }, [payments, fees]);
-
-  // Fee collection by grade/section
-  const { data: byClass } = useQuery({
-    queryKey: ["fin-by-class"],
+  const { data } = useQuery({
+    queryKey: ["finance-dashboard", range.from.toISOString(), range.to.toISOString()],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("fee_assignments")
-        .select("amount_due,amount_paid,students!inner(class_id,classes(id,name,section))")
-        .limit(20000);
-      const map = new Map<
-        string,
-        { id: string; label: string; collected: number; outstanding: number }
-      >();
-      for (const r of (data ?? []) as any[]) {
-        const c = r.students?.classes;
-        if (!c) continue;
-        const key = c.id;
-        const cur = map.get(key) ?? {
-          id: c.id,
-          label: `${c.name}${c.section ? `·${c.section}` : ""}`,
-          collected: 0,
-          outstanding: 0,
-        };
-        cur.collected += Number(r.amount_paid || 0);
-        cur.outstanding += Math.max(0, Number(r.amount_due || 0) - Number(r.amount_paid || 0));
-        map.set(key, cur);
-      }
-      return Array.from(map.values()).sort((a, b) =>
-        a.label.localeCompare(b.label, undefined, { numeric: true }),
-      );
+      const from = range.from.toISOString().slice(0, 10);
+      const to = range.to.toISOString().slice(0, 10);
+      return apiGet<{
+        revenue: number;
+        outstanding: number;
+        todaysCollections: number;
+        refunds: number;
+        payrollPeriod: number;
+        expensePeriod: number;
+        trend: { key: string; label: string; revenue: number }[];
+        efficiency: { thisPct: number; lastPct: number };
+        byClass: { id: string; label: string; collected: number; outstanding: number }[];
+        overdue: {
+          id: string;
+          student_id: string;
+          name: string;
+          admission_no: string | null;
+          amount: number;
+          days: number;
+        }[];
+      }>(`/finance/dashboard?from=${from}&to=${to}`);
     },
   });
 
-  // Top 10 overdue accounts
-  const { data: overdue } = useQuery({
-    queryKey: ["fin-overdue"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("fee_assignments")
-        .select(
-          "id,student_id,amount_due,amount_paid,due_date,status,students(admission_no,profiles(full_name))",
-        )
-        .neq("status", "paid")
-        .lt("due_date", new Date().toISOString().slice(0, 10))
-        .limit(200);
-      const rows = (data ?? [])
-        .map((r: any) => ({
-          id: r.id,
-          student_id: r.student_id,
-          name: r.students?.profiles?.full_name || r.students?.admission_no || "—",
-          admission_no: r.students?.admission_no,
-          amount: Math.max(0, Number(r.amount_due || 0) - Number(r.amount_paid || 0)),
-          days: Math.max(0, Math.floor((Date.now() - new Date(r.due_date).getTime()) / 86_400_000)),
-        }))
-        .filter((r) => r.amount > 0)
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 10);
-      return rows;
-    },
-  });
+  const revenue = data?.revenue ?? 0;
+  const outstanding = data?.outstanding ?? 0;
+  const todaysCollections = data?.todaysCollections ?? 0;
+  const refunds = data?.refunds ?? 0;
+  const payrollPeriod = data?.payrollPeriod ?? 0;
+  const expensePeriod = data?.expensePeriod ?? 0;
+  const trend = data?.trend ?? [];
+  const efficiency = data?.efficiency ?? { thisPct: 0, lastPct: 0 };
+  const byClass = data?.byClass ?? [];
+  const overdue = data?.overdue ?? [];
 
   return (
     <>
