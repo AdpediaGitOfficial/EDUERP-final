@@ -13,7 +13,6 @@ import {
   School,
   BarChart3,
   Search,
-  Bell,
   ClipboardCheck,
   BookOpenCheck,
   NotebookPen,
@@ -38,6 +37,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet";
+import { NotificationsBell } from "@/components/notifications-bell";
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; roles: AppRole[] };
 
@@ -236,12 +236,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="w-full h-10 pl-10 pr-3 rounded-lg bg-secondary text-sm outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
-          <button
-            aria-label="Notifications"
-            className="size-11 shrink-0 rounded-lg grid place-items-center hover:bg-secondary text-muted-foreground"
-          >
-            <Bell className="size-5" />
-          </button>
+          <NotificationsBell />
           <div className="flex items-center gap-2 shrink-0 min-w-0">
             <div className="size-9 shrink-0 rounded-lg bg-secondary text-secondary-foreground grid place-items-center text-sm font-semibold">
               {initials}

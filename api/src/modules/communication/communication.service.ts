@@ -117,6 +117,60 @@ export class CommunicationService {
     return { total, page, pageSize, rows };
   }
 
+  // ==== Notifications center (the caller's own inbox rows) =================
+  // Built on broadcast_recipients (br_user_read/update own rows): fee-due
+  // notices, targeted broadcasts, and anything else routed through
+  // NotificationsService.notify() land here as per-user rows with a read flag.
+
+  /** The caller's most recent notifications, newest first, with a read flag. */
+  async myNotifications(actor: AuthUser, limit = 20) {
+    const rows = await this.prisma.broadcast_recipients.findMany({
+      where: { user_id: actor.id },
+      orderBy: { created_at: "desc" },
+      take: Math.min(Math.max(limit, 1), 50),
+      include: {
+        broadcasts: {
+          select: { subject: true, body: true, created_at: true, audience_type: true },
+        },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id, // recipient-row id — mark-read targets this
+      broadcastId: r.broadcast_id,
+      subject: r.broadcasts?.subject ?? null,
+      body: r.broadcasts?.body ?? null,
+      audienceType: r.broadcasts?.audience_type ?? null,
+      createdAt: r.broadcasts?.created_at ?? r.created_at,
+      read: !!r.read_at,
+    }));
+  }
+
+  /** Unread count for the caller — drives the bell badge. */
+  async unreadCount(actor: AuthUser) {
+    const count = await this.prisma.broadcast_recipients.count({
+      where: { user_id: actor.id, read_at: null },
+    });
+    return { count };
+  }
+
+  /** Mark one of the caller's own notifications read (br_user_update own rows). */
+  async markNotificationRead(actor: AuthUser, recipientId: string) {
+    const res = await this.prisma.broadcast_recipients.updateMany({
+      where: { id: recipientId, user_id: actor.id, read_at: null },
+      data: { read_at: new Date() },
+    });
+    return { updated: res.count };
+  }
+
+  /** Mark all of the caller's unread notifications read. */
+  async markAllNotificationsRead(actor: AuthUser) {
+    const res = await this.prisma.broadcast_recipients.updateMany({
+      where: { user_id: actor.id, read_at: null },
+      data: { read_at: new Date() },
+    });
+    return { updated: res.count };
+  }
+
   async listHolidays(_actor: AuthUser) {
     // hol_read_auth: true
     return this.prisma.holidays.findMany({ orderBy: { start_date: "asc" } });

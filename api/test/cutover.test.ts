@@ -2338,3 +2338,35 @@ describe("Admin writes ported off Supabase server-functions (B40)", () => {
     expect(again.status).toBe(201);
   });
 });
+
+describe("Notifications center", () => {
+  it("lists the caller's notifications (read flag) + unread count", async () => {
+    const list = await get("/notifications?limit=5", "parent");
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body)).toBe(true);
+    if (list.body[0]) {
+      for (const k of ["id", "subject", "body", "createdAt", "read"])
+        expect(list.body[0]).toHaveProperty(k);
+    }
+    const uc = await get("/notifications/unread-count", "parent");
+    expect(uc.status).toBe(200);
+    expect(typeof uc.body.count).toBe("number");
+  });
+
+  it("mark-read only affects the caller's own rows (no cross-user)", async () => {
+    const list = await get("/notifications?limit=1", "parent");
+    if (!list.body[0]) return; // seed guard
+    const rid = list.body[0].id;
+    // Admin cannot mark a parent's recipient row.
+    expect((await post(`/notifications/${rid}/read`, "admin", {})).body.updated).toBe(0);
+    // The owner can (idempotent: 1 if it was unread, 0 if already read).
+    const mine = await post(`/notifications/${rid}/read`, "parent", {});
+    expect(mine.status).toBe(201);
+    expect([0, 1]).toContain(mine.body.updated);
+  });
+
+  it("read-all zeroes the caller's unread count", async () => {
+    await post("/notifications/read-all", "parent", {});
+    expect((await get("/notifications/unread-count", "parent")).body.count).toBe(0);
+  });
+});

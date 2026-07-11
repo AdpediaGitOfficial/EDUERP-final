@@ -114,6 +114,30 @@ export class CommunicationController {
     return this.comms.sendBroadcast(actor, dto);
   }
 
+  // ---- Notifications center ----------------------------------------------
+  @Get("notifications")
+  notifications(
+    @CurrentUser() actor: AuthUser,
+    @Query("limit", new ParseIntPipe({ optional: true })) limit?: number,
+  ) {
+    return this.comms.myNotifications(actor, limit ?? 20);
+  }
+
+  @Get("notifications/unread-count")
+  unreadCount(@CurrentUser() actor: AuthUser) {
+    return this.comms.unreadCount(actor);
+  }
+
+  @Post("notifications/read-all")
+  readAll(@CurrentUser() actor: AuthUser) {
+    return this.comms.markAllNotificationsRead(actor);
+  }
+
+  @Post("notifications/:id/read")
+  readOne(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.comms.markNotificationRead(actor, id);
+  }
+
   @Get("holidays")
   holidays(@CurrentUser() actor: AuthUser) {
     return this.comms.listHolidays(actor);
