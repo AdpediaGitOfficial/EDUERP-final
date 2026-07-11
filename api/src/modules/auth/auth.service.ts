@@ -180,7 +180,11 @@ export class AuthService {
       data: { recovery_token: this.hashToken(token), updated_at: new Date() },
     });
 
-    const base = process.env.WEB_ORIGIN || "http://localhost:3999";
+    // WEB_ORIGIN may be a comma-separated CORS list; the link uses the first origin.
+    const base = (process.env.WEB_ORIGIN?.split(",")[0].trim() || "http://localhost:3999").replace(
+      /\/$/,
+      "",
+    );
     const link = `${base}/reset-password?token=${encodeURIComponent(token)}`;
     await this.email.send({
       to: account.email,

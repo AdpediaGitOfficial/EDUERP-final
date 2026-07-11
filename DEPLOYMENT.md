@@ -1,7 +1,12 @@
 # Deployment Guide — Standard Node.js (no Docker)
 
-Production stack: **Node.js 22 + PM2 + Nginx + PostgreSQL (Supabase)** on a standard Linux or
-Windows server. No containers are used anywhere in this setup.
+Production stack: **Node.js 22 + PM2 + Nginx + PostgreSQL + the NestJS API** on a standard Linux
+or Windows server. No containers are used anywhere in this setup.
+
+Two services run under PM2: the **web SSR app** (`greenwood-erp`, nitro build in `.output/`) and
+the **NestJS API** (`greenwood-api`, `api/dist/`). The browser reaches the API same-origin via
+`/api` (Nginx proxies it), so there is no cross-origin/CORS hop in normal operation. The Supabase
+migration is complete — see `BACKEND_MIGRATION_LOG.md`.
 
 ## Architecture
 
@@ -9,10 +14,8 @@ Windows server. No containers are used anywhere in this setup.
 Browser ── HTTPS ──> Nginx (TLS, gzip, static assets, rate limiting, security headers)
                         │
                         ├── /assets/*      served from disk (immutable, hashed filenames)
-                        └── everything else ──> PM2 cluster ──> Node SSR server (.output/)
-                                                                    │
-                                                                    └──> PostgreSQL + Auth + Storage
-                                                                         (Supabase — cloud or self-hosted)
+                        ├── /api/*  ──────> PM2 ──> NestJS API (api/dist, :3001) ──> PostgreSQL
+                        └── everything else ──> PM2 cluster ──> Node SSR web server (.output/, :3000)
 ```
 
 Two honest notes on the requested stack, so nobody hunts for files that shouldn't exist:
@@ -22,11 +25,11 @@ Two honest notes on the requested stack, so nobody hunts for files that shouldn'
   (`.output/server/index.mjs`). Swapping to Next.js would be a ground-up rewrite of ~90 routes
   with no deployment benefit; everything in this guide (PM2, Nginx, env-driven config) applies
   identically. See MIGRATION_LOG "On the fixed tech-stack note".
-- **Redis**: not required by this architecture and deliberately not installed. Data access,
-  auth-session storage, and realtime are handled by PostgreSQL/Supabase; the app keeps no
-  server-side session state (JWT bearer auth), so there is nothing for Redis to hold. If you
-  later add server-side caching or queues, PM2 + this Nginx config need no changes — add a
-  `REDIS_URL` env var and a client at that point.
+- **Redis**: not required by this architecture and deliberately not installed. Data access is
+  PostgreSQL via the NestJS API; auth is stateless JWT (access token + httpOnly refresh cookie),
+  so there is no server-side session state for Redis to hold. If you later add server-side caching
+  or queues, PM2 + this Nginx config need no changes — add a `REDIS_URL` env var and a client at
+  that point.
 
 ## 1. Prerequisites
 
@@ -35,45 +38,59 @@ Two honest notes on the requested stack, so nobody hunts for files that shouldn'
 - Bun **1.3+** (build machine only; the production server needs only Node)
 - PM2: `npm i -g pm2`
 - Nginx 1.24+ (Linux; on Windows use IIS ARR or nginx-for-windows with the same proxy rules)
-- A PostgreSQL backend via Supabase — either a Supabase Cloud project (recommended) or
-  self-hosted Supabase (`supabase start` on the server, or the Supabase self-hosting guide).
+- **PostgreSQL 16** — a self-managed instance (local, RDS, Cloud SQL, etc.); the app owns the
+  database, there is no external BaaS dependency.
 
 ## 2. Database setup (once)
 
 ```sh
-supabase link --project-ref <YOUR_PROJECT_REF>
-supabase db push                  # applies supabase/migrations/ (schema, RLS, functions)
+# Create the database + a role, then build the schema from the extracted migrations.
+createdb greenwood
+DATABASE_URL="postgresql://erp:erp@localhost:5432/greenwood?schema=public" \
+  api/db/apply-migrations.sh        # applies the schema (tables, functions, indexes)
 ```
 
-Seed/demo data and moving off an old project: see the runbook in MIGRATION_LOG.md Phase 4.
+`api/db/apply-migrations.sh` is the source of truth for the schema (built from
+`supabase/migrations/`, retained only as that schema-of-record). Seed/demo data: see the runbook
+in `BACKEND_MIGRATION_LOG.md`.
 
 ## 3. Build (on the build machine or CI)
 
 ```sh
+# Web SSR app:
 bun install --frozen-lockfile
-cp .env.example .env              # fill in Supabase values (VITE_* are inlined at build time)
-bun run build                     # → .output/  (self-contained; no node_modules needed at runtime)
+bun run build                     # → .output/  (self-contained; no node_modules at runtime)
+                                  # VITE_API_URL defaults to /api (same-origin via Nginx)
+
+# NestJS API:
+cd api
+npm ci
+npx prisma generate
+npm run build                     # → api/dist/
 ```
 
-Deploy artifact = the `.output/` directory + `ecosystem.config.cjs`. Copy them to the server,
-e.g. `/var/www/greenwood-erp/`.
+Deploy artifact = the `.output/` directory + the `api/` directory (with its `dist/` and
+`node_modules/`, since Prisma's client is generated there) + `ecosystem.config.cjs`. Copy them to
+the server, e.g. `/var/www/greenwood-erp/`.
 
 ## 4. Run under PM2
 
 ```sh
 cd /var/www/greenwood-erp
-export $(grep -v '^#' .env | xargs)      # or set env in ecosystem.config.cjs
-pm2 start ecosystem.config.cjs
-pm2 save                                  # persist process list
-pm2 startup                               # generate boot service (systemd) — run the printed command
+export $(grep -v '^#' .env | xargs)          # web env (optional)
+export $(grep -v '^#' api/.env | xargs)      # API env: DATABASE_URL, JWT_SECRET, WEB_ORIGIN
+pm2 start ecosystem.config.cjs               # starts both greenwood-erp and greenwood-api
+pm2 save                                      # persist process list
+pm2 startup                                   # generate boot service (systemd) — run the printed command
 ```
 
-- Cluster mode uses every CPU core; `pm2 reload greenwood-erp` gives zero-downtime deploys.
-- Logs: `pm2 logs greenwood-erp` (files under `logs/`).
+- Both apps use cluster mode; `pm2 reload greenwood-erp greenwood-api` gives zero-downtime deploys.
+- Logs: `pm2 logs greenwood-erp` / `pm2 logs greenwood-api` (files under `logs/`).
 - **Windows**: PM2 works the same (`pm2 start ecosystem.config.cjs`); for boot persistence use
   `pm2-installer` or `pm2-windows-service` instead of `pm2 startup`.
 
-Verify: `curl http://127.0.0.1:3000/api/health` → `{"status":"ok",...}`.
+Verify: `curl http://127.0.0.1:3001/api/health` → `{"status":"ok",...}` (the NestJS API) and
+`curl -I http://127.0.0.1:3000/` → `200/307` (the web app).
 
 ## 5. Nginx
 
@@ -87,34 +104,42 @@ sudo nginx -t && sudo systemctl reload nginx
 TLS: `sudo certbot certonly --webroot -w /var/www/certbot -d erp.example.com`.
 
 What the config provides: HTTP→HTTPS redirect, TLS 1.2/1.3, HTTP/2, HSTS + security headers,
-gzip, immutable caching of hashed `/assets/*` straight from disk (bypasses Node), rate limiting
-on `/_serverFn/` RPCs, unlogged `/api/health` for external monitors.
+gzip, immutable caching of hashed `/assets/*` straight from disk (bypasses Node), `/api/*` proxied
+to the NestJS API (rate limited), `/_serverFn/` RPCs to the web app (rate limited), unlogged
+`/api/health` for external monitors.
 
 ## 6. Updating a deployment
 
 ```sh
+# Web:
 bun install --frozen-lockfile && bun run build      # on build machine
 rsync -a --delete .output/ server:/var/www/greenwood-erp/.output/
-ssh server 'cd /var/www/greenwood-erp && pm2 reload greenwood-erp'
+
+# API:
+cd api && npm ci && npx prisma generate && npm run build
+rsync -a --delete dist/ node_modules/ server:/var/www/greenwood-erp/api/
+
+ssh server 'cd /var/www/greenwood-erp && pm2 reload greenwood-erp greenwood-api'
 ```
 
-Database changes ship as new files in `supabase/migrations/` → `supabase db push` before the
-app reload.
+Schema changes: apply the new migration to Postgres (`api/db/apply-migrations.sh` against the
+production `DATABASE_URL`, or your migration tool of choice) and `npx prisma generate` before the
+API reload.
 
 ## 7. Security checklist
 
 - [x] TLS-only (Nginx redirects HTTP; HSTS 2 years)
 - [x] Security headers set by both the app (`src/server.ts`) and Nginx
-- [x] RPC rate limiting at the edge (`/_serverFn/`, 20 r/s + burst 40 per IP)
-- [x] Secrets only in `.env` on the server (gitignored); service-role key never reaches the
-      client bundle (`client.server.ts` is server-only, enforced by import protection)
-- [x] Row-Level Security on every table (see `supabase/migrations/`) — API access is scoped per
-      role even if the app layer is bypassed
+- [x] Edge rate limiting on `/api/*` and `/_serverFn/` (20 r/s + burst 40 per IP)
+- [x] Secrets only in `.env` / `api/.env` on the server (gitignored); no service-role/BaaS key
+      exists any more — the frontend has no DB client and the API holds the only DB credentials
+- [x] Authorization enforced server-side in the API (RLS policies reproduced as NestJS guards +
+      service-layer scoping) — a forged client request cannot read/write outside its role
 - [ ] Change the seeded demo-account passwords (or delete the demo accounts) before real use
-- [ ] Restrict Postgres/Supabase network access to the app server + admin IPs
+- [ ] Restrict Postgres network access to the API server + admin IPs
 
 ## 8. Monitoring
 
-- `GET /api/health` — liveness (also used by PM2 max-memory restarts and external uptime checks)
-- `pm2 monit` / `pm2 status` — process CPU/memory
-- Nginx `access.log`/`error.log` — edge traffic; app logs via `pm2 logs`
+- `GET /api/health` — API liveness (also used by external uptime checks)
+- `pm2 monit` / `pm2 status` — process CPU/memory for both apps
+- Nginx `access.log`/`error.log` — edge traffic; app logs via `pm2 logs greenwood-erp|greenwood-api`
