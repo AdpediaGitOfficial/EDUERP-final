@@ -116,6 +116,9 @@ export class AuthService {
     nationalId?: string | null;
     address?: string | null;
     occupation?: string | null;
+    passportNo?: string | null;
+    company?: string | null;
+    parentCode?: string | null;
   }): Promise<{ userId: string }> {
     const email = params.email.toLowerCase();
     const existing = await this.prisma.users.findUnique({ where: { email } });
@@ -148,6 +151,9 @@ export class AuthService {
           national_id: params.nationalId ?? null,
           address: params.address ?? null,
           occupation: params.occupation ?? null,
+          passport_no: params.passportNo ?? null,
+          company: params.company ?? null,
+          parent_code: params.parentCode ?? null,
         },
         update: {
           full_name: name,
@@ -155,6 +161,9 @@ export class AuthService {
           ...(params.nationalId ? { national_id: params.nationalId } : {}),
           ...(params.address ? { address: params.address } : {}),
           ...(params.occupation ? { occupation: params.occupation } : {}),
+          ...(params.passportNo ? { passport_no: params.passportNo } : {}),
+          ...(params.company ? { company: params.company } : {}),
+          ...(params.parentCode ? { parent_code: params.parentCode } : {}),
         },
       });
       // Force the requested role (the legacy on_auth_user_created trigger may

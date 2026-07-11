@@ -36,6 +36,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { Users } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/children/$studentId/")({
   component: ChildDetailPage,
@@ -62,6 +64,9 @@ function ChildDetailPage() {
   const fees = (dashboard?.fees ?? []) as any[];
   const assignedHomework = (dashboard?.homework ?? []) as any[];
   const submissionsAll = (dashboard?.submissions ?? []) as any[];
+  const guardians = (dashboard?.guardians ?? []) as any[];
+  const { user } = useCurrentUser();
+  const canOpenParentProfile = !!user?.roles.some((r) => r === "admin" || r === "reception");
 
   const [attMonth, setAttMonth] = useState(() => {
     const d = new Date();
@@ -453,6 +458,10 @@ function ChildDetailPage() {
           <TabsTrigger value="fees">
             <Wallet className="size-4 mr-1" />
             Fees
+          </TabsTrigger>
+          <TabsTrigger value="parents">
+            <Users className="size-4 mr-1" />
+            Parents
           </TabsTrigger>
         </TabsList>
 
@@ -930,6 +939,76 @@ function ChildDetailPage() {
               <Link to="/fees">
                 <Button size="sm">Pay fees online</Button>
               </Link>
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="parents">
+          <Card className="rounded-2xl overflow-hidden">
+            <div className="p-4 border-b font-medium text-sm">Parents & Guardians</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[720px]">
+                <thead className="bg-muted/40 text-left">
+                  <tr>
+                    <th className="p-3">Name</th>
+                    <th className="p-3">Relationship</th>
+                    <th className="p-3">Mobile</th>
+                    <th className="p-3">Email</th>
+                    <th className="p-3">Flags</th>
+                    {canOpenParentProfile && <th className="p-3" />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {guardians.map((g) => (
+                    <tr key={g.parentId} className="border-t">
+                      <td className="p-3 font-medium">
+                        {g.fullName ?? "—"}
+                        {g.isPrimary && (
+                          <Badge className="ml-2 bg-emerald-100 text-emerald-800">Primary</Badge>
+                        )}
+                      </td>
+                      <td className="p-3 capitalize">
+                        {(g.relationshipType ?? "").replace("_", " ")}
+                      </td>
+                      <td className="p-3 text-muted-foreground">{g.phone ?? "—"}</td>
+                      <td className="p-3 text-muted-foreground">{g.email ?? "—"}</td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1">
+                          {g.feeResponsible && <Badge variant="secondary">Fees</Badge>}
+                          {g.pickupPermission && <Badge variant="secondary">Pickup</Badge>}
+                          {g.emergencyContact && <Badge variant="secondary">Emergency</Badge>}
+                          {g.livesWith && <Badge variant="secondary">Lives with</Badge>}
+                          {!g.feeResponsible &&
+                            !g.pickupPermission &&
+                            !g.emergencyContact &&
+                            !g.livesWith && (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                        </div>
+                      </td>
+                      {canOpenParentProfile && (
+                        <td className="p-3 text-right">
+                          <Link to="/parents/$parentId" params={{ parentId: g.parentId }}>
+                            <Button size="sm" variant="outline">
+                              Profile
+                            </Button>
+                          </Link>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                  {guardians.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={canOpenParentProfile ? 6 : 5}
+                        className="p-6 text-center text-muted-foreground text-sm"
+                      >
+                        No parents or guardians linked to this student yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </Card>
         </TabsContent>

@@ -51,6 +51,11 @@ export class ParentsService {
       arr.push({
         studentId: l.student_id,
         relationshipType: l.relationship_type,
+        isPrimary: l.is_primary,
+        pickupPermission: l.pickup_permission,
+        feeResponsible: l.fee_responsible,
+        emergencyContact: l.emergency_contact,
+        livesWith: l.lives_with,
         name: l.students?.profiles?.full_name ?? null,
         admissionNo: l.students?.admission_no ?? null,
         rollNo: l.students?.roll_no ?? null,
@@ -71,20 +76,30 @@ export class ParentsService {
    */
   async search(
     actor: AuthUser,
-    params: { email?: string; phone?: string; nationalId?: string; q?: string },
+    params: {
+      email?: string;
+      phone?: string;
+      nationalId?: string;
+      passportNo?: string;
+      parentCode?: string;
+      q?: string;
+    },
   ) {
     this.requireDesk(actor);
-    const { email, phone, nationalId, q } = params;
-    if (!email && !phone && !nationalId && !q?.trim()) return { matches: [] };
+    const { email, phone, nationalId, passportNo, parentCode, q } = params;
+    if (!email && !phone && !nationalId && !passportNo && !parentCode && !q?.trim())
+      return { matches: [] };
 
     const conds: Prisma.Sql[] = [];
     if (email) conds.push(Prisma.sql`lower(p.email) = lower(${email})`);
     if (phone) conds.push(Prisma.sql`p.phone = ${phone}`);
     if (nationalId) conds.push(Prisma.sql`p.national_id = ${nationalId}`);
+    if (passportNo) conds.push(Prisma.sql`lower(p.passport_no) = lower(${passportNo})`);
+    if (parentCode) conds.push(Prisma.sql`lower(p.parent_code) = lower(${parentCode})`);
     if (q?.trim()) {
       const like = `%${q.trim()}%`;
       conds.push(
-        Prisma.sql`(p.full_name ILIKE ${like} OR p.email ILIKE ${like} OR p.phone ILIKE ${like})`,
+        Prisma.sql`(p.full_name ILIKE ${like} OR p.email ILIKE ${like} OR p.phone ILIKE ${like} OR p.parent_code ILIKE ${like})`,
       );
     }
     const rows = await this.prisma.$queryRaw<
@@ -94,9 +109,10 @@ export class ParentsService {
         email: string | null;
         phone: string | null;
         national_id: string | null;
+        parent_code: string | null;
       }[]
     >(Prisma.sql`
-      SELECT DISTINCT p.id, p.full_name, p.email, p.phone, p.national_id
+      SELECT DISTINCT p.id, p.full_name, p.email, p.phone, p.national_id, p.parent_code
       FROM profiles p
       JOIN user_roles ur ON ur.user_id = p.id AND ur.role = 'parent'
       WHERE ${Prisma.join(conds, " OR ")}
@@ -111,6 +127,7 @@ export class ParentsService {
         email: r.email,
         phone: r.phone,
         nationalId: r.national_id,
+        parentCode: r.parent_code,
         children: kids.get(r.id) ?? [],
       })),
     };
@@ -208,6 +225,9 @@ export class ParentsService {
       email: profile.email,
       phone: profile.phone,
       nationalId: profile.national_id,
+      passportNo: profile.passport_no,
+      parentCode: profile.parent_code,
+      company: profile.company,
       address: profile.address,
       occupation: profile.occupation,
       status: profile.status,
@@ -240,6 +260,8 @@ export class ParentsService {
       email: string;
       phone?: string;
       nationalId?: string;
+      passportNo?: string;
+      company?: string;
       address?: string;
       occupation?: string;
       password?: string;
@@ -267,6 +289,14 @@ export class ParentsService {
         nationalId: input.nationalId ?? null,
         address: input.address ?? null,
         occupation: input.occupation ?? null,
+        passportNo: input.passportNo ?? null,
+        company: input.company ?? null,
+      });
+      // Deterministic, unique parent code derived from the new id (matches the
+      // backfill scheme so all parents are searchable by code).
+      await this.prisma.profiles.update({
+        where: { id: userId },
+        data: { parent_code: `PAR-${userId.replace(/-/g, "").slice(0, 8).toUpperCase()}` },
       });
       return { ok: true, parentId: userId, tempPassword: password };
     } catch (e) {
@@ -292,6 +322,8 @@ export class ParentsService {
       fullName?: string;
       phone?: string | null;
       nationalId?: string | null;
+      passportNo?: string | null;
+      company?: string | null;
       address?: string | null;
       occupation?: string | null;
     },
@@ -306,6 +338,8 @@ export class ParentsService {
           ...(input.fullName !== undefined ? { full_name: input.fullName } : {}),
           ...(input.phone !== undefined ? { phone: input.phone } : {}),
           ...(input.nationalId !== undefined ? { national_id: input.nationalId } : {}),
+          ...(input.passportNo !== undefined ? { passport_no: input.passportNo } : {}),
+          ...(input.company !== undefined ? { company: input.company } : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
           ...(input.occupation !== undefined ? { occupation: input.occupation } : {}),
           updated_at: new Date(),
@@ -319,7 +353,19 @@ export class ParentsService {
     }
   }
 
-  async linkChild(actor: AuthUser, parentId: string, studentId: string, relationshipType: string) {
+  async linkChild(
+    actor: AuthUser,
+    parentId: string,
+    studentId: string,
+    relationshipType: string,
+    flags: {
+      isPrimary?: boolean;
+      pickupPermission?: boolean;
+      feeResponsible?: boolean;
+      emergencyContact?: boolean;
+      livesWith?: boolean;
+    } = {},
+  ) {
     this.requireDesk(actor);
     if (!(REL_TYPES as readonly string[]).includes(relationshipType))
       throw new BadRequestException("Invalid relationship type");
@@ -329,10 +375,33 @@ export class ParentsService {
     ]);
     if (!parent) throw new NotFoundException("Parent not found");
     if (!student) throw new NotFoundException("Student not found");
+    const flagData = {
+      ...(flags.isPrimary !== undefined ? { is_primary: flags.isPrimary } : {}),
+      ...(flags.pickupPermission !== undefined
+        ? { pickup_permission: flags.pickupPermission }
+        : {}),
+      ...(flags.feeResponsible !== undefined ? { fee_responsible: flags.feeResponsible } : {}),
+      ...(flags.emergencyContact !== undefined
+        ? { emergency_contact: flags.emergencyContact }
+        : {}),
+      ...(flags.livesWith !== undefined ? { lives_with: flags.livesWith } : {}),
+    };
+    // A student has at most one primary guardian — demote others when setting one.
+    if (flags.isPrimary) {
+      await this.prisma.parent_student.updateMany({
+        where: { student_id: studentId, parent_id: { not: parentId } },
+        data: { is_primary: false },
+      });
+    }
     await this.prisma.parent_student.upsert({
       where: { parent_id_student_id: { parent_id: parentId, student_id: studentId } },
-      create: { parent_id: parentId, student_id: studentId, relationship_type: relationshipType },
-      update: { relationship_type: relationshipType },
+      create: {
+        parent_id: parentId,
+        student_id: studentId,
+        relationship_type: relationshipType,
+        ...flagData,
+      },
+      update: { relationship_type: relationshipType, ...flagData },
     });
     return { ok: true };
   }

@@ -80,13 +80,23 @@ export class StudentsService {
       role: "student",
     });
 
+    // When placed in a class, auto-assign the next per-class sequential roll if
+    // one wasn't supplied — the (class_id, roll_no) unique index is the backstop
+    // against duplicates.
+    let rollNo = input.rollNo?.trim() || null;
+    if (input.classId && !rollNo) {
+      const r = await this.prisma.$queryRaw<{ next_roll_no: string }[]>`
+        SELECT public.next_roll_no(${input.classId}::uuid) AS next_roll_no`;
+      rollNo = r[0]?.next_roll_no ?? null;
+    }
+
     try {
       await this.prisma.students.create({
         data: {
           profile_id: userId,
           class_id: input.classId || null,
           admission_no: admissionNo,
-          roll_no: input.rollNo || null,
+          roll_no: rollNo,
           gender: input.gender ?? null,
         },
       });
@@ -95,7 +105,7 @@ export class StudentsService {
       throw e;
     }
 
-    return { ok: true, userId, tempPassword, admissionNo };
+    return { ok: true, userId, tempPassword, admissionNo, rollNo };
   }
 
   /**
@@ -629,6 +639,25 @@ export class StudentsService {
         )
       : new Map<string, string>();
 
+    // Guardians (with relationship flags) for the student's Parents tab.
+    const guardianRows = await this.prisma.parent_student.findMany({
+      where: { student_id: studentId },
+      include: { profiles: { select: { id: true, full_name: true, email: true, phone: true } } },
+      orderBy: [{ is_primary: "desc" }],
+    });
+    const guardians = guardianRows.map((g) => ({
+      parentId: g.parent_id,
+      fullName: g.profiles?.full_name ?? null,
+      email: g.profiles?.email ?? null,
+      phone: g.profiles?.phone ?? null,
+      relationshipType: g.relationship_type,
+      isPrimary: g.is_primary,
+      pickupPermission: g.pickup_permission,
+      feeResponsible: g.fee_responsible,
+      emergencyContact: g.emergency_contact,
+      livesWith: g.lives_with,
+    }));
+
     const dstr = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
     const num = (v: unknown) => (v == null ? null : Number(v));
 
@@ -655,6 +684,7 @@ export class StudentsService {
             }
           : null,
       },
+      guardians,
       attendance: attendance.map((a) => ({
         date: dstr(a.date),
         status: a.status,

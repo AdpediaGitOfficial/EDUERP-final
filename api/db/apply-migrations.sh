@@ -30,4 +30,6 @@ psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/05-fleet-demo-seed.sql
 
 # ESS demo data (links a staff record to the teacher login + self-service data).
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/06-ess-demo-seed.sql
+# Multi-child family (David + Maria + 3 siblings) proving the student–parent model.
+psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/07-student-parent-family-seed.sql
 echo "done."

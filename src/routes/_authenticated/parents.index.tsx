@@ -185,6 +185,8 @@ function AddParentDialog({ onClose }: { onClose: () => void }) {
     email: "",
     phone: "",
     nationalId: "",
+    passportNo: "",
+    company: "",
     address: "",
     occupation: "",
   });
@@ -230,6 +232,8 @@ function AddParentDialog({ onClose }: { onClose: () => void }) {
         email: form.email.trim(),
         phone: form.phone.trim() || undefined,
         nationalId: form.nationalId.trim() || undefined,
+        passportNo: form.passportNo.trim() || undefined,
+        company: form.company.trim() || undefined,
         address: form.address.trim() || undefined,
         occupation: form.occupation.trim() || undefined,
       });
@@ -273,8 +277,16 @@ function AddParentDialog({ onClose }: { onClose: () => void }) {
             <Input id="ap-nid" value={form.nationalId} onChange={set("nationalId")} />
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="ap-pass">Passport</Label>
+            <Input id="ap-pass" value={form.passportNo} onChange={set("passportNo")} />
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="ap-occ">Occupation</Label>
             <Input id="ap-occ" value={form.occupation} onChange={set("occupation")} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ap-company">Company</Label>
+            <Input id="ap-company" value={form.company} onChange={set("company")} />
           </div>
           <div className="space-y-1.5 col-span-2">
             <Label htmlFor="ap-addr">Address</Label>

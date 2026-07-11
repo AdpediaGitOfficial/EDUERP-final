@@ -35,6 +35,9 @@ type Profile = {
   email: string | null;
   phone: string | null;
   nationalId: string | null;
+  passportNo: string | null;
+  parentCode: string | null;
+  company: string | null;
   address: string | null;
   occupation: string | null;
   status: string;
@@ -112,10 +115,13 @@ function ParentProfilePage() {
         <Card className="rounded-2xl p-6 lg:col-span-2">
           <div className="font-medium text-sm mb-4">Contact & personal</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+            <Field label="Parent code" value={data.parentCode} icon={IdCard} />
             <Field label="Email" value={data.email} icon={Mail} />
             <Field label="Mobile" value={data.phone} icon={Phone} />
             <Field label="National ID" value={data.nationalId} icon={IdCard} />
+            <Field label="Passport" value={data.passportNo} icon={IdCard} />
             <Field label="Occupation" value={data.occupation} icon={Briefcase} />
+            <Field label="Company" value={data.company} icon={Briefcase} />
             <Field label="Address" value={data.address} icon={MapPin} />
           </div>
         </Card>
@@ -284,6 +290,8 @@ function EditParentDialog({
     fullName: profile.fullName,
     phone: profile.phone ?? "",
     nationalId: profile.nationalId ?? "",
+    passportNo: profile.passportNo ?? "",
+    company: profile.company ?? "",
     address: profile.address ?? "",
     occupation: profile.occupation ?? "",
   });
@@ -299,6 +307,8 @@ function EditParentDialog({
         fullName: form.fullName.trim(),
         phone: form.phone.trim() || null,
         nationalId: form.nationalId.trim() || null,
+        passportNo: form.passportNo.trim() || null,
+        company: form.company.trim() || null,
         address: form.address.trim() || null,
         occupation: form.occupation.trim() || null,
       });
@@ -335,10 +345,18 @@ function EditParentDialog({
             <Input id="pp-nid" value={form.nationalId} onChange={set("nationalId")} />
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="pp-pass">Passport</Label>
+            <Input id="pp-pass" value={form.passportNo} onChange={set("passportNo")} />
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="pp-occ">Occupation</Label>
             <Input id="pp-occ" value={form.occupation} onChange={set("occupation")} />
           </div>
           <div className="space-y-1.5">
+            <Label htmlFor="pp-company">Company</Label>
+            <Input id="pp-company" value={form.company} onChange={set("company")} />
+          </div>
+          <div className="space-y-1.5 col-span-2">
             <Label htmlFor="pp-addr">Address</Label>
             <Input id="pp-addr" value={form.address} onChange={set("address")} />
           </div>

@@ -12,7 +12,15 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import {
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 import { ParentsService } from "./parents.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
@@ -22,6 +30,8 @@ class CreateParentDto {
   @IsEmail() @MaxLength(255) email: string;
   @IsOptional() @IsString() @MaxLength(30) phone?: string;
   @IsOptional() @IsString() @MaxLength(40) nationalId?: string;
+  @IsOptional() @IsString() @MaxLength(40) passportNo?: string;
+  @IsOptional() @IsString() @MaxLength(120) company?: string;
   @IsOptional() @IsString() @MaxLength(300) address?: string;
   @IsOptional() @IsString() @MaxLength(120) occupation?: string;
   @IsOptional() @IsString() @MinLength(6) @MaxLength(72) password?: string;
@@ -31,6 +41,8 @@ class UpdateParentDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(100) fullName?: string;
   @IsOptional() @IsString() @MaxLength(30) phone?: string | null;
   @IsOptional() @IsString() @MaxLength(40) nationalId?: string | null;
+  @IsOptional() @IsString() @MaxLength(40) passportNo?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) company?: string | null;
   @IsOptional() @IsString() @MaxLength(300) address?: string | null;
   @IsOptional() @IsString() @MaxLength(120) occupation?: string | null;
 }
@@ -38,6 +50,11 @@ class UpdateParentDto {
 class LinkChildDto {
   @IsString() studentId: string;
   @IsIn(["father", "mother", "guardian", "emergency_contact"]) relationshipType: string;
+  @IsOptional() @IsBoolean() isPrimary?: boolean;
+  @IsOptional() @IsBoolean() pickupPermission?: boolean;
+  @IsOptional() @IsBoolean() feeResponsible?: boolean;
+  @IsOptional() @IsBoolean() emergencyContact?: boolean;
+  @IsOptional() @IsBoolean() livesWith?: boolean;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -51,9 +68,11 @@ export class ParentsController {
     @Query("email") email?: string,
     @Query("phone") phone?: string,
     @Query("nationalId") nationalId?: string,
+    @Query("passportNo") passportNo?: string,
+    @Query("parentCode") parentCode?: string,
     @Query("q") q?: string,
   ) {
-    return this.parents.search(actor, { email, phone, nationalId, q });
+    return this.parents.search(actor, { email, phone, nationalId, passportNo, parentCode, q });
   }
 
   @Get("mapping")
@@ -96,7 +115,13 @@ export class ParentsController {
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() dto: LinkChildDto,
   ) {
-    return this.parents.linkChild(actor, id, dto.studentId, dto.relationshipType);
+    return this.parents.linkChild(actor, id, dto.studentId, dto.relationshipType, {
+      isPrimary: dto.isPrimary,
+      pickupPermission: dto.pickupPermission,
+      feeResponsible: dto.feeResponsible,
+      emergencyContact: dto.emergencyContact,
+      livesWith: dto.livesWith,
+    });
   }
 
   @Delete(":id/children/:studentId")
