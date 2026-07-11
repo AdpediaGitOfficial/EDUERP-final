@@ -80,10 +80,45 @@ model admission_enquiries {
   notes                String?
   converted_student_id String?   @db.Uuid
   admission_no         String?
+  stage                String    @default("draft")
+  applicant_dob        DateTime? @db.Date
+  applicant_gender     String?
+  applicant_address    String?
+  previous_school      String?
+  blood_group          String?
+  transport_required   Boolean   @default(false)
+  hostel_required      Boolean   @default(false)
+  medical_notes        String?
+  academic_year        String?
+  class_id             String?   @db.Uuid
+  section              String?
+  fee_structure_id     String?   @db.Uuid
+  parent_id            String?   @db.Uuid
+  reviewer_id          String?   @db.Uuid
+  rejection_reason     String?
+  submitted_at         DateTime? @db.Timestamptz(6)
+  approved_at          DateTime? @db.Timestamptz(6)
+  admitted_at          DateTime? @db.Timestamptz(6)
+  documents            Json      @default("[]")
   created_at           DateTime  @default(now()) @db.Timestamptz(6)
   updated_at           DateTime  @default(now()) @db.Timestamptz(6)
   students             students? @relation(fields: [converted_student_id], references: [id], onUpdate: NoAction)
+  admission_stage_history admission_stage_history[]
 
+  @@schema("public")
+}
+
+model admission_stage_history {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  admission_id        String              @db.Uuid
+  from_stage          String?
+  to_stage            String
+  actor_id            String?             @db.Uuid
+  note                String?
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  admission_enquiries admission_enquiries @relation(fields: [admission_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([admission_id])
   @@schema("public")
 }
 
