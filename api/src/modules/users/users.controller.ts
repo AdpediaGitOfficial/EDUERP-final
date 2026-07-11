@@ -54,6 +54,14 @@ class CreateUserDto {
   phone?: string;
 }
 
+class ResetPasswordDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  @MaxLength(72)
+  password?: string;
+}
+
 class UpdateUserDto {
   @IsOptional()
   @IsString()
@@ -129,5 +137,21 @@ export class UsersController {
   @Roles("admin")
   remove(@CurrentUser() actor: AuthUser, @Param("id", new ParseUUIDPipe()) id: string) {
     return this.users.deleteUser(actor, id);
+  }
+
+  @Post(":id/reset-password")
+  @Roles("admin")
+  resetPassword(
+    @CurrentUser() actor: AuthUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: ResetPasswordDto,
+  ) {
+    return this.users.resetPassword(actor, id, dto.password);
+  }
+
+  @Get(":id/activity")
+  @Roles("admin")
+  activity(@CurrentUser() actor: AuthUser, @Param("id", new ParseUUIDPipe()) id: string) {
+    return this.users.userActivity(actor, id);
   }
 }

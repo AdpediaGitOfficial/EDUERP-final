@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
-import { Eye, Pencil, Search, Trash2, UserPlus, X } from "lucide-react";
+import { Copy, Eye, History, KeyRound, Pencil, Search, Trash2, UserPlus, X } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/users")({
   component: () => (
@@ -100,6 +100,28 @@ function UsersPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [activityUser, setActivityUser] = useState<UserRow | null>(null);
+  const [resetResult, setResetResult] = useState<{ name: string; password: string } | null>(null);
+
+  const resetMutation = useMutation({
+    mutationFn: (id: string) => apiPost<{ tempPassword: string }>(`/users/${id}/reset-password`),
+  });
+
+  const handleResetPassword = async (u: UserRow) => {
+    const ok = await confirm({
+      title: `Reset password for ${u.fullName}?`,
+      description:
+        "A new temporary password will be generated. Their current password stops working immediately — share the new one with them securely.",
+      confirmText: "Reset password",
+    });
+    if (!ok) return;
+    try {
+      const res = await resetMutation.mutateAsync(u.id);
+      setResetResult({ name: u.fullName, password: res.tempPassword });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reset password");
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiDelete(`/users/${id}`),
@@ -277,6 +299,22 @@ function UsersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label={`Activity history for ${u.fullName}`}
+                            onClick={() => setActivityUser(u)}
+                          >
+                            <History className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Reset password for ${u.fullName}`}
+                            onClick={() => handleResetPassword(u)}
+                          >
+                            <KeyRound className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             aria-label={`Edit ${u.fullName}`}
                             onClick={() => setEditing(u)}
                           >
@@ -339,6 +377,18 @@ function UsersPage() {
       {/* View dialog */}
       <Dialog open={!!viewingId} onOpenChange={(o) => !o && setViewingId(null)}>
         {viewingId && <ViewUserDialog id={viewingId} />}
+      </Dialog>
+
+      {/* Activity history dialog */}
+      <Dialog open={!!activityUser} onOpenChange={(o) => !o && setActivityUser(null)}>
+        {activityUser && <ActivityDialog user={activityUser} />}
+      </Dialog>
+
+      {/* Reset-password result dialog */}
+      <Dialog open={!!resetResult} onOpenChange={(o) => !o && setResetResult(null)}>
+        {resetResult && (
+          <ResetResultDialog result={resetResult} onClose={() => setResetResult(null)} />
+        )}
       </Dialog>
     </AppShell>
   );
@@ -589,5 +639,116 @@ function Field({ label, value }: { label: string; value: string }) {
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="mt-1 font-medium break-words">{value}</dd>
     </div>
+  );
+}
+
+/* ---------------------------- Activity history -------------------------- */
+type ActivityEvent = {
+  type: "created" | "login" | "permission";
+  at: string;
+  label: string;
+  detail?: string;
+  by?: string;
+};
+
+function ActivityDialog({ user }: { user: UserRow }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["user-activity", user.id],
+    queryFn: () =>
+      apiGet<{ createdAt: string; lastSignInAt: string | null; events: ActivityEvent[] }>(
+        `/users/${user.id}/activity`,
+      ),
+  });
+
+  const dotClass = (t: ActivityEvent["type"]) =>
+    t === "login" ? "bg-emerald-500" : t === "permission" ? "bg-blue-500" : "bg-muted-foreground";
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Activity — {user.fullName}</DialogTitle>
+      </DialogHeader>
+      {isLoading || !data ? (
+        <div className="space-y-3 py-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-5 w-full animate-pulse rounded bg-muted" />
+          ))}
+        </div>
+      ) : data.events.length === 0 ? (
+        <p className="py-4 text-sm text-muted-foreground">No activity recorded yet.</p>
+      ) : (
+        <ol className="relative max-h-[420px] space-y-4 overflow-y-auto py-2 pl-5">
+          <span className="absolute left-[7px] top-2 bottom-2 w-px bg-border" aria-hidden />
+          {data.events.map((e, i) => (
+            <li key={i} className="relative">
+              <span
+                className={`absolute -left-[15px] top-1 size-2.5 rounded-full ring-4 ring-background ${dotClass(e.type)}`}
+                aria-hidden
+              />
+              <div className="text-sm font-medium">{e.label}</div>
+              <div className="text-xs text-muted-foreground">
+                {new Date(e.at).toLocaleString()}
+                {e.by ? ` · by ${e.by}` : ""}
+                {e.detail ? ` · ${e.detail}` : ""}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </DialogContent>
+  );
+}
+
+/* --------------------------- Reset-password result ---------------------- */
+function ResetResultDialog({
+  result,
+  onClose,
+}: {
+  result: { name: string; password: string };
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(result.password);
+      setCopied(true);
+      toast.success("Temporary password copied.");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Couldn't copy — select and copy it manually.");
+    }
+  };
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Temporary password for {result.name}</DialogTitle>
+      </DialogHeader>
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Their old password no longer works. Share this with them securely — it won't be shown
+          again.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 rounded-lg border bg-muted px-3 py-2 font-mono text-sm break-all">
+            {result.password}
+          </code>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Copy password"
+            onClick={copy}
+          >
+            <Copy className="size-4" />
+          </Button>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button type="button" onClick={onClose}>
+          {copied ? "Copied — Done" : "Done"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }

@@ -6,10 +6,29 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomInt } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import { AuthService } from "../auth/auth.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
+
+/** A readable-but-strong temporary password (letters, digits, one symbol). */
+function generateTempPassword(): string {
+  const upper = "ABCDEFGHJKMNPQRSTUVWXYZ";
+  const lower = "abcdefghijkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const symbols = "!@#$%";
+  const pick = (set: string) => set[randomInt(set.length)];
+  const base = [pick(upper), pick(lower), pick(digits), pick(symbols)];
+  const all = upper + lower + digits;
+  for (let i = 0; i < 8; i++) base.push(pick(all));
+  // Fisher-Yates so the guaranteed classes aren't always in the first slots.
+  for (let i = base.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [base[i], base[j]] = [base[j], base[i]];
+  }
+  return base.join("");
+}
 
 export const APP_ROLES = [
   "admin",
@@ -241,6 +260,87 @@ export class UsersService {
       }
       throw e;
     }
+  }
+
+  /**
+   * Admin resets a user's password. Generates a strong temporary password (or
+   * uses one the admin supplied) and returns it once so the admin can share it
+   * out-of-band — the raw value is never stored, only its bcrypt hash.
+   */
+  async resetPassword(actor: AuthUser, id: string, password?: string) {
+    if (!actor.roles.includes("admin"))
+      throw new ForbiddenException("Only administrators can reset passwords.");
+    const target = await this.prisma.profiles.findUnique({ where: { id } });
+    if (!target) throw new NotFoundException("User not found");
+    const supplied = password?.trim();
+    if (supplied && supplied.length < 6)
+      throw new BadRequestException("Password must be at least 6 characters.");
+    const tempPassword = supplied || generateTempPassword();
+    await this.auth.adminSetPassword(id, tempPassword);
+    return { ok: true, tempPassword };
+  }
+
+  /**
+   * A user's activity/audit timeline for the admin Users screen, built from the
+   * real records we keep: account creation, last sign-in, and the permission
+   * grant/revoke audit log (permission_audit_log). Newest first.
+   */
+  async userActivity(actor: AuthUser, id: string) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException("Admin only");
+    const [profile, account, perms] = await Promise.all([
+      this.prisma.profiles.findUnique({ where: { id } }),
+      this.prisma.users.findUnique({
+        where: { id },
+        select: { last_sign_in_at: true, created_at: true },
+      }),
+      this.prisma.permission_audit_log.findMany({
+        where: { target_user_id: id },
+        orderBy: { created_at: "desc" },
+        take: 100,
+      }),
+    ]);
+    if (!profile) throw new NotFoundException("User not found");
+
+    // Resolve actor display names for the permission-change rows in one query.
+    const actorIds = [...new Set(perms.map((p) => p.actor_id))];
+    const actorProfiles = actorIds.length
+      ? await this.prisma.profiles.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, full_name: true, email: true },
+        })
+      : [];
+    const actorName = new Map(
+      actorProfiles.map((a) => [a.id, a.full_name || a.email || "Someone"]),
+    );
+
+    const events: {
+      type: "created" | "login" | "permission";
+      at: Date;
+      label: string;
+      detail?: string;
+      by?: string;
+    }[] = [];
+
+    if (profile.created_at)
+      events.push({ type: "created", at: profile.created_at, label: "Account created" });
+    if (account?.last_sign_in_at)
+      events.push({ type: "login", at: account.last_sign_in_at, label: "Signed in" });
+    for (const p of perms) {
+      events.push({
+        type: "permission",
+        at: p.created_at,
+        label: `${p.new_value ? "Granted" : "Revoked"} “${p.permission_key}”`,
+        detail: p.old_value === null ? undefined : `was ${p.old_value ? "granted" : "revoked"}`,
+        by: actorName.get(p.actor_id) ?? "An administrator",
+      });
+    }
+
+    events.sort((a, b) => b.at.getTime() - a.at.getTime());
+    return {
+      lastSignInAt: account?.last_sign_in_at ?? null,
+      createdAt: profile.created_at,
+      events,
+    };
   }
 
   async getProfile(actor: AuthUser, id: string) {

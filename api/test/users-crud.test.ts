@@ -143,6 +143,31 @@ describe("users CRUD: create -> view -> edit -> delete", () => {
     expect(ok.status).toBe(201);
   });
 
+  it("admin resets the password; the new temp password works and the old one fails", async () => {
+    const res = await authed("post", `/users/${tempId}/reset-password`, "admin").send({});
+    expect(res.status).toBe(201);
+    expect(typeof res.body.tempPassword).toBe("string");
+    expect(res.body.tempPassword.length).toBeGreaterThanOrEqual(8);
+
+    const withNew = await request(http)
+      .post("/api/auth/login")
+      .send({ email: tempEmail, password: res.body.tempPassword });
+    expect(withNew.status).toBe(201);
+
+    const withOld = await request(http)
+      .post("/api/auth/login")
+      .send({ email: tempEmail, password: "TempPass123!" });
+    expect(withOld.status).toBe(401);
+  });
+
+  it("admin views the activity timeline (created + login events)", async () => {
+    const res = await authed("get", `/users/${tempId}/activity`, "admin");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.events)).toBe(true);
+    expect(res.body.events.some((e: any) => e.type === "created")).toBe(true);
+    expect(res.body.events.some((e: any) => e.type === "login")).toBe(true);
+  });
+
   it("admin deletes the user (no linked records) and it disappears", async () => {
     const res = await authed("delete", `/users/${tempId}`, "admin");
     expect(res.status).toBe(200);
@@ -160,13 +185,17 @@ describe("users CRUD: create -> view -> edit -> delete", () => {
 });
 
 describe("users edit/delete: guards", () => {
-  it("teacher cannot edit or delete users", async () => {
+  it("teacher cannot edit, delete, reset passwords, or read activity", async () => {
     const patch = await authed("patch", `/users/${me.teacher.id}`, "teacher").send({
       fullName: "Hacker",
     });
     expect(patch.status).toBe(403);
     const del = await authed("delete", `/users/${me.admin.id}`, "teacher");
     expect(del.status).toBe(403);
+    const reset = await authed("post", `/users/${me.admin.id}/reset-password`, "teacher").send({});
+    expect(reset.status).toBe(403);
+    const activity = await authed("get", `/users/${me.admin.id}/activity`, "teacher");
+    expect(activity.status).toBe(403);
   });
 
   it("admin cannot delete or deactivate their own account", async () => {

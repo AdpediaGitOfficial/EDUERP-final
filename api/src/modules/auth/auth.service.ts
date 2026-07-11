@@ -154,6 +154,22 @@ export class AuthService {
     await this.prisma.users.delete({ where: { id: userId } }).catch(() => undefined);
   }
 
+  /**
+   * Admin-initiated password reset (no recovery link). Sets a fresh bcrypt hash
+   * directly and clears any outstanding recovery token so old reset links die.
+   * The admin shares the returned temporary password with the user out-of-band.
+   */
+  async adminSetPassword(userId: string, password: string): Promise<void> {
+    await this.prisma.users.update({
+      where: { id: userId },
+      data: {
+        encrypted_password: await bcrypt.hash(password, 10),
+        recovery_token: "",
+        updated_at: new Date(),
+      },
+    });
+  }
+
   async refresh(refreshToken: string): Promise<{ user: SessionUser; tokens: TokenPair }> {
     let payload: { sub: string; email: string; typ: string };
     try {
