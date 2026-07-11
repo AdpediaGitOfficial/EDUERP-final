@@ -44,6 +44,7 @@ import { Route as AuthenticatedAssignmentsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated/assets'
 import { Route as AuthenticatedAnnouncementsRouteImport } from './routes/_authenticated/announcements'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
+import { Route as AuthenticatedAdmissionsRouteImport } from './routes/_authenticated/admissions'
 import { Route as AuthenticatedTeachersIndexRouteImport } from './routes/_authenticated/teachers.index'
 import { Route as AuthenticatedReceptionIndexRouteImport } from './routes/_authenticated/reception.index'
 import { Route as AuthenticatedParentsIndexRouteImport } from './routes/_authenticated/parents.index'
@@ -54,6 +55,7 @@ import { Route as AuthenticatedEssIndexRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedClassesIndexRouteImport } from './routes/_authenticated/classes.index'
 import { Route as AuthenticatedChildrenIndexRouteImport } from './routes/_authenticated/children.index'
 import { Route as AuthenticatedAssetsIndexRouteImport } from './routes/_authenticated/assets.index'
+import { Route as AuthenticatedAdmissionsIndexRouteImport } from './routes/_authenticated/admissions.index'
 import { Route as AuthenticatedTeachersTeacherIdRouteImport } from './routes/_authenticated/teachers.$teacherId'
 import { Route as AuthenticatedReceptionVisitorsRouteImport } from './routes/_authenticated/reception.visitors'
 import { Route as AuthenticatedReceptionTransportRouteImport } from './routes/_authenticated/reception.transport'
@@ -100,6 +102,8 @@ import { Route as AuthenticatedAssetsRegistryRouteImport } from './routes/_authe
 import { Route as AuthenticatedAssetsMaintenanceRouteImport } from './routes/_authenticated/assets.maintenance'
 import { Route as AuthenticatedAssetsCategoriesRouteImport } from './routes/_authenticated/assets.categories'
 import { Route as AuthenticatedAssetsAllocationRouteImport } from './routes/_authenticated/assets.allocation'
+import { Route as AuthenticatedAdmissionsNewRouteImport } from './routes/_authenticated/admissions.new'
+import { Route as AuthenticatedAdmissionsAdmissionIdRouteImport } from './routes/_authenticated/admissions.$admissionId'
 import { Route as AuthenticatedHrStaffIndexRouteImport } from './routes/_authenticated/hr.staff.index'
 import { Route as AuthenticatedFleetVehiclesIndexRouteImport } from './routes/_authenticated/fleet.vehicles.index'
 import { Route as AuthenticatedFleetRoutesIndexRouteImport } from './routes/_authenticated/fleet.routes.index'
@@ -295,6 +299,11 @@ const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdmissionsRoute = AuthenticatedAdmissionsRouteImport.update({
+  id: '/admissions',
+  path: '/admissions',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedTeachersIndexRoute =
   AuthenticatedTeachersIndexRouteImport.update({
     id: '/',
@@ -351,6 +360,12 @@ const AuthenticatedAssetsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedAssetsRoute,
+  } as any)
+const AuthenticatedAdmissionsIndexRoute =
+  AuthenticatedAdmissionsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAdmissionsRoute,
   } as any)
 const AuthenticatedTeachersTeacherIdRoute =
   AuthenticatedTeachersTeacherIdRouteImport.update({
@@ -614,6 +629,18 @@ const AuthenticatedAssetsAllocationRoute =
     path: '/allocation',
     getParentRoute: () => AuthenticatedAssetsRoute,
   } as any)
+const AuthenticatedAdmissionsNewRoute =
+  AuthenticatedAdmissionsNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedAdmissionsRoute,
+  } as any)
+const AuthenticatedAdmissionsAdmissionIdRoute =
+  AuthenticatedAdmissionsAdmissionIdRouteImport.update({
+    id: '/$admissionId',
+    path: '/$admissionId',
+    getParentRoute: () => AuthenticatedAdmissionsRoute,
+  } as any)
 const AuthenticatedHrStaffIndexRoute =
   AuthenticatedHrStaffIndexRouteImport.update({
     id: '/staff/',
@@ -691,6 +718,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/admissions': typeof AuthenticatedAdmissionsRouteWithChildren
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
   '/assets': typeof AuthenticatedAssetsRouteWithChildren
@@ -722,6 +750,8 @@ export interface FileRoutesByFullPath {
   '/teachers': typeof AuthenticatedTeachersRouteWithChildren
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
+  '/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
   '/assets/categories': typeof AuthenticatedAssetsCategoriesRoute
   '/assets/maintenance': typeof AuthenticatedAssetsMaintenanceRoute
@@ -768,6 +798,7 @@ export interface FileRoutesByFullPath {
   '/reception/transport': typeof AuthenticatedReceptionTransportRoute
   '/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
   '/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
+  '/admissions/': typeof AuthenticatedAdmissionsIndexRoute
   '/assets/': typeof AuthenticatedAssetsIndexRoute
   '/children/': typeof AuthenticatedChildrenIndexRoute
   '/classes/': typeof AuthenticatedClassesIndexRoute
@@ -817,6 +848,8 @@ export interface FileRoutesByTo {
   '/students': typeof AuthenticatedStudentsRoute
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
+  '/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
   '/assets/categories': typeof AuthenticatedAssetsCategoriesRoute
   '/assets/maintenance': typeof AuthenticatedAssetsMaintenanceRoute
@@ -862,6 +895,7 @@ export interface FileRoutesByTo {
   '/reception/transport': typeof AuthenticatedReceptionTransportRoute
   '/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
   '/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
+  '/admissions': typeof AuthenticatedAdmissionsIndexRoute
   '/assets': typeof AuthenticatedAssetsIndexRoute
   '/children': typeof AuthenticatedChildrenIndexRoute
   '/classes': typeof AuthenticatedClassesIndexRoute
@@ -891,6 +925,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/admissions': typeof AuthenticatedAdmissionsRouteWithChildren
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/announcements': typeof AuthenticatedAnnouncementsRoute
   '/_authenticated/assets': typeof AuthenticatedAssetsRouteWithChildren
@@ -922,6 +957,8 @@ export interface FileRoutesById {
   '/_authenticated/teachers': typeof AuthenticatedTeachersRouteWithChildren
   '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
+  '/_authenticated/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
+  '/_authenticated/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/_authenticated/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
   '/_authenticated/assets/categories': typeof AuthenticatedAssetsCategoriesRoute
   '/_authenticated/assets/maintenance': typeof AuthenticatedAssetsMaintenanceRoute
@@ -968,6 +1005,7 @@ export interface FileRoutesById {
   '/_authenticated/reception/transport': typeof AuthenticatedReceptionTransportRoute
   '/_authenticated/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
   '/_authenticated/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
+  '/_authenticated/admissions/': typeof AuthenticatedAdmissionsIndexRoute
   '/_authenticated/assets/': typeof AuthenticatedAssetsIndexRoute
   '/_authenticated/children/': typeof AuthenticatedChildrenIndexRoute
   '/_authenticated/classes/': typeof AuthenticatedClassesIndexRoute
@@ -997,6 +1035,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/admissions'
     | '/analytics'
     | '/announcements'
     | '/assets'
@@ -1028,6 +1067,8 @@ export interface FileRouteTypes {
     | '/teachers'
     | '/timetable'
     | '/users'
+    | '/admissions/$admissionId'
+    | '/admissions/new'
     | '/assets/allocation'
     | '/assets/categories'
     | '/assets/maintenance'
@@ -1074,6 +1115,7 @@ export interface FileRouteTypes {
     | '/reception/transport'
     | '/reception/visitors'
     | '/teachers/$teacherId'
+    | '/admissions/'
     | '/assets/'
     | '/children/'
     | '/classes/'
@@ -1123,6 +1165,8 @@ export interface FileRouteTypes {
     | '/students'
     | '/timetable'
     | '/users'
+    | '/admissions/$admissionId'
+    | '/admissions/new'
     | '/assets/allocation'
     | '/assets/categories'
     | '/assets/maintenance'
@@ -1168,6 +1212,7 @@ export interface FileRouteTypes {
     | '/reception/transport'
     | '/reception/visitors'
     | '/teachers/$teacherId'
+    | '/admissions'
     | '/assets'
     | '/children'
     | '/classes'
@@ -1196,6 +1241,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/reset-password'
+    | '/_authenticated/admissions'
     | '/_authenticated/analytics'
     | '/_authenticated/announcements'
     | '/_authenticated/assets'
@@ -1227,6 +1273,8 @@ export interface FileRouteTypes {
     | '/_authenticated/teachers'
     | '/_authenticated/timetable'
     | '/_authenticated/users'
+    | '/_authenticated/admissions/$admissionId'
+    | '/_authenticated/admissions/new'
     | '/_authenticated/assets/allocation'
     | '/_authenticated/assets/categories'
     | '/_authenticated/assets/maintenance'
@@ -1273,6 +1321,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reception/transport'
     | '/_authenticated/reception/visitors'
     | '/_authenticated/teachers/$teacherId'
+    | '/_authenticated/admissions/'
     | '/_authenticated/assets/'
     | '/_authenticated/children/'
     | '/_authenticated/classes/'
@@ -1551,6 +1600,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admissions': {
+      id: '/_authenticated/admissions'
+      path: '/admissions'
+      fullPath: '/admissions'
+      preLoaderRoute: typeof AuthenticatedAdmissionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/teachers/': {
       id: '/_authenticated/teachers/'
       path: '/'
@@ -1620,6 +1676,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/assets/'
       preLoaderRoute: typeof AuthenticatedAssetsIndexRouteImport
       parentRoute: typeof AuthenticatedAssetsRoute
+    }
+    '/_authenticated/admissions/': {
+      id: '/_authenticated/admissions/'
+      path: '/'
+      fullPath: '/admissions/'
+      preLoaderRoute: typeof AuthenticatedAdmissionsIndexRouteImport
+      parentRoute: typeof AuthenticatedAdmissionsRoute
     }
     '/_authenticated/teachers/$teacherId': {
       id: '/_authenticated/teachers/$teacherId'
@@ -1943,6 +2006,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAssetsAllocationRouteImport
       parentRoute: typeof AuthenticatedAssetsRoute
     }
+    '/_authenticated/admissions/new': {
+      id: '/_authenticated/admissions/new'
+      path: '/new'
+      fullPath: '/admissions/new'
+      preLoaderRoute: typeof AuthenticatedAdmissionsNewRouteImport
+      parentRoute: typeof AuthenticatedAdmissionsRoute
+    }
+    '/_authenticated/admissions/$admissionId': {
+      id: '/_authenticated/admissions/$admissionId'
+      path: '/$admissionId'
+      fullPath: '/admissions/$admissionId'
+      preLoaderRoute: typeof AuthenticatedAdmissionsAdmissionIdRouteImport
+      parentRoute: typeof AuthenticatedAdmissionsRoute
+    }
     '/_authenticated/hr/staff/': {
       id: '/_authenticated/hr/staff/'
       path: '/staff'
@@ -2029,6 +2106,25 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AuthenticatedAdmissionsRouteChildren {
+  AuthenticatedAdmissionsAdmissionIdRoute: typeof AuthenticatedAdmissionsAdmissionIdRoute
+  AuthenticatedAdmissionsNewRoute: typeof AuthenticatedAdmissionsNewRoute
+  AuthenticatedAdmissionsIndexRoute: typeof AuthenticatedAdmissionsIndexRoute
+}
+
+const AuthenticatedAdmissionsRouteChildren: AuthenticatedAdmissionsRouteChildren =
+  {
+    AuthenticatedAdmissionsAdmissionIdRoute:
+      AuthenticatedAdmissionsAdmissionIdRoute,
+    AuthenticatedAdmissionsNewRoute: AuthenticatedAdmissionsNewRoute,
+    AuthenticatedAdmissionsIndexRoute: AuthenticatedAdmissionsIndexRoute,
+  }
+
+const AuthenticatedAdmissionsRouteWithChildren =
+  AuthenticatedAdmissionsRoute._addFileChildren(
+    AuthenticatedAdmissionsRouteChildren,
+  )
 
 interface AuthenticatedAssetsRouteChildren {
   AuthenticatedAssetsAllocationRoute: typeof AuthenticatedAssetsAllocationRoute
@@ -2272,6 +2368,7 @@ const AuthenticatedTeachersRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdmissionsRoute: typeof AuthenticatedAdmissionsRouteWithChildren
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAnnouncementsRoute: typeof AuthenticatedAnnouncementsRoute
   AuthenticatedAssetsRoute: typeof AuthenticatedAssetsRouteWithChildren
@@ -2308,6 +2405,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdmissionsRoute: AuthenticatedAdmissionsRouteWithChildren,
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAnnouncementsRoute: AuthenticatedAnnouncementsRoute,
   AuthenticatedAssetsRoute: AuthenticatedAssetsRouteWithChildren,
