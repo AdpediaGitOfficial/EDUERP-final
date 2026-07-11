@@ -32,4 +32,6 @@ psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/05-fleet-demo-seed.sql
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/06-ess-demo-seed.sql
 # Multi-child family (David + Maria + 3 siblings) proving the student–parent model.
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/07-student-parent-family-seed.sql
+# Student profile detail demo (medical/hostel/disciplinary/documents/activity) for that family.
+psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/08-student-profile-demo-seed.sql
 echo "done."

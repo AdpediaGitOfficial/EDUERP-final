@@ -958,6 +958,11 @@ model profiles {
   payment_reconciliations     payment_reconciliations[]
   staff                       staff[]
   students                    students?
+  student_medical             student_medical[]
+  student_hostel              student_hostel[]
+  student_disciplinary        student_disciplinary[]
+  student_documents           student_documents[]
+  student_activity_log        student_activity_log[]
   teacher_performance_reviews teacher_performance_reviews[]
 
   @@schema("public")
@@ -1188,6 +1193,11 @@ model students {
   payments             payments[]
   progress_notes       progress_notes[]
   route_students       route_students[]
+  student_medical      student_medical?
+  student_hostel       student_hostel?
+  student_disciplinary student_disciplinary[]
+  student_documents    student_documents[]
+  student_activity_log student_activity_log[]
   classes              classes?               @relation(fields: [class_id], references: [id], onUpdate: NoAction)
   profiles             profiles               @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -1196,6 +1206,102 @@ model students {
   @@index([profile_id], map: "idx_students_profile_id")
   @@index([roll_no], map: "idx_students_roll_no")
   @@index([status], map: "idx_students_status")
+  @@schema("public")
+}
+
+model student_medical {
+  student_id              String    @id @db.Uuid
+  blood_group             String?
+  allergies               String?
+  chronic_conditions      String?
+  medications             String?
+  disabilities            String?
+  physician_name          String?
+  physician_phone         String?
+  emergency_contact_name  String?
+  emergency_contact_phone String?
+  insurance_provider      String?
+  insurance_number        String?
+  notes                   String?
+  updated_by              String?   @db.Uuid
+  created_at              DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime  @default(now()) @db.Timestamptz(6)
+  students                students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles                profiles? @relation(fields: [updated_by], references: [id], onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+model student_hostel {
+  student_id     String    @id @db.Uuid
+  is_resident    Boolean   @default(false)
+  hostel_block   String?
+  room_no        String?
+  bed_no         String?
+  warden_name    String?
+  warden_phone   String?
+  check_in_date  DateTime? @db.Date
+  check_out_date DateTime? @db.Date
+  notes          String?
+  updated_by     String?   @db.Uuid
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime  @default(now()) @db.Timestamptz(6)
+  students       students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles       profiles? @relation(fields: [updated_by], references: [id], onUpdate: NoAction)
+
+  @@schema("public")
+}
+
+model student_disciplinary {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id    String    @db.Uuid
+  incident_date DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  category      String    @default("general")
+  severity      String    @default("minor")
+  description   String
+  action_taken  String?
+  status        String    @default("open")
+  reported_by   String?   @db.Uuid
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @db.Timestamptz(6)
+  students      students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles      profiles? @relation(fields: [reported_by], references: [id], onUpdate: NoAction)
+
+  @@index([student_id, incident_date(sort: Desc)], map: "idx_student_disciplinary_student")
+  @@schema("public")
+}
+
+model student_documents {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id  String    @db.Uuid
+  doc_type    String    @default("other")
+  title       String
+  file_url    String?
+  issued_date DateTime? @db.Date
+  expiry_date DateTime? @db.Date
+  verified    Boolean   @default(false)
+  uploaded_by String?   @db.Uuid
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime  @default(now()) @db.Timestamptz(6)
+  students    students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles    profiles? @relation(fields: [uploaded_by], references: [id], onUpdate: NoAction)
+
+  @@index([student_id, created_at(sort: Desc)], map: "idx_student_documents_student")
+  @@schema("public")
+}
+
+model student_activity_log {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_id  String    @db.Uuid
+  event_type  String
+  description String
+  meta        Json?
+  actor_id    String?   @db.Uuid
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  students    students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles    profiles? @relation(fields: [actor_id], references: [id], onUpdate: NoAction)
+
+  @@index([student_id, created_at(sort: Desc)], map: "idx_student_activity_student")
   @@schema("public")
 }
 

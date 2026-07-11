@@ -381,7 +381,7 @@ function StudentsPage() {
                               title="View profile"
                               aria-label={`View profile of ${s.full_name}`}
                             >
-                              <Link to="/students">
+                              <Link to="/children/$studentId" params={{ studentId: s.id }}>
                                 <Eye className="size-4" />
                               </Link>
                             </Button>
@@ -964,7 +964,7 @@ function AdminStudentsView() {
                     className="border-t hover:bg-muted/40 cursor-pointer"
                     onClick={(e) => {
                       if ((e.target as HTMLElement).closest("[data-no-nav]")) return;
-                      navigate({ to: "/children/$studentId/report", params: { studentId: r.id } });
+                      navigate({ to: "/children/$studentId", params: { studentId: r.id } });
                     }}
                   >
                     <td className="p-3" data-no-nav onClick={(e) => e.stopPropagation()}>

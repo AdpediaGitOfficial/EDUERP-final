@@ -37,7 +37,16 @@ import {
 import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { Users } from "lucide-react";
+import { Users, HeartPulse, BedDouble, ShieldAlert, FileText, History, Bus } from "lucide-react";
+import {
+  MedicalTab,
+  HostelTab,
+  TransportTab,
+  DisciplinaryTab,
+  DocumentsTab,
+  ActivityTab,
+  AdmissionDetailsCard,
+} from "@/components/student-profile-extras";
 
 export const Route = createFileRoute("/_authenticated/children/$studentId/")({
   component: ChildDetailPage,
@@ -441,6 +450,8 @@ function ChildDetailPage() {
         </Card>
       </div>
 
+      <AdmissionDetailsCard studentId={studentId} />
+
       <Tabs defaultValue="attendance">
         <TabsList>
           <TabsTrigger value="attendance">
@@ -462,6 +473,30 @@ function ChildDetailPage() {
           <TabsTrigger value="parents">
             <Users className="size-4 mr-1" />
             Parents
+          </TabsTrigger>
+          <TabsTrigger value="medical">
+            <HeartPulse className="size-4 mr-1" />
+            Medical
+          </TabsTrigger>
+          <TabsTrigger value="hostel">
+            <BedDouble className="size-4 mr-1" />
+            Hostel
+          </TabsTrigger>
+          <TabsTrigger value="transport">
+            <Bus className="size-4 mr-1" />
+            Transport
+          </TabsTrigger>
+          <TabsTrigger value="disciplinary">
+            <ShieldAlert className="size-4 mr-1" />
+            Disciplinary
+          </TabsTrigger>
+          <TabsTrigger value="documents">
+            <FileText className="size-4 mr-1" />
+            Documents
+          </TabsTrigger>
+          <TabsTrigger value="activity">
+            <History className="size-4 mr-1" />
+            Activity
           </TabsTrigger>
         </TabsList>
 
@@ -1011,6 +1046,25 @@ function ChildDetailPage() {
               </table>
             </div>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="medical">
+          <MedicalTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="hostel">
+          <HostelTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="transport">
+          <TransportTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="disciplinary">
+          <DisciplinaryTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="documents">
+          <DocumentsTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="activity">
+          <ActivityTab studentId={studentId} />
         </TabsContent>
       </Tabs>
     </AppShell>
