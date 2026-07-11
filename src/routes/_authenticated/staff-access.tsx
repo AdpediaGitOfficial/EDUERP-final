@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -80,25 +80,7 @@ function Page() {
 
   const { data: staff } = useQuery({
     queryKey: ["access-staff"],
-    queryFn: async () => {
-      const { data: roleRows } = await supabase
-        .from("user_roles")
-        .select("user_id,role")
-        .in("role", ["admin", "teacher"]);
-      const ids = Array.from(new Set((roleRows ?? []).map((r: any) => r.user_id)));
-      if (ids.length === 0) return [];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id,full_name,email")
-        .in("id", ids);
-      const roleMap = new Map<string, AppRole[]>();
-      for (const r of roleRows ?? []) {
-        const arr = roleMap.get(r.user_id) ?? [];
-        arr.push(r.role as AppRole);
-        roleMap.set(r.user_id, arr);
-      }
-      return (profiles ?? []).map((p: any) => ({ ...p, roles: roleMap.get(p.id) ?? [] }));
-    },
+    queryFn: () => apiGet<any[]>("/access/staff"),
   });
 
   const filtered = useMemo(() => {
@@ -119,36 +101,13 @@ function Page() {
   const { data: perms } = useQuery({
     queryKey: ["access-perms", selected],
     enabled: !!selected,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("staff_permissions")
-          .select("permission_key,enabled")
-          .eq("user_id", selected!)
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>(`/access/permissions/${selected!}`),
   });
 
   const { data: audit } = useQuery({
     queryKey: ["access-audit", selected],
     enabled: !!selected,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("permission_audit_log")
-        .select("id,permission_key,old_value,new_value,created_at,actor_id")
-        .eq("target_user_id", selected!)
-        .order("created_at", { ascending: false })
-        .limit(50);
-      const actorIds = Array.from(new Set((data ?? []).map((r: any) => r.actor_id)));
-      const actorMap = new Map<string, string>();
-      if (actorIds.length) {
-        const { data: ps } = await supabase
-          .from("profiles")
-          .select("id,full_name")
-          .in("id", actorIds);
-        for (const p of ps ?? []) actorMap.set(p.id, p.full_name);
-      }
-      return (data ?? []).map((r: any) => ({ ...r, actor_name: actorMap.get(r.actor_id) ?? "—" }));
-    },
+    queryFn: () => apiGet<any[]>(`/access/audit/${selected!}`),
   });
 
   const permMap = useMemo(() => {
@@ -157,23 +116,25 @@ function Page() {
     return m;
   }, [perms]);
 
+  const write = async (path: string, method: string, body: any) => {
+    const res = await apiFetch(path, { method, body: JSON.stringify(body) });
+    if (!res || !res.ok) {
+      const b = res ? await res.json().catch(() => null) : null;
+      throw new Error(b?.message ?? "Request failed");
+    }
+  };
+
   const togglePerm = async (key: string, next: boolean) => {
     if (!current || !me) return;
-    const old = permMap.get(key) ?? false;
-    const { error } = await supabase
-      .from("staff_permissions")
-      .upsert(
-        { user_id: current.id, permission_key: key, enabled: next },
-        { onConflict: "user_id,permission_key" },
-      );
-    if (error) return toast.error(error.message);
-    await supabase.from("permission_audit_log").insert({
-      target_user_id: current.id,
-      actor_id: me.id,
-      permission_key: key,
-      old_value: old,
-      new_value: next,
-    });
+    try {
+      await write("/access/permissions", "POST", {
+        userId: current.id,
+        key,
+        enabled: next,
+      });
+    } catch (e: any) {
+      return toast.error(e.message);
+    }
     toast.success(`${next ? "Enabled" : "Disabled"} ${key}`);
     qc.invalidateQueries({ queryKey: ["access-perms", current.id] });
     qc.invalidateQueries({ queryKey: ["access-audit", current.id] });
@@ -181,12 +142,11 @@ function Page() {
 
   const changeRole = async (nextRole: AppRole) => {
     if (!current) return;
-    const { error: delErr } = await supabase.from("user_roles").delete().eq("user_id", current.id);
-    if (delErr) return toast.error(delErr.message);
-    const { error } = await supabase
-      .from("user_roles")
-      .insert({ user_id: current.id, role: nextRole });
-    if (error) return toast.error(error.message);
+    try {
+      await write("/access/role", "PATCH", { userId: current.id, role: nextRole });
+    } catch (e: any) {
+      return toast.error(e.message);
+    }
     toast.success(`Role set to ${nextRole}`);
     qc.invalidateQueries({ queryKey: ["access-staff"] });
   };

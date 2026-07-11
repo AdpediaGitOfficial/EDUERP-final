@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -31,88 +31,37 @@ function initials(name: string) {
 
 function Page() {
   const [q, setQ] = useState("");
-  const today = format(new Date(), "yyyy-MM-dd");
 
-  const { data: teacherProfiles } = useQuery({
-    queryKey: ["monitor-teachers"],
-    queryFn: async () => {
-      const { data: roleRows } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "teacher");
-      const ids = (roleRows ?? []).map((r: any) => r.user_id);
-      if (ids.length === 0) return [];
-      const { data } = await supabase
-        .from("profiles")
-        .select("id,full_name,email,phone")
-        .in("id", ids)
-        .order("full_name");
-      return data ?? [];
-    },
+  const { data } = useQuery({
+    queryKey: ["monitoring"],
+    queryFn: () =>
+      apiGet<{
+        totals: { total: number; marked: number; pending: number };
+        rows: {
+          id: string;
+          full_name: string;
+          email: string;
+          phone: string | null;
+          markedToday: boolean;
+          notesCount: number;
+          broadcastCount: number;
+          lastBroadcast: string | null;
+        }[];
+      }>("/access/monitoring"),
   });
 
-  const { data: attendanceToday } = useQuery({
-    queryKey: ["monitor-att-today", today],
-    queryFn: async () =>
-      (await supabase.from("attendance").select("marked_by,class_id").eq("date", today)).data ?? [],
-  });
-
-  const { data: recentNotes } = useQuery({
-    queryKey: ["monitor-notes"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("progress_notes")
-          .select("teacher_id,created_at")
-          .order("created_at", { ascending: false })
-          .limit(200)
-      ).data ?? [],
-  });
-
-  const { data: recentBroadcasts } = useQuery({
-    queryKey: ["monitor-broadcasts"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("broadcasts")
-          .select("sender_id,created_at,subject")
-          .order("created_at", { ascending: false })
-          .limit(200)
-      ).data ?? [],
-  });
-
-  const stats = useMemo(() => {
-    const markedByIds = new Set(
-      (attendanceToday ?? []).map((r: any) => r.marked_by).filter(Boolean),
-    );
-    const notesByTeacher = new Map<string, number>();
-    for (const n of recentNotes ?? [])
-      notesByTeacher.set(n.teacher_id, (notesByTeacher.get(n.teacher_id) ?? 0) + 1);
-    const bcByTeacher = new Map<string, { count: number; last: string | null }>();
-    for (const b of recentBroadcasts ?? []) {
-      const cur = bcByTeacher.get(b.sender_id) ?? { count: 0, last: null };
-      cur.count += 1;
-      if (!cur.last || b.created_at > cur.last) cur.last = b.created_at;
-      bcByTeacher.set(b.sender_id, cur);
-    }
-    return { markedByIds, notesByTeacher, bcByTeacher };
-  }, [attendanceToday, recentNotes, recentBroadcasts]);
+  const rows = data?.rows ?? [];
+  const totals = data?.totals ?? { total: 0, marked: 0, pending: 0 };
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return (teacherProfiles ?? []).filter(
-      (p: any) =>
+    return rows.filter(
+      (p) =>
         !t ||
         (p.full_name || "").toLowerCase().includes(t) ||
         (p.email || "").toLowerCase().includes(t),
     );
-  }, [teacherProfiles, q]);
-
-  const totals = useMemo(() => {
-    const total = (teacherProfiles ?? []).length;
-    const marked = (teacherProfiles ?? []).filter((p: any) => stats.markedByIds.has(p.id)).length;
-    return { total, marked, pending: total - marked };
-  }, [teacherProfiles, stats]);
+  }, [rows, q]);
 
   return (
     <AppShell>
@@ -166,10 +115,10 @@ function Page() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p: any) => {
-                const marked = stats.markedByIds.has(p.id);
-                const notes = stats.notesByTeacher.get(p.id) ?? 0;
-                const bc = stats.bcByTeacher.get(p.id);
+              {filtered.map((p) => {
+                const marked = p.markedToday;
+                const notes = p.notesCount;
+                const bc = { count: p.broadcastCount, last: p.lastBroadcast };
                 return (
                   <tr key={p.id} className="border-t hover:bg-muted/40">
                     <td className="p-3">

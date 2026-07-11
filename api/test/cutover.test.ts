@@ -1629,3 +1629,63 @@ describe("HR Records: documents, performance, training, reports (hr|admin)", () 
     expect((await get("/hr/reports/does-not-exist", "admin")).status).toBe(400);
   });
 });
+
+describe("Access control + monitoring (admin only)", () => {
+  it("staff/permissions/audit/monitoring are admin-only; teacher 403", async () => {
+    for (const ep of ["/access/staff", "/access/monitoring"]) {
+      expect((await get(ep, "teacher")).status).toBe(403);
+      const r = await get(ep, "admin");
+      expect(r.status).toBe(200);
+    }
+    const staff = await get("/access/staff", "admin");
+    expect(Array.isArray(staff.body)).toBe(true);
+    expect(staff.body.length).toBeGreaterThan(0);
+    expect(staff.body[0]).toHaveProperty("roles");
+
+    const mon = await get("/access/monitoring", "admin");
+    expect(mon.body).toHaveProperty("totals");
+    expect(Array.isArray(mon.body.rows)).toBe(true);
+    expect(mon.body.totals.total).toBe(mon.body.totals.marked + mon.body.totals.pending);
+  });
+
+  it("admin toggles a permission (audited) and can change a role; teacher 403 on writes", async () => {
+    // pick a teacher-role staff member from the access list
+    const staff = (await get("/access/staff", "admin")).body;
+    const target = staff.find((s: any) => s.roles.includes("teacher")) ?? staff[0];
+
+    // teacher cannot write
+    expect(
+      (
+        await post("/access/permissions", "teacher", {
+          userId: target.id,
+          key: "reports.view",
+          enabled: true,
+        })
+      ).status,
+    ).toBe(403);
+
+    // admin enables a permission -> 201, and an audit row appears
+    const set = await post("/access/permissions", "admin", {
+      userId: target.id,
+      key: "reports.view",
+      enabled: true,
+    });
+    expect(set.status).toBe(201);
+
+    const perms = await get(`/access/permissions/${target.id}`, "admin");
+    expect(perms.body.some((p: any) => p.permission_key === "reports.view" && p.enabled)).toBe(
+      true,
+    );
+
+    const audit = await get(`/access/audit/${target.id}`, "admin");
+    expect(audit.body.some((a: any) => a.permission_key === "reports.view")).toBe(true);
+    expect(audit.body[0]).toHaveProperty("actor_name");
+
+    // role change round-trips (set back to teacher afterwards to keep the seed intact)
+    const roleSet = await patch("/access/role", "admin", { userId: target.id, role: "teacher" });
+    expect(roleSet.status).toBe(200);
+    expect(
+      (await patch("/access/role", "teacher", { userId: target.id, role: "admin" })).status,
+    ).toBe(403);
+  });
+});
