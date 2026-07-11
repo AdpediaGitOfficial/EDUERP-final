@@ -2,7 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import {
   BarChart,
@@ -18,8 +18,6 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { subDays, format, startOfDay } from "date-fns";
-import { useMemo } from "react";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
   component: () => (
@@ -32,67 +30,21 @@ export const Route = createFileRoute("/_authenticated/analytics")({
 const COLORS = ["hsl(var(--primary))", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
 
 function Page() {
-  const since = subDays(startOfDay(new Date()), 29).toISOString();
-
-  const { data: attendance } = useQuery({
-    queryKey: ["an-att"],
-    queryFn: async () =>
-      (await supabase.from("attendance").select("date,status").gte("date", since.slice(0, 10)))
-        .data ?? [],
+  const { data } = useQuery({
+    queryKey: ["analytics"],
+    queryFn: () =>
+      apiGet<{
+        attSeries: { date: string; day: string; present: number; absent: number; late: number }[];
+        revenueSeries: { day: string; amount: number }[];
+        roleDist: { name: string; value: number }[];
+        totalUsers: number;
+      }>("/reports/analytics"),
   });
 
-  const { data: payments } = useQuery({
-    queryKey: ["an-pay"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("payments")
-          .select("amount,paid_at,status")
-          .gte("paid_at", since)
-          .eq("status", "successful")
-      ).data ?? [],
-  });
-
-  const { data: roleRows } = useQuery({
-    queryKey: ["an-roles"],
-    queryFn: async () => (await supabase.from("user_roles").select("role")).data ?? [],
-  });
-
-  const attSeries = useMemo(() => {
-    const days: Record<string, { date: string; present: number; absent: number; late: number }> =
-      {};
-    for (let i = 29; i >= 0; i--) {
-      const d = format(subDays(new Date(), i), "yyyy-MM-dd");
-      days[d] = { date: d, present: 0, absent: 0, late: 0 };
-    }
-    for (const r of attendance ?? []) {
-      const d = String(r.date);
-      if (!days[d]) continue;
-      if (r.status === "present") days[d].present++;
-      else if (r.status === "absent") days[d].absent++;
-      else if (r.status === "late") days[d].late++;
-    }
-    return Object.values(days).map((r) => ({ ...r, day: format(new Date(r.date), "dd MMM") }));
-  }, [attendance]);
-
-  const revenueSeries = useMemo(() => {
-    const days: Record<string, { day: string; amount: number }> = {};
-    for (let i = 29; i >= 0; i--) {
-      const d = format(subDays(new Date(), i), "yyyy-MM-dd");
-      days[d] = { day: format(new Date(d), "dd MMM"), amount: 0 };
-    }
-    for (const p of payments ?? []) {
-      const d = format(new Date(p.paid_at), "yyyy-MM-dd");
-      if (days[d]) days[d].amount += Number(p.amount);
-    }
-    return Object.values(days);
-  }, [payments]);
-
-  const roleDist = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of roleRows ?? []) m.set(r.role, (m.get(r.role) ?? 0) + 1);
-    return Array.from(m.entries()).map(([name, value]) => ({ name, value }));
-  }, [roleRows]);
+  const attSeries = data?.attSeries ?? [];
+  const revenueSeries = data?.revenueSeries ?? [];
+  const roleDist = data?.roleDist ?? [];
+  const totalUsers = data?.totalUsers ?? 0;
 
   const totalRevenue = revenueSeries.reduce((s, r) => s + r.amount, 0);
   const totalPresent = attSeries.reduce((s, r) => s + r.present, 0);
@@ -114,7 +66,7 @@ function Page() {
         </Card>
         <Card className="p-4 rounded-2xl">
           <div className="text-xs text-muted-foreground">Total users</div>
-          <div className="text-2xl font-semibold">{(roleRows ?? []).length}</div>
+          <div className="text-2xl font-semibold">{totalUsers}</div>
         </Card>
       </div>
 

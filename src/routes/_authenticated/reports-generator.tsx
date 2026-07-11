@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,75 +57,8 @@ function Page() {
 
   const { data, isFetching, refetch } = useQuery<Record<string, any>[]>({
     queryKey: ["rg", type, from, to],
-    queryFn: async () => {
-      if (type === "attendance") {
-        const { data } = await supabase
-          .from("attendance")
-          .select("date,status,students(admission_no,profiles(full_name)),classes(name,section)")
-          .gte("date", from)
-          .lte("date", to)
-          .order("date", { ascending: false });
-        return (data ?? []).map((r: any) => ({
-          date: r.date,
-          admission_no: r.students?.admission_no,
-          student: r.students?.profiles?.full_name,
-          class: `${r.classes?.name ?? ""}${r.classes?.section ? " " + r.classes.section : ""}`,
-          status: r.status,
-        }));
-      }
-      if (type === "fees") {
-        const { data } = await supabase
-          .from("payments")
-          .select("paid_at,amount,method,reference,students(admission_no,profiles(full_name))")
-          .gte("paid_at", `${from}T00:00:00`)
-          .lte("paid_at", `${to}T23:59:59`)
-          .order("paid_at", { ascending: false });
-        return (data ?? []).map((r: any) => ({
-          paid_at: format(new Date(r.paid_at), "yyyy-MM-dd HH:mm"),
-          admission_no: r.students?.admission_no,
-          student: r.students?.profiles?.full_name,
-          amount: r.amount,
-          method: r.method,
-          reference: r.reference,
-        }));
-      }
-      if (type === "students") {
-        const { data } = await supabase
-          .from("students")
-          .select(
-            "admission_no,roll_no,admission_date,profiles(full_name,email),classes(name,section)",
-          )
-          .gte("admission_date", from)
-          .lte("admission_date", to)
-          .order("admission_date", { ascending: false });
-        return (data ?? []).map((r: any) => ({
-          admission_no: r.admission_no,
-          roll_no: r.roll_no,
-          name: r.profiles?.full_name,
-          email: r.profiles?.email,
-          class: `${r.classes?.name ?? ""}${r.classes?.section ? " " + r.classes.section : ""}`,
-          admission_date: r.admission_date,
-        }));
-      }
-      // complaints
-      const { data } = await supabase
-        .from("complaints")
-        .select(
-          "created_at,subject,severity,status,escalated_to_admin,students(admission_no,profiles(full_name))",
-        )
-        .gte("created_at", `${from}T00:00:00`)
-        .lte("created_at", `${to}T23:59:59`)
-        .order("created_at", { ascending: false });
-      return (data ?? []).map((r: any) => ({
-        created_at: format(new Date(r.created_at), "yyyy-MM-dd HH:mm"),
-        student: r.students?.profiles?.full_name,
-        admission_no: r.students?.admission_no,
-        subject: r.subject,
-        severity: r.severity,
-        status: r.status,
-        escalated: r.escalated_to_admin ? "yes" : "no",
-      }));
-    },
+    queryFn: () =>
+      apiGet<Record<string, any>[]>(`/reports/generator?type=${type}&from=${from}&to=${to}`),
   });
 
   const rows = data ?? [];

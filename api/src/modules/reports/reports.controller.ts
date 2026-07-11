@@ -36,4 +36,19 @@ export class ReportsController {
   ) {
     return this.reports.auditLog(actor, page ?? 1, Math.min(pageSize ?? 50, 200));
   }
+
+  @Get("analytics")
+  analytics(@CurrentUser() actor: AuthUser) {
+    return this.reports.analytics(actor);
+  }
+
+  @Get("generator")
+  generator(
+    @CurrentUser() actor: AuthUser,
+    @Query("type") type: string,
+    @Query("from") from: string,
+    @Query("to") to: string,
+  ) {
+    return this.reports.generator(actor, type, from, to);
+  }
 }

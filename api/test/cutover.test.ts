@@ -1689,3 +1689,54 @@ describe("Access control + monitoring (admin only)", () => {
     ).toBe(403);
   });
 });
+
+describe("Reports: admin analytics + generator (admin only)", () => {
+  it("analytics returns 30-day series + role split; teacher 403", async () => {
+    expect((await get("/reports/analytics", "teacher")).status).toBe(403);
+    const a = await get("/reports/analytics", "admin");
+    expect(a.status).toBe(200);
+    expect(a.body.attSeries.length).toBe(30);
+    expect(a.body.revenueSeries.length).toBe(30);
+    expect(Array.isArray(a.body.roleDist)).toBe(true);
+    expect(typeof a.body.totalUsers).toBe("number");
+    // series rows carry the fields the charts plot
+    expect(a.body.attSeries[0]).toHaveProperty("present");
+    expect(a.body.revenueSeries[0]).toHaveProperty("amount");
+  });
+
+  it("generator returns flat rows for each report type; teacher 403; unknown type rejected", async () => {
+    const from = "2000-01-01";
+    const to = "2100-01-01";
+    expect(
+      (await get(`/reports/generator?type=attendance&from=${from}&to=${to}`, "teacher")).status,
+    ).toBe(403);
+
+    const att = await get(`/reports/generator?type=attendance&from=${from}&to=${to}`, "admin");
+    expect(att.status).toBe(200);
+    expect(Array.isArray(att.body)).toBe(true);
+    if (att.body[0]) {
+      for (const k of ["date", "admission_no", "student", "class", "status"]) {
+        expect(att.body[0]).toHaveProperty(k);
+      }
+    }
+
+    const fees = await get(`/reports/generator?type=fees&from=${from}&to=${to}`, "admin");
+    expect(fees.status).toBe(200);
+    if (fees.body[0]) expect(fees.body[0]).toHaveProperty("amount");
+
+    const students = await get(`/reports/generator?type=students&from=${from}&to=${to}`, "admin");
+    expect(students.status).toBe(200);
+
+    const complaints = await get(
+      `/reports/generator?type=complaints&from=${from}&to=${to}`,
+      "admin",
+    );
+    expect(complaints.status).toBe(200);
+    if (complaints.body[0]) expect(complaints.body[0]).toHaveProperty("escalated");
+
+    // unknown type -> 403 (guarded)
+    expect((await get(`/reports/generator?type=bogus&from=${from}&to=${to}`, "admin")).status).toBe(
+      403,
+    );
+  });
+});

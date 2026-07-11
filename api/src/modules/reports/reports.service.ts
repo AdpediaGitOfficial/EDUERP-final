@@ -731,4 +731,158 @@ export class ReportsService {
     ]);
     return { total, page, pageSize, rows };
   }
+
+  private ymd(d: Date): string {
+    return d.toISOString().slice(0, 10);
+  }
+  private ymdhm(d: Date): string {
+    // "YYYY-MM-DD HH:mm" in UTC — matches the old client's display granularity.
+    return d.toISOString().slice(0, 16).replace("T", " ");
+  }
+  private clsLabel(c: { name: string | null; section: string | null } | null): string {
+    if (!c) return "";
+    return `${c.name ?? ""}${c.section ? " " + c.section : ""}`;
+  }
+
+  /** Admin analytics — 30-day revenue + attendance-mix series and role split. */
+  async analytics(actor: AuthUser) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const start = new Date();
+    start.setUTCHours(0, 0, 0, 0);
+    start.setUTCDate(start.getUTCDate() - 29);
+
+    const [attendance, payments, roles] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where: { date: { gte: start } },
+        select: { date: true, status: true },
+      }),
+      this.prisma.payments.findMany({
+        where: { paid_at: { gte: start }, status: "successful" },
+        select: { amount: true, paid_at: true },
+      }),
+      this.prisma.user_roles.findMany({ select: { role: true } }),
+    ]);
+
+    // 30-day scaffolds keyed by YYYY-MM-DD
+    const attDays = new Map<string, { present: number; absent: number; late: number }>();
+    const revDays = new Map<string, number>();
+    const order: string[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(start.getTime() + (29 - i) * 86_400_000);
+      const key = this.ymd(d);
+      order.push(key);
+      attDays.set(key, { present: 0, absent: 0, late: 0 });
+      revDays.set(key, 0);
+    }
+    for (const a of attendance) {
+      const key = this.ymd(a.date);
+      const bucket = attDays.get(key);
+      if (!bucket) continue;
+      if (a.status === "present") bucket.present++;
+      else if (a.status === "absent") bucket.absent++;
+      else if (a.status === "late") bucket.late++;
+    }
+    for (const p of payments) {
+      const key = this.ymd(p.paid_at);
+      if (revDays.has(key)) revDays.set(key, (revDays.get(key) ?? 0) + Number(p.amount));
+    }
+    const label = (key: string) =>
+      new Date(`${key}T00:00:00Z`).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        timeZone: "UTC",
+      });
+
+    const attSeries = order.map((key) => ({ date: key, day: label(key), ...attDays.get(key)! }));
+    const revenueSeries = order.map((key) => ({ day: label(key), amount: revDays.get(key) ?? 0 }));
+    const roleCounts = new Map<string, number>();
+    for (const r of roles) roleCounts.set(r.role, (roleCounts.get(r.role) ?? 0) + 1);
+    const roleDist = Array.from(roleCounts.entries()).map(([name, value]) => ({ name, value }));
+
+    return { attSeries, revenueSeries, roleDist, totalUsers: roles.length };
+  }
+
+  /** Report generator — one of four typed exports over a date range (admin). */
+  async generator(actor: AuthUser, type: string, from: string, to: string) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00.000Z`);
+    const start = day(from);
+    const endInclusive = new Date(day(to).getTime() + 86_400_000);
+
+    if (type === "attendance") {
+      const rows = await this.prisma.attendance.findMany({
+        where: { date: { gte: start, lt: endInclusive } },
+        orderBy: { date: "desc" },
+        take: 5000,
+        include: {
+          students: { select: { admission_no: true, profiles: { select: { full_name: true } } } },
+          classes: { select: { name: true, section: true } },
+        },
+      });
+      return rows.map((r) => ({
+        date: this.ymd(r.date),
+        admission_no: r.students?.admission_no ?? null,
+        student: r.students?.profiles?.full_name ?? null,
+        class: this.clsLabel(r.classes),
+        status: r.status,
+      }));
+    }
+    if (type === "fees") {
+      const rows = await this.prisma.payments.findMany({
+        where: { paid_at: { gte: start, lt: endInclusive } },
+        orderBy: { paid_at: "desc" },
+        take: 5000,
+        include: {
+          students: { select: { admission_no: true, profiles: { select: { full_name: true } } } },
+        },
+      });
+      return rows.map((r) => ({
+        paid_at: this.ymdhm(r.paid_at),
+        admission_no: r.students?.admission_no ?? null,
+        student: r.students?.profiles?.full_name ?? null,
+        amount: Number(r.amount),
+        method: r.method,
+        reference: r.reference,
+      }));
+    }
+    if (type === "students") {
+      const rows = await this.prisma.students.findMany({
+        where: { admission_date: { gte: start, lt: endInclusive } },
+        orderBy: { admission_date: "desc" },
+        take: 5000,
+        include: {
+          profiles: { select: { full_name: true, email: true } },
+          classes: { select: { name: true, section: true } },
+        },
+      });
+      return rows.map((r) => ({
+        admission_no: r.admission_no,
+        roll_no: r.roll_no,
+        name: r.profiles?.full_name ?? null,
+        email: r.profiles?.email ?? null,
+        class: this.clsLabel(r.classes),
+        admission_date: this.ymd(r.admission_date),
+      }));
+    }
+    if (type === "complaints") {
+      const rows = await this.prisma.complaints.findMany({
+        where: { created_at: { gte: start, lt: endInclusive } },
+        orderBy: { created_at: "desc" },
+        take: 5000,
+        include: {
+          students: { select: { admission_no: true, profiles: { select: { full_name: true } } } },
+        },
+      });
+      return rows.map((r) => ({
+        created_at: r.created_at ? this.ymdhm(r.created_at) : null,
+        student: r.students?.profiles?.full_name ?? null,
+        admission_no: r.students?.admission_no ?? null,
+        subject: r.subject,
+        severity: r.severity,
+        status: r.status,
+        escalated: r.escalated_to_admin ? "yes" : "no",
+      }));
+    }
+    throw new ForbiddenException("Unknown report type.");
+  }
 }
