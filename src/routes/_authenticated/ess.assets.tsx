@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { niceLabel } from "@/lib/module-util";
 
@@ -39,11 +40,11 @@ function Page() {
               </tr>
             ))}
             {(data ?? []).length === 0 && (
-              <tr>
-                <td colSpan={4} className="p-6 text-center text-muted-foreground">
-                  No assets assigned.
-                </td>
-              </tr>
+              <EmptyRow
+                colSpan={4}
+                title="No assets assigned"
+                hint="Items issued to you will appear here."
+              />
             )}
           </tbody>
         </table>

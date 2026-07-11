@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -164,11 +165,11 @@ function Page() {
                 </tr>
               ))}
               {(!renewals || renewals.length === 0) && (
-                <tr>
-                  <td colSpan={4} className="p-6 text-center text-muted-foreground">
-                    Nothing expiring in the next 180 days.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={4}
+                  title="Nothing expiring soon"
+                  hint="No insurance, permit, or licence renewals in the next 180 days."
+                />
               )}
             </tbody>
           </table>

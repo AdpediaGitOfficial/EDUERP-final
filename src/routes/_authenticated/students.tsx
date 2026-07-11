@@ -446,11 +446,12 @@ function StudentsPage() {
                     );
                   })}
                   {(students ?? []).length === 0 && (
-                    <tr>
-                      <td colSpan={9} className="p-8 text-center text-muted-foreground">
-                        No students in your assigned classes.
-                      </td>
-                    </tr>
+                    <EmptyRow
+                      colSpan={9}
+                      icon={GraduationCap}
+                      title="No students in your assigned classes"
+                      hint="Students from the classes you teach will appear here."
+                    />
                   )}
                 </tbody>
               </table>

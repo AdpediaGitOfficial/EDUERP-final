@@ -2,6 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
@@ -334,11 +335,11 @@ function Page() {
                         </tr>
                       ))}
                       {(audit ?? []).length === 0 && (
-                        <tr>
-                          <td colSpan={4} className="p-6 text-center text-muted-foreground text-sm">
-                            No changes recorded yet.
-                          </td>
-                        </tr>
+                        <EmptyRow
+                          colSpan={4}
+                          title="No changes recorded yet"
+                          hint="Access changes will be logged here."
+                        />
                       )}
                     </tbody>
                   </table>

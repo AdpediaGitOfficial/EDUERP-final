@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { useConfirm } from "@/components/confirm-dialog";
+import { EmptyRow } from "@/components/empty-state";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -457,11 +458,11 @@ function CatalogTab({ books }: { books: any[] }) {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr>
-                <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                  No books match.
-                </td>
-              </tr>
+              <EmptyRow
+                colSpan={5}
+                title="No books match"
+                hint="Try a different search or add a new book."
+              />
             )}
           </tbody>
         </table>
@@ -552,11 +553,7 @@ function CirculationTab({ loans, onChange }: { loans: any[]; onChange: () => voi
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                  No loans match.
-                </td>
-              </tr>
+              <EmptyRow colSpan={6} title="No loans match" hint="Issued books will appear here." />
             )}
           </tbody>
         </table>
@@ -648,11 +645,11 @@ function FinesTab({ loans, onChange }: { loans: any[]; onChange: () => void }) {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                  No fines to show.
-                </td>
-              </tr>
+              <EmptyRow
+                colSpan={6}
+                title="No fines to show"
+                hint="Overdue-return fines will be listed here."
+              />
             )}
           </tbody>
         </table>

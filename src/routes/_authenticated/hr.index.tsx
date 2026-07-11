@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, StatCardsSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import {
   Users,
@@ -34,7 +35,7 @@ import {
 export const Route = createFileRoute("/_authenticated/hr/")({ component: Page });
 
 function Page() {
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["hr-dashboard"],
     queryFn: async () => apiGet<any>("/hr/dashboard"),
   });
@@ -55,6 +56,26 @@ function Page() {
 
   const deptData: { name: string; value: number }[] = data?.byDepartment ?? [];
   const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+  if (isError) {
+    return (
+      <>
+        <PageHeader title="HR Dashboard" subtitle="Team overview, leave and payroll status." />
+        <QueryError title="Couldn't load the HR dashboard" onRetry={refetch} />
+      </>
+    );
+  }
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader title="HR Dashboard" subtitle="Team overview, leave and payroll status." />
+        <div className="space-y-4">
+          <StatCardsSkeleton count={6} />
+          <StatCardsSkeleton count={3} />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

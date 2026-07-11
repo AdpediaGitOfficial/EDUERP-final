@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -203,11 +204,11 @@ function Page() {
                 );
               })}
               {byClass.size === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                    No classes.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={7}
+                  title="No classes"
+                  hint="Classes will appear here once created."
+                />
               )}
             </tbody>
           </table>
@@ -266,11 +267,11 @@ function Page() {
                   </tr>
                 ))}
                 {drill.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                      No attendance recorded for this class on {date}.
-                    </td>
-                  </tr>
+                  <EmptyRow
+                    colSpan={4}
+                    title="No attendance recorded"
+                    hint={`Nothing marked for this class on ${date}.`}
+                  />
                 )}
               </tbody>
             </table>

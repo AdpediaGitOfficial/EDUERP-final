@@ -2,6 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -209,11 +210,11 @@ function Page() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                    No teachers found.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={5}
+                  title="No teachers found"
+                  hint="Try a different search or filter."
+                />
               )}
             </tbody>
           </table>

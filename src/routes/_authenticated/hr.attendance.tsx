@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -365,11 +366,11 @@ function Page() {
                     </tr>
                   ))}
                   {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="p-6 text-center text-muted-foreground">
-                        No active teachers.
-                      </td>
-                    </tr>
+                    <EmptyRow
+                      colSpan={8}
+                      title="No active teachers"
+                      hint="Active teaching staff will appear here."
+                    />
                   )}
                 </tbody>
               </table>
@@ -407,11 +408,11 @@ function Page() {
                     </tr>
                   ))}
                   {(monthRows ?? []).length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="p-6 text-center text-muted-foreground">
-                        No records this month.
-                      </td>
-                    </tr>
+                    <EmptyRow
+                      colSpan={5}
+                      title="No records this month"
+                      hint="Attendance for this month will show here."
+                    />
                   )}
                 </tbody>
               </table>
@@ -451,11 +452,11 @@ function Page() {
                     </tr>
                   ))}
                   {(corrections ?? []).length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="p-6 text-center text-muted-foreground">
-                        No corrections yet.
-                      </td>
-                    </tr>
+                    <EmptyRow
+                      colSpan={6}
+                      title="No corrections yet"
+                      hint="Attendance correction requests will appear here."
+                    />
                   )}
                 </tbody>
               </table>

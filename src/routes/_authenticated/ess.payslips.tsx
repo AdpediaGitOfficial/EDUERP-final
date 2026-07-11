@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { badgeClass, fmtDate, money, niceLabel } from "@/lib/module-util";
@@ -67,11 +68,11 @@ function Page() {
               </tr>
             ))}
             {(data ?? []).length === 0 && (
-              <tr>
-                <td colSpan={7} className="p-6 text-center text-muted-foreground">
-                  No payslips yet.
-                </td>
-              </tr>
+              <EmptyRow
+                colSpan={7}
+                title="No payslips yet"
+                hint="Your monthly payslips will appear here."
+              />
             )}
           </tbody>
         </table>

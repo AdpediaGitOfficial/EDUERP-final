@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
+import { QueryError, StatCardsSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,7 +67,7 @@ function Page() {
   const [custom, setCustom] = useState({ from: "", to: "" });
   const range = useMemo(() => periodRange(period, custom), [period, custom]);
 
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["finance-dashboard", range.from.toISOString(), range.to.toISOString()],
     queryFn: async () => {
       const from = range.from.toISOString().slice(0, 10);
@@ -103,6 +104,26 @@ function Page() {
   const efficiency = data?.efficiency ?? { thisPct: 0, lastPct: 0 };
   const byClass = data?.byClass ?? [];
   const overdue = data?.overdue ?? [];
+
+  if (isError) {
+    return (
+      <>
+        <PageHeader title="Finance Dashboard" subtitle="Revenue, expenses and outstanding fees." />
+        <QueryError title="Couldn't load the finance dashboard" onRetry={refetch} />
+      </>
+    );
+  }
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader title="Finance Dashboard" subtitle="Revenue, expenses and outstanding fees." />
+        <div className="space-y-4">
+          <StatCardsSkeleton count={4} />
+          <StatCardsSkeleton count={3} />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, StatCardsSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -48,7 +49,7 @@ function Page() {
   const [period, setPeriod] = useState<Period>("month");
   const since = periodStart(period);
 
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["fleet-dashboard", period],
     queryFn: async () => apiGet<any>(`/fleet/dashboard${since ? `?since=${since}` : ""}`),
   });
@@ -68,6 +69,26 @@ function Page() {
       soon: src.filter((r) => r.daysLeft > 15 && r.daysLeft <= 60),
     };
   }, [renewals]);
+
+  if (isError) {
+    return (
+      <>
+        <PageHeader title="Fleet Dashboard" subtitle="Vehicles, drivers, and renewals." />
+        <QueryError title="Couldn't load the fleet dashboard" onRetry={refetch} />
+      </>
+    );
+  }
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader title="Fleet Dashboard" subtitle="Vehicles, drivers, and renewals." />
+        <div className="space-y-4">
+          <StatCardsSkeleton count={4} />
+          <StatCardsSkeleton count={2} />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
