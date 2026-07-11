@@ -844,4 +844,53 @@ describe("Fleet: dashboard + vehicle/driver CRUD (fleet write)", () => {
     expect(row.vehicleReg).toBe(vreg);
     expect(row).toHaveProperty("licenseDue");
   });
+
+  it("fuel + maintenance logging and the analytics aggregation", async () => {
+    const vehId = (await get("/fleet/vehicles", "admin")).body[0]?.id;
+    if (!vehId) return; // seed present in CI
+    expect(
+      (
+        await post("/fleet/fuel-logs", "admin", {
+          vehicleId: vehId,
+          date: "2026-07-05",
+          liters: 42,
+          cost: 4100,
+          odometer: 20000,
+        })
+      ).status,
+    ).toBe(201);
+    const fuel = await get("/fleet/fuel-logs", "admin");
+    expect(fuel.body[0]).toHaveProperty("registrationNo");
+
+    expect(
+      (
+        await post("/fleet/maintenance", "admin", {
+          vehicleId: vehId,
+          serviceDate: "2026-07-04",
+          serviceType: "Spec service",
+          cost: 900,
+          nextDueDate: "2026-10-04",
+        })
+      ).status,
+    ).toBe(201);
+
+    const an = await get("/fleet/analytics?since=2026-07-01", "admin");
+    expect(an.status).toBe(200);
+    expect(typeof an.body.fuelSpend).toBe("number");
+    expect(Array.isArray(an.body.perVehicle)).toBe(true);
+    expect(Array.isArray(an.body.routeUtilization)).toBe(true);
+    expect(an.body).toHaveProperty("costPerStudent");
+    // Non-fleet role can't read fuel/maintenance/analytics.
+    expect((await get("/fleet/analytics", "teacher")).status).toBe(403);
+    expect(
+      (
+        await post("/fleet/fuel-logs", "teacher", {
+          vehicleId: vehId,
+          date: "2026-07-05",
+          liters: 1,
+          cost: 1,
+        })
+      ).status,
+    ).toBe(403);
+  });
 });

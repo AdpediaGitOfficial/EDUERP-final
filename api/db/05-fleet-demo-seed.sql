@@ -55,8 +55,10 @@ JOIN (SELECT id, row_number() OVER (ORDER BY name) rn FROM public.transport_rout
 WHERE t.id = r.id;
 
 -- Fuel logs across the last two months (drives the dashboard fuel spend).
+-- Odometer INCREASES with date (n=0 is newest → highest reading) so the
+-- per-vehicle km/L efficiency comes out positive.
 INSERT INTO public.fuel_logs (vehicle_id, date, liters, cost, odometer)
-SELECT v.id, CURRENT_DATE - (g.n * 12), 55 + g.n * 3, 5200 + g.n * 350, 12000 + g.n * 900
+SELECT v.id, CURRENT_DATE - (g.n * 12), 55 + g.n * 3, 5200 + g.n * 350, 12000 + (3 - g.n) * 900
 FROM (SELECT id FROM public.fleet_vehicles WHERE registration_no LIKE 'DEMO-%' ORDER BY registration_no LIMIT 3) v
 CROSS JOIN generate_series(0, 3) AS g(n);
 

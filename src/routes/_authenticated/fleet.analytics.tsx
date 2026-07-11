@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,68 +18,34 @@ function firstOfMonthISO() {
 
 function Page() {
   const monthStart = firstOfMonthISO();
-  const { data: fuel } = useQuery({
-    queryKey: ["an-fuel"],
-    queryFn: async () =>
-      (await supabase.from("fuel_logs").select("cost,date,vehicle_id").gte("date", monthStart))
-        .data ?? [],
-  });
-  const { data: maint } = useQuery({
-    queryKey: ["an-maint"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("vehicle_maintenance")
-          .select("cost,service_date,vehicle_id")
-          .gte("service_date", monthStart)
-      ).data ?? [],
-  });
-  const { data: routes } = useQuery({
-    queryKey: ["an-routes"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("transport_routes")
-          .select("id,name,vehicle:vehicle_id(id,capacity,registration_no),route_students(id)")
-      ).data ?? [],
-  });
-  const { data: renewals } = useQuery({
-    queryKey: ["an-renewals"],
-    queryFn: async () => (await supabase.rpc("fleet_renewals_due", { _days: 180 })).data ?? [],
+  const { data } = useQuery({
+    queryKey: ["fleet-analytics", monthStart],
+    queryFn: async () => apiGet<any>(`/fleet/analytics?since=${monthStart}`),
   });
 
-  const fuelSpend = (fuel ?? []).reduce((a: number, x: any) => a + Number(x.cost || 0), 0);
-  const maintSpend = (maint ?? []).reduce((a: number, x: any) => a + Number(x.cost || 0), 0);
-  const totalCost = fuelSpend + maintSpend;
-  const totalStudents = (routes ?? []).reduce(
-    (a: number, r: any) => a + (r.route_students?.length ?? 0),
-    0,
+  const fuelSpend = data?.fuelSpend ?? 0;
+  const maintSpend = data?.maintSpend ?? 0;
+  const totalCost = data?.totalCost ?? 0;
+  const totalStudents = data?.totalStudents ?? 0;
+  const costPerStudent = data?.costPerStudent ?? 0;
+  const perVehicle: any[] = data?.perVehicle ?? [];
+  const routes: any[] = useMemo(
+    () =>
+      (data?.routeUtilization ?? []).map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        vehicle: r.capacity ? { capacity: r.capacity } : null,
+        route_students: Array.from({ length: r.filled }),
+      })),
+    [data],
   );
-  const costPerStudent = totalStudents ? totalCost / totalStudents : 0;
-
-  // Per-vehicle cost
-  const perVehicle = useMemo(() => {
-    const map = new Map<string, { fuel: number; maint: number }>();
-    for (const f of fuel ?? []) {
-      const v = map.get(f.vehicle_id) ?? { fuel: 0, maint: 0 };
-      v.fuel += Number(f.cost || 0);
-      map.set(f.vehicle_id, v);
-    }
-    for (const m of maint ?? []) {
-      const v = map.get(m.vehicle_id) ?? { fuel: 0, maint: 0 };
-      v.maint += Number(m.cost || 0);
-      map.set(m.vehicle_id, v);
-    }
-    return Array.from(map.entries())
-      .map(([id, v]) => ({ id, ...v, total: v.fuel + v.maint }))
-      .sort((a, b) => b.total - a.total);
-  }, [fuel, maint]);
+  const renewals: any[] = data?.renewals ?? [];
 
   const vehicleRegs: Record<string, string> = useMemo(() => {
     const rec: Record<string, string> = {};
-    for (const r of routes ?? []) if (r.vehicle) rec[r.vehicle.id] = r.vehicle.registration_no;
+    for (const v of perVehicle) rec[v.id] = v.registrationNo ?? v.id.slice(0, 8);
     return rec;
-  }, [routes]);
+  }, [perVehicle]);
 
   return (
     <>
@@ -178,21 +144,21 @@ function Page() {
             </thead>
             <tbody>
               {((renewals as any[]) ?? []).map((r) => (
-                <tr key={`${r.kind}-${r.ref_id}`} className="border-t">
+                <tr key={`${r.kind}-${r.refId}`} className="border-t">
                   <td className="p-3 capitalize">{r.kind}</td>
                   <td className="p-3">{r.label}</td>
-                  <td className="p-3">{fmtDate(r.expiry_date)}</td>
+                  <td className="p-3">{fmtDate(r.expiryDate)}</td>
                   <td className="p-3">
                     <Badge
                       className={
-                        r.days_left <= 15
+                        r.daysLeft <= 15
                           ? "bg-red-100 text-red-800 border-0"
-                          : r.days_left <= 60
+                          : r.daysLeft <= 60
                             ? "bg-amber-100 text-amber-800 border-0"
                             : "bg-slate-100 text-slate-700 border-0"
                       }
                     >
-                      {r.days_left}d
+                      {r.daysLeft}d
                     </Badge>
                   </td>
                 </tr>

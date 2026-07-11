@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,13 +34,20 @@ function Page() {
   const [open, setOpen] = useState(false);
   const { data } = useQuery({
     queryKey: ["maint-all"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("vehicle_maintenance")
-          .select("*, vehicle:vehicle_id(registration_no)")
-          .order("service_date", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/fleet/maintenance");
+      return rows.map((m) => ({
+        id: m.id,
+        vehicle_id: m.vehicleId,
+        service_date: m.serviceDate,
+        service_type: m.serviceType,
+        vendor: m.vendor,
+        cost: m.cost,
+        next_due_date: m.nextDueDate,
+        notes: m.notes,
+        vehicle: { registration_no: m.registrationNo },
+      }));
+    },
   });
 
   const overdue = (data ?? []).filter(
@@ -221,22 +228,26 @@ function MaintDialog({
   const [f, setF] = useState<any>({ service_date: todayISO() });
   const { data: vehicles } = useQuery({
     queryKey: ["maint-veh-picker"],
-    queryFn: async () =>
-      (await supabase.from("fleet_vehicles").select("id,registration_no")).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/fleet/vehicles");
+      return rows.map((v) => ({ id: v.id, registration_no: v.registrationNo }));
+    },
     enabled: open,
   });
   const mut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("vehicle_maintenance").insert({
-        vehicle_id: f.vehicle_id,
-        service_date: f.service_date,
-        service_type: f.service_type,
-        vendor: f.vendor || null,
-        cost: Number(f.cost || 0),
-        next_due_date: f.next_due_date || null,
-        notes: f.notes || null,
+      await apiFetch("/fleet/maintenance", {
+        method: "POST",
+        body: JSON.stringify({
+          vehicleId: f.vehicle_id,
+          serviceDate: f.service_date,
+          serviceType: f.service_type,
+          vendor: f.vendor || undefined,
+          cost: Number(f.cost || 0),
+          nextDueDate: f.next_due_date || undefined,
+          notes: f.notes || undefined,
+        }),
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Service logged");

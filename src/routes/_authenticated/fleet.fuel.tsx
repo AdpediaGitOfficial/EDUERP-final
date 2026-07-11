@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,13 +33,18 @@ function Page() {
   const [open, setOpen] = useState(false);
   const { data } = useQuery({
     queryKey: ["fuel-logs-all"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("fuel_logs")
-          .select("*, vehicle:vehicle_id(registration_no)")
-          .order("date", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/fleet/fuel-logs");
+      return rows.map((f) => ({
+        id: f.id,
+        vehicle_id: f.vehicleId,
+        date: f.date,
+        liters: f.liters,
+        cost: f.cost,
+        odometer: f.odometer,
+        vehicle: { registration_no: f.registrationNo },
+      }));
+    },
   });
 
   // Efficiency per vehicle: order asc by date, compute km/L on diffs
@@ -144,20 +149,24 @@ function FuelDialog({
   const [f, setF] = useState<any>({ date: todayISO() });
   const { data: vehicles } = useQuery({
     queryKey: ["fuel-veh-picker"],
-    queryFn: async () =>
-      (await supabase.from("fleet_vehicles").select("id,registration_no")).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/fleet/vehicles");
+      return rows.map((v) => ({ id: v.id, registration_no: v.registrationNo }));
+    },
     enabled: open,
   });
   const mut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("fuel_logs").insert({
-        vehicle_id: f.vehicle_id,
-        date: f.date,
-        liters: Number(f.liters),
-        cost: Number(f.cost),
-        odometer: f.odometer ? Number(f.odometer) : null,
+      await apiFetch("/fleet/fuel-logs", {
+        method: "POST",
+        body: JSON.stringify({
+          vehicleId: f.vehicle_id,
+          date: f.date,
+          liters: Number(f.liters),
+          cost: Number(f.cost),
+          odometer: f.odometer ? Number(f.odometer) : undefined,
+        }),
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Fuel logged");

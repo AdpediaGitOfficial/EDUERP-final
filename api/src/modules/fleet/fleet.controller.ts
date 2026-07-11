@@ -9,7 +9,17 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Min, MinLength } from "class-validator";
+import {
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  MinLength,
+} from "class-validator";
 import { FleetService } from "./fleet.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
@@ -76,6 +86,56 @@ class DriverDto {
   assignedVehicleId?: string;
 }
 
+class FuelLogDto {
+  @IsUUID()
+  vehicleId: string;
+
+  @IsDateString()
+  date: string;
+
+  @IsNumber()
+  @Min(0.1)
+  liters: number;
+
+  @IsNumber()
+  @Min(0)
+  cost: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  odometer?: number;
+}
+
+class MaintenanceDto {
+  @IsUUID()
+  vehicleId: string;
+
+  @IsDateString()
+  serviceDate: string;
+
+  @IsString()
+  @MinLength(2)
+  serviceType: string;
+
+  @IsOptional()
+  @IsString()
+  vendor?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cost?: number;
+
+  @IsOptional()
+  @IsDateString()
+  nextDueDate?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller("fleet")
 export class FleetController {
@@ -84,6 +144,31 @@ export class FleetController {
   @Get("dashboard")
   dashboard(@CurrentUser() actor: AuthUser, @Query("since") since?: string) {
     return this.fleet.dashboard(actor, since);
+  }
+
+  @Get("analytics")
+  analytics(@CurrentUser() actor: AuthUser, @Query("since") since?: string) {
+    return this.fleet.analytics(actor, since);
+  }
+
+  @Get("fuel-logs")
+  fuelLogs(@CurrentUser() actor: AuthUser) {
+    return this.fleet.listFuelLogs(actor);
+  }
+
+  @Post("fuel-logs")
+  createFuelLog(@CurrentUser() actor: AuthUser, @Body() dto: FuelLogDto) {
+    return this.fleet.createFuelLog(actor, dto);
+  }
+
+  @Get("maintenance")
+  maintenance(@CurrentUser() actor: AuthUser) {
+    return this.fleet.listMaintenance(actor);
+  }
+
+  @Post("maintenance")
+  createMaintenance(@CurrentUser() actor: AuthUser, @Body() dto: MaintenanceDto) {
+    return this.fleet.createMaintenance(actor, dto);
   }
 
   @Get("vehicles")
