@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,19 +52,16 @@ const initials = (n?: string) =>
 function ChildDetailPage() {
   const { studentId } = Route.useParams();
 
-  const { data: student, isLoading } = useQuery({
-    queryKey: ["child-detail", studentId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("students")
-        .select(
-          "id, admission_no, roll_no, admission_date, gender, profiles(full_name,email,phone), classes(id,name,section,academic_year)",
-        )
-        .eq("id", studentId)
-        .maybeSingle();
-      return data;
-    },
+  const { data: dashboard, isLoading } = useQuery({
+    queryKey: ["child-dashboard", studentId],
+    queryFn: () => apiGet<any>(`/students/${studentId}/dashboard`),
   });
+  const student = dashboard?.student ?? null;
+  const attendance = (dashboard?.attendance ?? []) as any[];
+  const results = (dashboard?.results ?? []) as any[];
+  const fees = (dashboard?.fees ?? []) as any[];
+  const assignedHomework = (dashboard?.homework ?? []) as any[];
+  const submissionsAll = (dashboard?.submissions ?? []) as any[];
 
   const [attMonth, setAttMonth] = useState(() => {
     const d = new Date();
@@ -78,71 +75,7 @@ function ChildDetailPage() {
   const [hwStatus, setHwStatus] = useState<string>("all");
   const [hwRange, setHwRange] = useState<string>("all");
 
-  const { data: attendance } = useQuery({
-    queryKey: ["child-attendance", studentId],
-    queryFn: async () => {
-      const since = new Date();
-      since.setMonth(since.getMonth() - 6);
-      since.setDate(1);
-      const { data } = await supabase
-        .from("attendance")
-        .select("date,status,note")
-        .eq("student_id", studentId)
-        .gte("date", since.toISOString().slice(0, 10))
-        .order("date", { ascending: false });
-      return data ?? [];
-    },
-  });
-
-  const { data: results } = useQuery({
-    queryKey: ["child-results", studentId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("exam_results")
-        .select("marks_obtained,grade,remarks,exams(name,exam_date,max_marks,subjects(name))")
-        .eq("student_id", studentId);
-      return data ?? [];
-    },
-  });
-
-  const { data: fees } = useQuery({
-    queryKey: ["child-fees", studentId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("fee_assignments")
-        .select("amount_due,amount_paid,status,due_date,fee_structures(name,term)")
-        .eq("student_id", studentId)
-        .order("due_date", { ascending: true });
-      return data ?? [];
-    },
-  });
-
   const classId: string | undefined = (student as any)?.classes?.id;
-
-  const { data: assignedHomework } = useQuery({
-    enabled: !!classId,
-    queryKey: ["child-hw-assigned", classId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("homework")
-        .select("id,title,assigned_date,due_date,max_marks,subjects(name)")
-        .eq("class_id", classId!)
-        .order("assigned_date", { ascending: false })
-        .limit(100);
-      return data ?? [];
-    },
-  });
-
-  const { data: submissionsAll } = useQuery({
-    queryKey: ["child-hw-all", studentId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("homework_submissions")
-        .select("homework_id,submitted_at,marks,remarks,status")
-        .eq("student_id", studentId);
-      return data ?? [];
-    },
-  });
 
   const homeworkHistory = useMemo(() => {
     const subMap = new Map<string, any>();

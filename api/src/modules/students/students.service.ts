@@ -303,6 +303,211 @@ export class StudentsService {
   }
 
   /**
+   * Comprehensive per-child dashboard for the parent child-detail + report
+   * pages. Authorized through the student scope (parent/self/teacher/admin);
+   * returns supabase-shaped nested rows so the two big pages consume it with
+   * minimal change: student, attendance, exam results (+ class-wide results
+   * for ranking), fees, homework (+ submissions).
+   */
+  async dashboard(actor: AuthUser, studentId: string) {
+    const scope = this.scopeFilter(actor);
+    if (scope === null) throw new ForbiddenException();
+    const student = await this.prisma.students.findFirst({
+      where: { AND: [{ id: studentId }, scope] },
+      include: {
+        profiles: { select: { full_name: true, email: true, phone: true } },
+        classes: { select: { id: true, name: true, section: true, academic_year: true } },
+      },
+    });
+    if (!student) throw new NotFoundException();
+    const classId = student.class_id;
+
+    const [attendance, results, fees, homework, submissions, classResults] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where: { student_id: studentId },
+        orderBy: { date: "asc" },
+        select: { date: true, status: true, note: true },
+      }),
+      this.prisma.exam_results.findMany({
+        where: { student_id: studentId },
+        select: {
+          marks_obtained: true,
+          grade: true,
+          remarks: true,
+          exams: {
+            select: {
+              id: true,
+              name: true,
+              term: true,
+              exam_date: true,
+              max_marks: true,
+              subjects: { select: { id: true, name: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.fee_assignments.findMany({
+        where: { student_id: studentId },
+        orderBy: { due_date: "asc" },
+        select: {
+          amount_due: true,
+          amount_paid: true,
+          status: true,
+          due_date: true,
+          fee_structures: { select: { name: true, term: true } },
+        },
+      }),
+      classId
+        ? this.prisma.homework.findMany({
+            where: { class_id: classId },
+            orderBy: { assigned_date: "desc" },
+            take: 200,
+            select: {
+              id: true,
+              title: true,
+              assigned_date: true,
+              due_date: true,
+              max_marks: true,
+              teacher_id: true,
+              subjects: { select: { name: true } },
+            },
+          })
+        : Promise.resolve([]),
+      this.prisma.homework_submissions.findMany({
+        where: { student_id: studentId },
+        select: {
+          homework_id: true,
+          submitted_at: true,
+          marks: true,
+          remarks: true,
+          status: true,
+        },
+      }),
+      classId
+        ? this.prisma.exam_results.findMany({
+            where: { exams: { class_id: classId } },
+            select: {
+              marks_obtained: true,
+              exams: {
+                select: {
+                  id: true,
+                  term: true,
+                  max_marks: true,
+                  class_id: true,
+                  subject_id: true,
+                  subjects: { select: { name: true } },
+                },
+              },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    // Resolve homework teacher names (homework.teacher_id -> profiles).
+    const teacherIds = Array.from(
+      new Set((homework as any[]).map((h) => h.teacher_id).filter(Boolean)),
+    ) as string[];
+    const teacherNames = teacherIds.length
+      ? new Map(
+          (
+            await this.prisma.profiles.findMany({
+              where: { id: { in: teacherIds } },
+              select: { id: true, full_name: true },
+            })
+          ).map((p) => [p.id, p.full_name]),
+        )
+      : new Map<string, string>();
+
+    const dstr = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+    const num = (v: unknown) => (v == null ? null : Number(v));
+
+    return {
+      student: {
+        id: student.id,
+        admission_no: student.admission_no,
+        roll_no: student.roll_no,
+        admission_date: dstr(student.admission_date),
+        gender: student.gender,
+        profiles: student.profiles
+          ? {
+              full_name: student.profiles.full_name,
+              email: student.profiles.email,
+              phone: student.profiles.phone,
+            }
+          : null,
+        classes: student.classes
+          ? {
+              id: student.classes.id,
+              name: student.classes.name,
+              section: student.classes.section,
+              academic_year: student.classes.academic_year,
+            }
+          : null,
+      },
+      attendance: attendance.map((a) => ({
+        date: dstr(a.date),
+        status: a.status,
+        note: a.note,
+      })),
+      results: results.map((r) => ({
+        marks_obtained: num(r.marks_obtained),
+        grade: r.grade,
+        remarks: r.remarks,
+        exams: r.exams
+          ? {
+              id: r.exams.id,
+              name: r.exams.name,
+              term: r.exams.term,
+              exam_date: dstr(r.exams.exam_date),
+              max_marks: r.exams.max_marks,
+              subjects: r.exams.subjects
+                ? { id: r.exams.subjects.id, name: r.exams.subjects.name }
+                : null,
+            }
+          : null,
+      })),
+      fees: fees.map((f) => ({
+        amount_due: num(f.amount_due),
+        amount_paid: num(f.amount_paid),
+        status: f.status,
+        due_date: dstr(f.due_date),
+        fee_structures: f.fee_structures
+          ? { name: f.fee_structures.name, term: f.fee_structures.term }
+          : null,
+      })),
+      homework: (homework as any[]).map((h) => ({
+        id: h.id,
+        title: h.title,
+        assigned_date: dstr(h.assigned_date),
+        due_date: dstr(h.due_date),
+        max_marks: h.max_marks,
+        subjects: h.subjects ? { name: h.subjects.name } : null,
+        teachers: h.teacher_id ? { full_name: teacherNames.get(h.teacher_id) ?? null } : null,
+      })),
+      submissions: submissions.map((s) => ({
+        homework_id: s.homework_id,
+        submitted_at: s.submitted_at ? s.submitted_at.toISOString() : null,
+        marks: num(s.marks),
+        remarks: s.remarks,
+        status: s.status,
+      })),
+      classResults: (classResults as any[]).map((r) => ({
+        marks_obtained: num(r.marks_obtained),
+        exams: r.exams
+          ? {
+              id: r.exams.id,
+              term: r.exams.term,
+              max_marks: r.exams.max_marks,
+              class_id: r.exams.class_id,
+              subject_id: r.exams.subject_id,
+              subjects: r.exams.subjects ? { name: r.exams.subjects.name } : null,
+            }
+          : null,
+      })),
+    };
+  }
+
+  /**
    * A child's transport assignment (route + bus + driver + stops), for the
    * parent tracking page. Authorized through the same student scope
    * (students_parent_read etc.) — route_students itself has no parent RLS

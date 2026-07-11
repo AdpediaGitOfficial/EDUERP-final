@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api/client";
 import { AppShell } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,82 +66,18 @@ function StudentReportPage() {
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
 
-  const { data: student, isLoading } = useQuery({
-    queryKey: ["report-student", studentId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("students")
-        .select(
-          "id, admission_no, roll_no, admission_date, gender, profiles(full_name,email,phone), classes(id,name,section,academic_year)",
-        )
-        .eq("id", studentId)
-        .maybeSingle();
-      return data;
-    },
+  const { data: dashboard, isLoading } = useQuery({
+    queryKey: ["report-dashboard", studentId],
+    queryFn: () => apiGet<any>(`/students/${studentId}/dashboard`),
   });
+  const student = dashboard?.student ?? null;
+  const results = (dashboard?.results ?? []) as any[];
+  const classResults = (dashboard?.classResults ?? []) as any[];
+  const attendance = (dashboard?.attendance ?? []) as any[];
+  const assignedHomework = (dashboard?.homework ?? []) as any[];
+  const submissions = (dashboard?.submissions ?? []) as any[];
 
   const classId: string | undefined = (student as any)?.classes?.id;
-
-  const { data: results } = useQuery({
-    queryKey: ["report-results", studentId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("exam_results")
-        .select(
-          "marks_obtained,grade,remarks,exams(id,name,term,exam_date,max_marks,subjects(id,name))",
-        )
-        .eq("student_id", studentId);
-      return data ?? [];
-    },
-  });
-
-  const { data: classResults } = useQuery({
-    enabled: !!classId,
-    queryKey: ["report-class-results", classId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("exam_results")
-        .select("marks_obtained,exams!inner(id,term,max_marks,class_id,subject_id,subjects(name))")
-        .eq("exams.class_id", classId!);
-      return data ?? [];
-    },
-  });
-
-  const { data: attendance } = useQuery({
-    queryKey: ["report-attendance", studentId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("attendance")
-        .select("date,status,note")
-        .eq("student_id", studentId)
-        .order("date", { ascending: true });
-      return data ?? [];
-    },
-  });
-
-  const { data: assignedHomework } = useQuery({
-    enabled: !!classId,
-    queryKey: ["report-hw-assigned", classId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("homework")
-        .select("id,title,assigned_date,due_date,max_marks,subjects(name),teachers(full_name)")
-        .eq("class_id", classId!)
-        .order("assigned_date", { ascending: false });
-      return data ?? [];
-    },
-  });
-
-  const { data: submissions } = useQuery({
-    queryKey: ["report-hw-subs", studentId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("homework_submissions")
-        .select("homework_id,submitted_at,marks,remarks,status")
-        .eq("student_id", studentId);
-      return data ?? [];
-    },
-  });
 
   // ---------- Period filter ----------
   const range = useMemo(() => {

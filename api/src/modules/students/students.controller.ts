@@ -86,6 +86,11 @@ export class StudentsController {
     return this.students.linkParent(actor, dto.admissionNo, dto.parentId);
   }
 
+  @Get(":id/dashboard")
+  dashboard(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.students.dashboard(actor, id);
+  }
+
   @Get(":id/transport")
   transport(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.students.transport(actor, id);

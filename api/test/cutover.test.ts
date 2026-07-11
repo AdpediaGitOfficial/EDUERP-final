@@ -1877,3 +1877,35 @@ describe("Child transport tracking (parent-scoped)", () => {
     }
   });
 });
+
+describe("Child detail dashboard (parent child-detail + report pages)", () => {
+  it("returns the full nested bundle, scoped by student visibility", async () => {
+    // a parent can read their own child's dashboard
+    const kid = (await get("/students?pageSize=1", "parent")).body.rows[0];
+    if (kid) {
+      const d = await get(`/students/${kid.id}/dashboard`, "parent");
+      expect(d.status).toBe(200);
+      for (const k of [
+        "student",
+        "attendance",
+        "results",
+        "fees",
+        "homework",
+        "submissions",
+        "classResults",
+      ]) {
+        expect(d.body).toHaveProperty(k);
+      }
+      expect(d.body.student).toHaveProperty("profiles");
+      expect(d.body.student).toHaveProperty("classes");
+      expect(Array.isArray(d.body.attendance)).toBe(true);
+      expect(Array.isArray(d.body.classResults)).toBe(true);
+      // nested exam shape the report page relies on for ranking
+      if (d.body.results[0]) expect(d.body.results[0]).toHaveProperty("exams");
+    }
+
+    // admin can read any student's dashboard
+    const anyStudent = (await get("/students/search?limit=1", "admin")).body.rows[0];
+    expect((await get(`/students/${anyStudent.id}/dashboard`, "admin")).status).toBe(200);
+  });
+});
