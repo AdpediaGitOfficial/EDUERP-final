@@ -26,7 +26,7 @@ import { Plus, Pencil, ChevronRight } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/fleet/drivers")({ component: Page });
+export const Route = createFileRoute("/_authenticated/fleet/drivers/")({ component: Page });
 
 function Page() {
   const qc = useQueryClient();

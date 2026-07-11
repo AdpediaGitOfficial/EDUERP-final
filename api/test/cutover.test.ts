@@ -1082,3 +1082,101 @@ describe("assets: allocation, maintenance, AMC (admin-only tables)", () => {
     expect((await get(`/assets/${assetId}`, "student")).status).toBe(403);
   });
 });
+
+describe("fleet detail: vehicle / driver / route pages + roster", () => {
+  it("vehicle detail + fuel/maintenance/documents sub-lists (fleet read)", async () => {
+    const list = await get("/fleet/vehicles", "admin");
+    expect(list.status).toBe(200);
+    const id = list.body[0].id;
+    const v = await get(`/fleet/vehicles/${id}`, "admin");
+    expect(v.status).toBe(200);
+    expect(v.body).toHaveProperty("registration_no");
+    expect(v.body).toHaveProperty("insuranceDaysLeft");
+    expect(v.body).toHaveProperty("driver");
+    expect(v.body).toHaveProperty("route");
+    for (const sub of ["fuel", "maintenance", "documents"]) {
+      const r = await get(`/fleet/vehicles/${id}/${sub}`, "admin");
+      expect(r.status).toBe(200);
+      expect(Array.isArray(r.body)).toBe(true);
+    }
+    // Non-fleet role rejected.
+    expect((await get(`/fleet/vehicles/${id}`, "teacher")).status).toBe(403);
+  });
+
+  it("driver detail + incidents; admin logs an incident, teacher cannot", async () => {
+    const id = (await get("/fleet/drivers", "admin")).body[0].id;
+    const d = await get(`/fleet/drivers/${id}`, "admin");
+    expect(d.status).toBe(200);
+    expect(d.body).toHaveProperty("licenseDaysLeft");
+    expect(d.body).toHaveProperty("vehicle");
+    const inc = await get(`/fleet/drivers/${id}/incidents`, "admin");
+    expect(inc.status).toBe(200);
+    expect(Array.isArray(inc.body)).toBe(true);
+    const made = await post(`/fleet/drivers/${id}/incidents`, "admin", {
+      incidentType: "traffic_violation",
+      severity: "low",
+      status: "open",
+      description: `cutover test ${process.env.VITEST_WORKER_ID ?? "0"}`,
+    });
+    expect(made.status).toBe(201);
+    expect(
+      (
+        await post(`/fleet/drivers/${id}/incidents`, "teacher", {
+          incidentType: "x",
+          description: "y",
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("route detail + roster; assign then remove a student; save/edit route", async () => {
+    const routes = await get("/fleet/routes-full", "admin");
+    expect(routes.status).toBe(200);
+    const routeId = routes.body[0].id;
+    const detail = await get(`/fleet/routes/${routeId}`, "admin");
+    expect(detail.status).toBe(200);
+    expect(Array.isArray(detail.body.stops)).toBe(true);
+
+    const picker = await get("/fleet/students-picker?q=", "admin");
+    expect(picker.status).toBe(200);
+    expect(picker.body.length).toBeGreaterThan(0);
+    const studentId = picker.body[0].id;
+
+    const assign = await post("/fleet/route-students", "admin", {
+      routeId,
+      studentIds: [studentId],
+    });
+    expect(assign.status).toBe(201);
+    expect(assign.body.assigned).toBe(1);
+
+    const roster = await get(`/fleet/routes/${routeId}/roster`, "admin");
+    expect(roster.body.some((r: any) => r.studentId === studentId)).toBe(true);
+    const rsId = roster.body.find((r: any) => r.studentId === studentId).id;
+    const del = await request(http)
+      .delete(`/api/fleet/route-students/${rsId}`)
+      .set("Authorization", `Bearer ${tokens.admin}`);
+    expect(del.status).toBe(200);
+
+    // Save a route (create) then edit it (replace stops), then clean up.
+    const created = await post("/fleet/routes", "admin", {
+      name: `Cutover Route ${process.env.VITEST_WORKER_ID ?? "0"}-${routes.body.length}`,
+      stops: [{ name: "Stop 1", estimatedMinutes: 10 }],
+    });
+    expect(created.status).toBe(201);
+    const edited = await post("/fleet/routes", "admin", {
+      id: created.body.id,
+      name: `Cutover Route ${process.env.VITEST_WORKER_ID ?? "0"}-${routes.body.length}b`,
+      stops: [{ name: "Only Stop", estimatedMinutes: 5 }],
+    });
+    expect(edited.status).toBe(201);
+    const after = await get(`/fleet/routes/${created.body.id}`, "admin");
+    expect(after.body.stops.length).toBe(1);
+    expect(after.body.stops[0].name).toBe("Only Stop");
+
+    // Non-fleet writes rejected.
+    expect((await post("/fleet/routes", "teacher", { name: "x", stops: [] })).status).toBe(403);
+    expect(
+      (await post("/fleet/route-students", "teacher", { routeId, studentIds: [studentId] })).status,
+    ).toBe(403);
+  });
+});

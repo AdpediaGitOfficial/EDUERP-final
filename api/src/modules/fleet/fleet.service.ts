@@ -436,6 +436,349 @@ export class FleetService {
       renewals,
     };
   }
+
+  // ---- Vehicle detail (fleet_admin_*; reception read) ----------------------
+  async getVehicle(actor: AuthUser, id: string) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const v = await this.prisma.fleet_vehicles.findUnique({
+      where: { id },
+      include: {
+        drivers: { select: { id: true, full_name: true, phone: true, license_no: true } },
+        transport_routes: {
+          select: { id: true, name: true, _count: { select: { route_stops: true } } },
+        },
+      },
+    });
+    if (!v) throw new NotFoundException("Vehicle not found");
+    const driver = v.drivers[0] ?? null;
+    const route = v.transport_routes[0] ?? null;
+    return {
+      id: v.id,
+      registration_no: v.registration_no,
+      vehicle_type: v.vehicle_type,
+      model: v.model,
+      capacity: v.capacity,
+      status: v.status,
+      purchase_date: v.purchase_date ? v.purchase_date.toISOString().slice(0, 10) : null,
+      insurance_expiry: v.insurance_expiry ? v.insurance_expiry.toISOString().slice(0, 10) : null,
+      permit_expiry: v.permit_expiry ? v.permit_expiry.toISOString().slice(0, 10) : null,
+      insuranceDaysLeft: daysUntil(v.insurance_expiry),
+      permitDaysLeft: daysUntil(v.permit_expiry),
+      driver: driver ? { id: driver.id, full_name: driver.full_name } : null,
+      route: route ? { id: route.id, name: route.name, stops: route._count.route_stops } : null,
+    };
+  }
+
+  async vehicleFuel(actor: AuthUser, id: string) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.fuel_logs.findMany({
+      where: { vehicle_id: id },
+      orderBy: { date: "desc" },
+    });
+    return rows.map((f) => ({
+      id: f.id,
+      date: f.date ? f.date.toISOString().slice(0, 10) : null,
+      liters: Number(f.liters ?? 0),
+      cost: Number(f.cost ?? 0),
+      odometer: f.odometer,
+    }));
+  }
+
+  async vehicleMaintenance(actor: AuthUser, id: string) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.vehicle_maintenance.findMany({
+      where: { vehicle_id: id },
+      orderBy: { service_date: "desc" },
+    });
+    return rows.map((m) => ({
+      id: m.id,
+      service_date: m.service_date ? m.service_date.toISOString().slice(0, 10) : null,
+      service_type: m.service_type,
+      vendor: m.vendor,
+      cost: Number(m.cost ?? 0),
+      next_due_date: m.next_due_date ? m.next_due_date.toISOString().slice(0, 10) : null,
+    }));
+  }
+
+  async vehicleDocuments(actor: AuthUser, id: string) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.vehicle_documents.findMany({
+      where: { vehicle_id: id },
+      orderBy: { expiry_date: "asc" },
+    });
+    return rows.map((d) => ({
+      id: d.id,
+      title: d.title,
+      doc_kind: d.doc_kind,
+      issue_date: d.issue_date ? d.issue_date.toISOString().slice(0, 10) : null,
+      expiry_date: d.expiry_date ? d.expiry_date.toISOString().slice(0, 10) : null,
+    }));
+  }
+
+  // ---- Driver detail (fleet_admin_di; reception read) ----------------------
+  async getDriver(actor: AuthUser, id: string) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const d = await this.prisma.drivers.findUnique({
+      where: { id },
+      include: {
+        fleet_vehicles: { select: { id: true, registration_no: true, model: true } },
+      },
+    });
+    if (!d) throw new NotFoundException("Driver not found");
+    return {
+      id: d.id,
+      full_name: d.full_name,
+      license_no: d.license_no,
+      license_expiry: d.license_expiry ? d.license_expiry.toISOString().slice(0, 10) : null,
+      licenseDaysLeft: daysUntil(d.license_expiry),
+      phone: d.phone,
+      years_experience: d.years_experience,
+      assigned_vehicle_id: d.assigned_vehicle_id,
+      vehicle: d.fleet_vehicles
+        ? { id: d.fleet_vehicles.id, registration_no: d.fleet_vehicles.registration_no }
+        : null,
+    };
+  }
+
+  async driverIncidents(actor: AuthUser, id: string) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.driver_incidents.findMany({
+      where: { driver_id: id },
+      orderBy: { incident_date: "desc" },
+    });
+    return rows.map((i) => ({
+      id: i.id,
+      incident_date: i.incident_date ? i.incident_date.toISOString().slice(0, 10) : null,
+      incident_type: i.incident_type,
+      severity: i.severity,
+      description: i.description,
+      status: i.status,
+    }));
+  }
+
+  async createDriverIncident(
+    actor: AuthUser,
+    driverId: string,
+    input: {
+      incidentType: string;
+      severity?: string;
+      status?: string;
+      incidentDate?: string;
+      description: string;
+    },
+  ) {
+    if (!this.canWriteFleet(actor)) throw new ForbiddenException();
+    const driver = await this.prisma.drivers.findUnique({ where: { id: driverId } });
+    if (!driver) throw new NotFoundException("Driver not found");
+    if (!input.description?.trim()) throw new BadRequestException("description required");
+    const row = await this.prisma.driver_incidents.create({
+      data: {
+        driver_id: driverId,
+        incident_type: input.incidentType,
+        severity: input.severity ?? "low",
+        status: input.status ?? "open",
+        incident_date: input.incidentDate ? new Date(input.incidentDate) : new Date(),
+        description: input.description,
+      },
+    });
+    return { id: row.id };
+  }
+
+  // ---- Route detail, roster + CRUD (fleet_admin_tr/_rs; reception read) -----
+  private routeCard(r: {
+    id: string;
+    name: string;
+    vehicle_id: string | null;
+    driver_id: string | null;
+    fleet_vehicles: { id: string; registration_no: string; capacity: number } | null;
+    drivers: { id: string; full_name: string } | null;
+    route_stops: {
+      id: string;
+      name: string;
+      sequence: number;
+      eta: string | null;
+      estimated_minutes: number;
+    }[];
+    _count?: { route_students: number };
+  }) {
+    return {
+      id: r.id,
+      name: r.name,
+      vehicle_id: r.vehicle_id,
+      driver_id: r.driver_id,
+      vehicle: r.fleet_vehicles
+        ? {
+            id: r.fleet_vehicles.id,
+            registration_no: r.fleet_vehicles.registration_no,
+            capacity: r.fleet_vehicles.capacity,
+          }
+        : null,
+      driver: r.drivers ? { id: r.drivers.id, full_name: r.drivers.full_name } : null,
+      stops: r.route_stops.map((s) => ({
+        id: s.id,
+        name: s.name,
+        sequence: s.sequence,
+        eta: s.eta,
+        estimated_minutes: s.estimated_minutes,
+      })),
+      studentCount: r._count?.route_students ?? 0,
+    };
+  }
+
+  async listRoutesFull(actor: AuthUser) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.transport_routes.findMany({
+      orderBy: { name: "asc" },
+      include: {
+        fleet_vehicles: { select: { id: true, registration_no: true, capacity: true } },
+        drivers: { select: { id: true, full_name: true } },
+        route_stops: { orderBy: { sequence: "asc" } },
+        _count: { select: { route_students: true } },
+      },
+    });
+    return rows.map((r) => this.routeCard(r));
+  }
+
+  async getRoute(actor: AuthUser, id: string) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const r = await this.prisma.transport_routes.findUnique({
+      where: { id },
+      include: {
+        fleet_vehicles: { select: { id: true, registration_no: true, capacity: true } },
+        drivers: { select: { id: true, full_name: true } },
+        route_stops: { orderBy: { sequence: "asc" } },
+        _count: { select: { route_students: true } },
+      },
+    });
+    if (!r) throw new NotFoundException("Route not found");
+    return this.routeCard(r);
+  }
+
+  async routeRoster(actor: AuthUser, routeId: string) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.route_students.findMany({
+      where: { route_id: routeId },
+      include: {
+        students: { select: { admission_no: true, profiles: { select: { full_name: true } } } },
+        route_stops: { select: { name: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      studentId: r.student_id,
+      studentName: r.students?.profiles?.full_name ?? null,
+      admissionNo: r.students?.admission_no ?? null,
+      stopId: r.stop_id,
+      stopName: r.route_stops?.name ?? null,
+    }));
+  }
+
+  async assignRouteStudents(
+    actor: AuthUser,
+    input: { routeId: string; stopId?: string | null; studentIds: string[] },
+  ) {
+    if (!this.canWriteFleet(actor)) throw new ForbiddenException();
+    if (!input.routeId) throw new BadRequestException("routeId required");
+    if (!input.studentIds?.length) throw new BadRequestException("no students selected");
+    let assigned = 0;
+    for (const studentId of input.studentIds) {
+      await this.prisma.route_students.upsert({
+        where: { route_id_student_id: { route_id: input.routeId, student_id: studentId } },
+        create: {
+          route_id: input.routeId,
+          student_id: studentId,
+          stop_id: input.stopId || null,
+          pickup_time: "07:00 AM",
+          drop_time: "03:30 PM",
+        },
+        update: { stop_id: input.stopId || null },
+      });
+      assigned++;
+    }
+    return { assigned };
+  }
+
+  async removeRouteStudent(actor: AuthUser, id: string) {
+    if (!this.canWriteFleet(actor)) throw new ForbiddenException();
+    const row = await this.prisma.route_students.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException();
+    await this.prisma.route_students.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  async saveRoute(
+    actor: AuthUser,
+    input: {
+      id?: string | null;
+      name: string;
+      vehicleId?: string | null;
+      driverId?: string | null;
+      stops: { name: string; eta?: string | null; estimatedMinutes?: number | null }[];
+    },
+  ) {
+    if (!this.canWriteFleet(actor)) throw new ForbiddenException();
+    if (!input.name?.trim()) throw new BadRequestException("name required");
+    const data = {
+      name: input.name,
+      vehicle_id: input.vehicleId || null,
+      driver_id: input.driverId || null,
+    };
+    const stopRows = (input.stops ?? []).map((s, idx) => ({
+      name: s.name,
+      sequence: idx + 1,
+      eta: s.eta || null,
+      estimated_minutes: Number(s.estimatedMinutes) || 0,
+    }));
+    if (input.id) {
+      const existing = await this.prisma.transport_routes.findUnique({ where: { id: input.id } });
+      if (!existing) throw new NotFoundException("Route not found");
+      const routeId = input.id;
+      await this.prisma.$transaction([
+        this.prisma.transport_routes.update({ where: { id: routeId }, data }),
+        this.prisma.route_stops.deleteMany({ where: { route_id: routeId } }),
+        ...(stopRows.length
+          ? [
+              this.prisma.route_stops.createMany({
+                data: stopRows.map((s) => ({ ...s, route_id: routeId })),
+              }),
+            ]
+          : []),
+      ]);
+      return { id: routeId };
+    }
+    const created = await this.prisma.transport_routes.create({ data });
+    if (stopRows.length) {
+      await this.prisma.route_stops.createMany({
+        data: stopRows.map((s) => ({ ...s, route_id: created.id })),
+      });
+    }
+    return { id: created.id };
+  }
+
+  async studentPicker(actor: AuthUser, q?: string) {
+    if (!this.canWriteFleet(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.students.findMany({
+      where: {
+        status: "active",
+        ...(q
+          ? {
+              OR: [
+                { admission_no: { contains: q, mode: "insensitive" } },
+                { profiles: { full_name: { contains: q, mode: "insensitive" } } },
+              ],
+            }
+          : {}),
+      },
+      select: { id: true, admission_no: true, profiles: { select: { full_name: true } } },
+      orderBy: { admission_no: "asc" },
+      take: 50,
+    });
+    return rows.map((s) => ({
+      id: s.id,
+      admission_no: s.admission_no,
+      full_name: s.profiles?.full_name ?? null,
+    }));
+  }
 }
 
 export interface VehicleInput {

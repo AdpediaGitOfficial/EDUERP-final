@@ -73,12 +73,9 @@ import { Route as AuthenticatedHrDocumentsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedHrDepartmentsRouteImport } from './routes/_authenticated/hr.departments'
 import { Route as AuthenticatedHrAttendanceRouteImport } from './routes/_authenticated/hr.attendance'
 import { Route as AuthenticatedHrAnalyticsRouteImport } from './routes/_authenticated/hr.analytics'
-import { Route as AuthenticatedFleetVehiclesRouteImport } from './routes/_authenticated/fleet.vehicles'
 import { Route as AuthenticatedFleetTrackingRouteImport } from './routes/_authenticated/fleet.tracking'
-import { Route as AuthenticatedFleetRoutesRouteImport } from './routes/_authenticated/fleet.routes'
 import { Route as AuthenticatedFleetMaintenanceRouteImport } from './routes/_authenticated/fleet.maintenance'
 import { Route as AuthenticatedFleetFuelRouteImport } from './routes/_authenticated/fleet.fuel'
-import { Route as AuthenticatedFleetDriversRouteImport } from './routes/_authenticated/fleet.drivers'
 import { Route as AuthenticatedFleetAnalyticsRouteImport } from './routes/_authenticated/fleet.analytics'
 import { Route as AuthenticatedFinanceReconciliationRouteImport } from './routes/_authenticated/finance.reconciliation'
 import { Route as AuthenticatedFinanceLedgerRouteImport } from './routes/_authenticated/finance.ledger'
@@ -100,6 +97,9 @@ import { Route as AuthenticatedAssetsRegistryRouteImport } from './routes/_authe
 import { Route as AuthenticatedAssetsMaintenanceRouteImport } from './routes/_authenticated/assets.maintenance'
 import { Route as AuthenticatedAssetsCategoriesRouteImport } from './routes/_authenticated/assets.categories'
 import { Route as AuthenticatedAssetsAllocationRouteImport } from './routes/_authenticated/assets.allocation'
+import { Route as AuthenticatedFleetVehiclesIndexRouteImport } from './routes/_authenticated/fleet.vehicles.index'
+import { Route as AuthenticatedFleetRoutesIndexRouteImport } from './routes/_authenticated/fleet.routes.index'
+import { Route as AuthenticatedFleetDriversIndexRouteImport } from './routes/_authenticated/fleet.drivers.index'
 import { Route as AuthenticatedChildrenStudentIdIndexRouteImport } from './routes/_authenticated/children.$studentId.index'
 import { Route as AuthenticatedHrStaffStaffIdRouteImport } from './routes/_authenticated/hr.staff.$staffId'
 import { Route as AuthenticatedFleetVehiclesVehicleIdRouteImport } from './routes/_authenticated/fleet.vehicles.$vehicleId'
@@ -451,22 +451,10 @@ const AuthenticatedHrAnalyticsRoute =
     path: '/analytics',
     getParentRoute: () => AuthenticatedHrRoute,
   } as any)
-const AuthenticatedFleetVehiclesRoute =
-  AuthenticatedFleetVehiclesRouteImport.update({
-    id: '/vehicles',
-    path: '/vehicles',
-    getParentRoute: () => AuthenticatedFleetRoute,
-  } as any)
 const AuthenticatedFleetTrackingRoute =
   AuthenticatedFleetTrackingRouteImport.update({
     id: '/tracking',
     path: '/tracking',
-    getParentRoute: () => AuthenticatedFleetRoute,
-  } as any)
-const AuthenticatedFleetRoutesRoute =
-  AuthenticatedFleetRoutesRouteImport.update({
-    id: '/routes',
-    path: '/routes',
     getParentRoute: () => AuthenticatedFleetRoute,
   } as any)
 const AuthenticatedFleetMaintenanceRoute =
@@ -480,12 +468,6 @@ const AuthenticatedFleetFuelRoute = AuthenticatedFleetFuelRouteImport.update({
   path: '/fuel',
   getParentRoute: () => AuthenticatedFleetRoute,
 } as any)
-const AuthenticatedFleetDriversRoute =
-  AuthenticatedFleetDriversRouteImport.update({
-    id: '/drivers',
-    path: '/drivers',
-    getParentRoute: () => AuthenticatedFleetRoute,
-  } as any)
 const AuthenticatedFleetAnalyticsRoute =
   AuthenticatedFleetAnalyticsRouteImport.update({
     id: '/analytics',
@@ -609,6 +591,24 @@ const AuthenticatedAssetsAllocationRoute =
     path: '/allocation',
     getParentRoute: () => AuthenticatedAssetsRoute,
   } as any)
+const AuthenticatedFleetVehiclesIndexRoute =
+  AuthenticatedFleetVehiclesIndexRouteImport.update({
+    id: '/vehicles/',
+    path: '/vehicles/',
+    getParentRoute: () => AuthenticatedFleetRoute,
+  } as any)
+const AuthenticatedFleetRoutesIndexRoute =
+  AuthenticatedFleetRoutesIndexRouteImport.update({
+    id: '/routes/',
+    path: '/routes/',
+    getParentRoute: () => AuthenticatedFleetRoute,
+  } as any)
+const AuthenticatedFleetDriversIndexRoute =
+  AuthenticatedFleetDriversIndexRouteImport.update({
+    id: '/drivers/',
+    path: '/drivers/',
+    getParentRoute: () => AuthenticatedFleetRoute,
+  } as any)
 const AuthenticatedChildrenStudentIdIndexRoute =
   AuthenticatedChildrenStudentIdIndexRouteImport.update({
     id: '/',
@@ -623,21 +623,21 @@ const AuthenticatedHrStaffStaffIdRoute =
   } as any)
 const AuthenticatedFleetVehiclesVehicleIdRoute =
   AuthenticatedFleetVehiclesVehicleIdRouteImport.update({
-    id: '/$vehicleId',
-    path: '/$vehicleId',
-    getParentRoute: () => AuthenticatedFleetVehiclesRoute,
+    id: '/vehicles/$vehicleId',
+    path: '/vehicles/$vehicleId',
+    getParentRoute: () => AuthenticatedFleetRoute,
   } as any)
 const AuthenticatedFleetRoutesRouteIdRoute =
   AuthenticatedFleetRoutesRouteIdRouteImport.update({
-    id: '/$routeId',
-    path: '/$routeId',
-    getParentRoute: () => AuthenticatedFleetRoutesRoute,
+    id: '/routes/$routeId',
+    path: '/routes/$routeId',
+    getParentRoute: () => AuthenticatedFleetRoute,
   } as any)
 const AuthenticatedFleetDriversDriverIdRoute =
   AuthenticatedFleetDriversDriverIdRouteImport.update({
-    id: '/$driverId',
-    path: '/$driverId',
-    getParentRoute: () => AuthenticatedFleetDriversRoute,
+    id: '/drivers/$driverId',
+    path: '/drivers/$driverId',
+    getParentRoute: () => AuthenticatedFleetRoute,
   } as any)
 const AuthenticatedChildrenStudentIdTransportRoute =
   AuthenticatedChildrenStudentIdTransportRouteImport.update({
@@ -714,12 +714,9 @@ export interface FileRoutesByFullPath {
   '/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
   '/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
   '/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
-  '/fleet/drivers': typeof AuthenticatedFleetDriversRouteWithChildren
   '/fleet/fuel': typeof AuthenticatedFleetFuelRoute
   '/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
-  '/fleet/routes': typeof AuthenticatedFleetRoutesRouteWithChildren
   '/fleet/tracking': typeof AuthenticatedFleetTrackingRoute
-  '/fleet/vehicles': typeof AuthenticatedFleetVehiclesRouteWithChildren
   '/hr/analytics': typeof AuthenticatedHrAnalyticsRoute
   '/hr/attendance': typeof AuthenticatedHrAttendanceRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsRoute
@@ -757,6 +754,9 @@ export interface FileRoutesByFullPath {
   '/fleet/vehicles/$vehicleId': typeof AuthenticatedFleetVehiclesVehicleIdRoute
   '/hr/staff/$staffId': typeof AuthenticatedHrStaffStaffIdRoute
   '/children/$studentId/': typeof AuthenticatedChildrenStudentIdIndexRoute
+  '/fleet/drivers/': typeof AuthenticatedFleetDriversIndexRoute
+  '/fleet/routes/': typeof AuthenticatedFleetRoutesIndexRoute
+  '/fleet/vehicles/': typeof AuthenticatedFleetVehiclesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -805,12 +805,9 @@ export interface FileRoutesByTo {
   '/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
   '/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
   '/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
-  '/fleet/drivers': typeof AuthenticatedFleetDriversRouteWithChildren
   '/fleet/fuel': typeof AuthenticatedFleetFuelRoute
   '/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
-  '/fleet/routes': typeof AuthenticatedFleetRoutesRouteWithChildren
   '/fleet/tracking': typeof AuthenticatedFleetTrackingRoute
-  '/fleet/vehicles': typeof AuthenticatedFleetVehiclesRouteWithChildren
   '/hr/analytics': typeof AuthenticatedHrAnalyticsRoute
   '/hr/attendance': typeof AuthenticatedHrAttendanceRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsRoute
@@ -848,6 +845,9 @@ export interface FileRoutesByTo {
   '/fleet/vehicles/$vehicleId': typeof AuthenticatedFleetVehiclesVehicleIdRoute
   '/hr/staff/$staffId': typeof AuthenticatedHrStaffStaffIdRoute
   '/children/$studentId': typeof AuthenticatedChildrenStudentIdIndexRoute
+  '/fleet/drivers': typeof AuthenticatedFleetDriversIndexRoute
+  '/fleet/routes': typeof AuthenticatedFleetRoutesIndexRoute
+  '/fleet/vehicles': typeof AuthenticatedFleetVehiclesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -907,12 +907,9 @@ export interface FileRoutesById {
   '/_authenticated/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
   '/_authenticated/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
   '/_authenticated/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
-  '/_authenticated/fleet/drivers': typeof AuthenticatedFleetDriversRouteWithChildren
   '/_authenticated/fleet/fuel': typeof AuthenticatedFleetFuelRoute
   '/_authenticated/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
-  '/_authenticated/fleet/routes': typeof AuthenticatedFleetRoutesRouteWithChildren
   '/_authenticated/fleet/tracking': typeof AuthenticatedFleetTrackingRoute
-  '/_authenticated/fleet/vehicles': typeof AuthenticatedFleetVehiclesRouteWithChildren
   '/_authenticated/hr/analytics': typeof AuthenticatedHrAnalyticsRoute
   '/_authenticated/hr/attendance': typeof AuthenticatedHrAttendanceRoute
   '/_authenticated/hr/departments': typeof AuthenticatedHrDepartmentsRoute
@@ -950,6 +947,9 @@ export interface FileRoutesById {
   '/_authenticated/fleet/vehicles/$vehicleId': typeof AuthenticatedFleetVehiclesVehicleIdRoute
   '/_authenticated/hr/staff/$staffId': typeof AuthenticatedHrStaffStaffIdRoute
   '/_authenticated/children/$studentId/': typeof AuthenticatedChildrenStudentIdIndexRoute
+  '/_authenticated/fleet/drivers/': typeof AuthenticatedFleetDriversIndexRoute
+  '/_authenticated/fleet/routes/': typeof AuthenticatedFleetRoutesIndexRoute
+  '/_authenticated/fleet/vehicles/': typeof AuthenticatedFleetVehiclesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1009,12 +1009,9 @@ export interface FileRouteTypes {
     | '/finance/ledger'
     | '/finance/reconciliation'
     | '/fleet/analytics'
-    | '/fleet/drivers'
     | '/fleet/fuel'
     | '/fleet/maintenance'
-    | '/fleet/routes'
     | '/fleet/tracking'
-    | '/fleet/vehicles'
     | '/hr/analytics'
     | '/hr/attendance'
     | '/hr/departments'
@@ -1052,6 +1049,9 @@ export interface FileRouteTypes {
     | '/fleet/vehicles/$vehicleId'
     | '/hr/staff/$staffId'
     | '/children/$studentId/'
+    | '/fleet/drivers/'
+    | '/fleet/routes/'
+    | '/fleet/vehicles/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1100,12 +1100,9 @@ export interface FileRouteTypes {
     | '/finance/ledger'
     | '/finance/reconciliation'
     | '/fleet/analytics'
-    | '/fleet/drivers'
     | '/fleet/fuel'
     | '/fleet/maintenance'
-    | '/fleet/routes'
     | '/fleet/tracking'
-    | '/fleet/vehicles'
     | '/hr/analytics'
     | '/hr/attendance'
     | '/hr/departments'
@@ -1143,6 +1140,9 @@ export interface FileRouteTypes {
     | '/fleet/vehicles/$vehicleId'
     | '/hr/staff/$staffId'
     | '/children/$studentId'
+    | '/fleet/drivers'
+    | '/fleet/routes'
+    | '/fleet/vehicles'
   id:
     | '__root__'
     | '/'
@@ -1201,12 +1201,9 @@ export interface FileRouteTypes {
     | '/_authenticated/finance/ledger'
     | '/_authenticated/finance/reconciliation'
     | '/_authenticated/fleet/analytics'
-    | '/_authenticated/fleet/drivers'
     | '/_authenticated/fleet/fuel'
     | '/_authenticated/fleet/maintenance'
-    | '/_authenticated/fleet/routes'
     | '/_authenticated/fleet/tracking'
-    | '/_authenticated/fleet/vehicles'
     | '/_authenticated/hr/analytics'
     | '/_authenticated/hr/attendance'
     | '/_authenticated/hr/departments'
@@ -1244,6 +1241,9 @@ export interface FileRouteTypes {
     | '/_authenticated/fleet/vehicles/$vehicleId'
     | '/_authenticated/hr/staff/$staffId'
     | '/_authenticated/children/$studentId/'
+    | '/_authenticated/fleet/drivers/'
+    | '/_authenticated/fleet/routes/'
+    | '/_authenticated/fleet/vehicles/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1703,25 +1703,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrAnalyticsRouteImport
       parentRoute: typeof AuthenticatedHrRoute
     }
-    '/_authenticated/fleet/vehicles': {
-      id: '/_authenticated/fleet/vehicles'
-      path: '/vehicles'
-      fullPath: '/fleet/vehicles'
-      preLoaderRoute: typeof AuthenticatedFleetVehiclesRouteImport
-      parentRoute: typeof AuthenticatedFleetRoute
-    }
     '/_authenticated/fleet/tracking': {
       id: '/_authenticated/fleet/tracking'
       path: '/tracking'
       fullPath: '/fleet/tracking'
       preLoaderRoute: typeof AuthenticatedFleetTrackingRouteImport
-      parentRoute: typeof AuthenticatedFleetRoute
-    }
-    '/_authenticated/fleet/routes': {
-      id: '/_authenticated/fleet/routes'
-      path: '/routes'
-      fullPath: '/fleet/routes'
-      preLoaderRoute: typeof AuthenticatedFleetRoutesRouteImport
       parentRoute: typeof AuthenticatedFleetRoute
     }
     '/_authenticated/fleet/maintenance': {
@@ -1736,13 +1722,6 @@ declare module '@tanstack/react-router' {
       path: '/fuel'
       fullPath: '/fleet/fuel'
       preLoaderRoute: typeof AuthenticatedFleetFuelRouteImport
-      parentRoute: typeof AuthenticatedFleetRoute
-    }
-    '/_authenticated/fleet/drivers': {
-      id: '/_authenticated/fleet/drivers'
-      path: '/drivers'
-      fullPath: '/fleet/drivers'
-      preLoaderRoute: typeof AuthenticatedFleetDriversRouteImport
       parentRoute: typeof AuthenticatedFleetRoute
     }
     '/_authenticated/fleet/analytics': {
@@ -1892,6 +1871,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAssetsAllocationRouteImport
       parentRoute: typeof AuthenticatedAssetsRoute
     }
+    '/_authenticated/fleet/vehicles/': {
+      id: '/_authenticated/fleet/vehicles/'
+      path: '/vehicles'
+      fullPath: '/fleet/vehicles/'
+      preLoaderRoute: typeof AuthenticatedFleetVehiclesIndexRouteImport
+      parentRoute: typeof AuthenticatedFleetRoute
+    }
+    '/_authenticated/fleet/routes/': {
+      id: '/_authenticated/fleet/routes/'
+      path: '/routes'
+      fullPath: '/fleet/routes/'
+      preLoaderRoute: typeof AuthenticatedFleetRoutesIndexRouteImport
+      parentRoute: typeof AuthenticatedFleetRoute
+    }
+    '/_authenticated/fleet/drivers/': {
+      id: '/_authenticated/fleet/drivers/'
+      path: '/drivers'
+      fullPath: '/fleet/drivers/'
+      preLoaderRoute: typeof AuthenticatedFleetDriversIndexRouteImport
+      parentRoute: typeof AuthenticatedFleetRoute
+    }
     '/_authenticated/children/$studentId/': {
       id: '/_authenticated/children/$studentId/'
       path: '/'
@@ -1908,24 +1908,24 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/fleet/vehicles/$vehicleId': {
       id: '/_authenticated/fleet/vehicles/$vehicleId'
-      path: '/$vehicleId'
+      path: '/vehicles/$vehicleId'
       fullPath: '/fleet/vehicles/$vehicleId'
       preLoaderRoute: typeof AuthenticatedFleetVehiclesVehicleIdRouteImport
-      parentRoute: typeof AuthenticatedFleetVehiclesRoute
+      parentRoute: typeof AuthenticatedFleetRoute
     }
     '/_authenticated/fleet/routes/$routeId': {
       id: '/_authenticated/fleet/routes/$routeId'
-      path: '/$routeId'
+      path: '/routes/$routeId'
       fullPath: '/fleet/routes/$routeId'
       preLoaderRoute: typeof AuthenticatedFleetRoutesRouteIdRouteImport
-      parentRoute: typeof AuthenticatedFleetRoutesRoute
+      parentRoute: typeof AuthenticatedFleetRoute
     }
     '/_authenticated/fleet/drivers/$driverId': {
       id: '/_authenticated/fleet/drivers/$driverId'
-      path: '/$driverId'
+      path: '/drivers/$driverId'
       fullPath: '/fleet/drivers/$driverId'
       preLoaderRoute: typeof AuthenticatedFleetDriversDriverIdRouteImport
-      parentRoute: typeof AuthenticatedFleetDriversRoute
+      parentRoute: typeof AuthenticatedFleetRoute
     }
     '/_authenticated/children/$studentId/transport': {
       id: '/_authenticated/children/$studentId/transport'
@@ -2071,70 +2071,34 @@ const AuthenticatedFinanceRouteChildren: AuthenticatedFinanceRouteChildren = {
 const AuthenticatedFinanceRouteWithChildren =
   AuthenticatedFinanceRoute._addFileChildren(AuthenticatedFinanceRouteChildren)
 
-interface AuthenticatedFleetDriversRouteChildren {
-  AuthenticatedFleetDriversDriverIdRoute: typeof AuthenticatedFleetDriversDriverIdRoute
-}
-
-const AuthenticatedFleetDriversRouteChildren: AuthenticatedFleetDriversRouteChildren =
-  {
-    AuthenticatedFleetDriversDriverIdRoute:
-      AuthenticatedFleetDriversDriverIdRoute,
-  }
-
-const AuthenticatedFleetDriversRouteWithChildren =
-  AuthenticatedFleetDriversRoute._addFileChildren(
-    AuthenticatedFleetDriversRouteChildren,
-  )
-
-interface AuthenticatedFleetRoutesRouteChildren {
-  AuthenticatedFleetRoutesRouteIdRoute: typeof AuthenticatedFleetRoutesRouteIdRoute
-}
-
-const AuthenticatedFleetRoutesRouteChildren: AuthenticatedFleetRoutesRouteChildren =
-  {
-    AuthenticatedFleetRoutesRouteIdRoute: AuthenticatedFleetRoutesRouteIdRoute,
-  }
-
-const AuthenticatedFleetRoutesRouteWithChildren =
-  AuthenticatedFleetRoutesRoute._addFileChildren(
-    AuthenticatedFleetRoutesRouteChildren,
-  )
-
-interface AuthenticatedFleetVehiclesRouteChildren {
-  AuthenticatedFleetVehiclesVehicleIdRoute: typeof AuthenticatedFleetVehiclesVehicleIdRoute
-}
-
-const AuthenticatedFleetVehiclesRouteChildren: AuthenticatedFleetVehiclesRouteChildren =
-  {
-    AuthenticatedFleetVehiclesVehicleIdRoute:
-      AuthenticatedFleetVehiclesVehicleIdRoute,
-  }
-
-const AuthenticatedFleetVehiclesRouteWithChildren =
-  AuthenticatedFleetVehiclesRoute._addFileChildren(
-    AuthenticatedFleetVehiclesRouteChildren,
-  )
-
 interface AuthenticatedFleetRouteChildren {
   AuthenticatedFleetAnalyticsRoute: typeof AuthenticatedFleetAnalyticsRoute
-  AuthenticatedFleetDriversRoute: typeof AuthenticatedFleetDriversRouteWithChildren
   AuthenticatedFleetFuelRoute: typeof AuthenticatedFleetFuelRoute
   AuthenticatedFleetMaintenanceRoute: typeof AuthenticatedFleetMaintenanceRoute
-  AuthenticatedFleetRoutesRoute: typeof AuthenticatedFleetRoutesRouteWithChildren
   AuthenticatedFleetTrackingRoute: typeof AuthenticatedFleetTrackingRoute
-  AuthenticatedFleetVehiclesRoute: typeof AuthenticatedFleetVehiclesRouteWithChildren
   AuthenticatedFleetIndexRoute: typeof AuthenticatedFleetIndexRoute
+  AuthenticatedFleetDriversDriverIdRoute: typeof AuthenticatedFleetDriversDriverIdRoute
+  AuthenticatedFleetRoutesRouteIdRoute: typeof AuthenticatedFleetRoutesRouteIdRoute
+  AuthenticatedFleetVehiclesVehicleIdRoute: typeof AuthenticatedFleetVehiclesVehicleIdRoute
+  AuthenticatedFleetDriversIndexRoute: typeof AuthenticatedFleetDriversIndexRoute
+  AuthenticatedFleetRoutesIndexRoute: typeof AuthenticatedFleetRoutesIndexRoute
+  AuthenticatedFleetVehiclesIndexRoute: typeof AuthenticatedFleetVehiclesIndexRoute
 }
 
 const AuthenticatedFleetRouteChildren: AuthenticatedFleetRouteChildren = {
   AuthenticatedFleetAnalyticsRoute: AuthenticatedFleetAnalyticsRoute,
-  AuthenticatedFleetDriversRoute: AuthenticatedFleetDriversRouteWithChildren,
   AuthenticatedFleetFuelRoute: AuthenticatedFleetFuelRoute,
   AuthenticatedFleetMaintenanceRoute: AuthenticatedFleetMaintenanceRoute,
-  AuthenticatedFleetRoutesRoute: AuthenticatedFleetRoutesRouteWithChildren,
   AuthenticatedFleetTrackingRoute: AuthenticatedFleetTrackingRoute,
-  AuthenticatedFleetVehiclesRoute: AuthenticatedFleetVehiclesRouteWithChildren,
   AuthenticatedFleetIndexRoute: AuthenticatedFleetIndexRoute,
+  AuthenticatedFleetDriversDriverIdRoute:
+    AuthenticatedFleetDriversDriverIdRoute,
+  AuthenticatedFleetRoutesRouteIdRoute: AuthenticatedFleetRoutesRouteIdRoute,
+  AuthenticatedFleetVehiclesVehicleIdRoute:
+    AuthenticatedFleetVehiclesVehicleIdRoute,
+  AuthenticatedFleetDriversIndexRoute: AuthenticatedFleetDriversIndexRoute,
+  AuthenticatedFleetRoutesIndexRoute: AuthenticatedFleetRoutesIndexRoute,
+  AuthenticatedFleetVehiclesIndexRoute: AuthenticatedFleetVehiclesIndexRoute,
 }
 
 const AuthenticatedFleetRouteWithChildren =

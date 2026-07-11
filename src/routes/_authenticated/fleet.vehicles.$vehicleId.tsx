@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { badgeClass, daysUntil, fmtDate, money, niceLabel } from "@/lib/module-util";
 import { ArrowLeft, Pencil, Power } from "lucide-react";
 import { useState } from "react";
-import { VehicleDialog } from "./fleet.vehicles";
+import { VehicleDialog } from "./fleet.vehicles.index";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/fleet/vehicles/$vehicleId")({
@@ -24,49 +24,54 @@ function Page() {
 
   const { data: v, isLoading } = useQuery({
     queryKey: ["vehicle-detail", vehicleId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("fleet_vehicles")
-          .select(
-            "*, drivers!drivers_assigned_vehicle_id_fkey(id,full_name,phone,license_no), transport_routes!transport_routes_vehicle_id_fkey(id,name,route_stops(id))",
-          )
-          .eq("id", vehicleId)
-          .maybeSingle()
-      ).data,
+    queryFn: () =>
+      apiGet<{
+        id: string;
+        registration_no: string;
+        vehicle_type: string;
+        model: string | null;
+        capacity: number;
+        status: string;
+        purchase_date: string | null;
+        insurance_expiry: string | null;
+        permit_expiry: string | null;
+        driver: { id: string; full_name: string } | null;
+        route: { id: string; name: string; stops: number } | null;
+      }>(`/fleet/vehicles/${vehicleId}`),
   });
   const { data: fuel } = useQuery({
     queryKey: ["vehicle-fuel", vehicleId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("fuel_logs")
-          .select("*")
-          .eq("vehicle_id", vehicleId)
-          .order("date", { ascending: false })
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        { id: string; date: string | null; liters: number; cost: number; odometer: number | null }[]
+      >(`/fleet/vehicles/${vehicleId}/fuel`),
   });
   const { data: maint } = useQuery({
     queryKey: ["vehicle-maint", vehicleId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("vehicle_maintenance")
-          .select("*")
-          .eq("vehicle_id", vehicleId)
-          .order("service_date", { ascending: false })
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          service_date: string | null;
+          service_type: string;
+          vendor: string | null;
+          cost: number;
+          next_due_date: string | null;
+        }[]
+      >(`/fleet/vehicles/${vehicleId}/maintenance`),
   });
   const { data: docs } = useQuery({
     queryKey: ["vehicle-docs", vehicleId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("vehicle_documents")
-          .select("*")
-          .eq("vehicle_id", vehicleId)
-          .order("expiry_date", { ascending: true })
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          title: string;
+          doc_kind: string;
+          issue_date: string | null;
+          expiry_date: string | null;
+        }[]
+      >(`/fleet/vehicles/${vehicleId}/documents`),
   });
 
   if (isLoading) return <div className="p-6">Loading…</div>;
@@ -85,8 +90,8 @@ function Page() {
   const trips = (fuel ?? []).length;
   const ins = daysUntil(v.insurance_expiry);
   const per = daysUntil(v.permit_expiry);
-  const route = v.transport_routes?.[0];
-  const driver = v.drivers?.[0];
+  const route = v.route;
+  const driver = v.driver;
 
   // Fuel efficiency computation: order asc by date, diff odometer/liters
   const eff = [...(fuel ?? [])].sort((a: any, b: any) => a.date.localeCompare(b.date));
@@ -107,12 +112,22 @@ function Page() {
 
   const deactivate = async () => {
     if (!confirm("Deactivate this vehicle?")) return;
-    const { error } = await supabase
-      .from("fleet_vehicles")
-      .update({ status: "inactive" })
-      .eq("id", v.id);
-    if (error) {
-      toast.error(error.message);
+    const res = await apiFetch(`/fleet/vehicles/${v.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        registrationNo: v.registration_no,
+        vehicleType: v.vehicle_type,
+        model: v.model ?? undefined,
+        capacity: v.capacity,
+        purchaseDate: v.purchase_date ?? undefined,
+        insuranceExpiry: v.insurance_expiry ?? undefined,
+        permitExpiry: v.permit_expiry ?? undefined,
+        status: "inactive",
+      }),
+    });
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => null) : null;
+      toast.error(body?.message ?? "Could not deactivate");
       return;
     }
     toast.success("Vehicle deactivated");

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,15 +26,18 @@ export const Route = createFileRoute("/_authenticated/fleet/tracking")({ compone
 function Page() {
   const { data: routes } = useQuery({
     queryKey: ["track-routes"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("transport_routes")
-        .select(
-          "id,name,vehicle_id,driver_id,vehicle:vehicle_id(registration_no,model),driver:driver_id(full_name),route_stops(id,name,sequence,estimated_minutes)",
-        )
-        .order("name");
-      return data ?? [];
-    },
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          name: string;
+          vehicle_id: string | null;
+          driver_id: string | null;
+          vehicle: { id: string; registration_no: string } | null;
+          driver: { id: string; full_name: string } | null;
+          stops: { id: string; name: string; sequence: number; estimated_minutes: number }[];
+        }[]
+      >("/fleet/routes-full"),
     refetchOnWindowFocus: false,
   });
 
@@ -51,7 +54,7 @@ function Page() {
         name: r.name,
         vehicle_id: r.vehicle_id,
         driver_id: r.driver_id,
-        stops: ((r.route_stops as SimStop[]) ?? []).map((s) => ({
+        stops: ((r.stops as SimStop[]) ?? []).map((s) => ({
           id: s.id,
           name: s.name,
           sequence: s.sequence,

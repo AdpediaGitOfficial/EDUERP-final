@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { ArrowLeft, Pencil, UserPlus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { RouteDialog } from "./fleet.routes";
+import { RouteDialog } from "./fleet.routes.index";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/fleet/routes/$routeId")({ component: Page });
@@ -38,38 +38,43 @@ function Page() {
 
   const { data: r } = useQuery({
     queryKey: ["route-detail", routeId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("transport_routes")
-          .select(
-            "*, vehicle:vehicle_id(id,registration_no,capacity), driver:driver_id(id,full_name), route_stops(id,name,sequence,eta,estimated_minutes)",
-          )
-          .eq("id", routeId)
-          .maybeSingle()
-      ).data,
+    queryFn: () =>
+      apiGet<{
+        id: string;
+        name: string;
+        vehicle_id: string | null;
+        driver_id: string | null;
+        vehicle: { id: string; registration_no: string; capacity: number } | null;
+        driver: { id: string; full_name: string } | null;
+        stops: {
+          id: string;
+          name: string;
+          sequence: number;
+          eta: string | null;
+          estimated_minutes: number;
+        }[];
+      }>(`/fleet/routes/${routeId}`),
   });
   const { data: roster } = useQuery({
     queryKey: ["route-roster", routeId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("route_students")
-          .select(
-            "id,stop_id, student:student_id(id,admission_no, profiles!students_profile_id_fkey(full_name)), stop:stop_id(name)",
-          )
-          .eq("route_id", routeId)
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          studentId: string;
+          studentName: string | null;
+          admissionNo: string | null;
+          stopId: string | null;
+          stopName: string | null;
+        }[]
+      >(`/fleet/routes/${routeId}/roster`),
   });
 
-  const stops = useMemo(
-    () => [...((r?.route_stops as any[]) ?? [])].sort((a, b) => a.sequence - b.sequence),
-    [r],
-  );
+  const stops = useMemo(() => [...(r?.stops ?? [])].sort((a, b) => a.sequence - b.sequence), [r]);
   const rosterByStop = useMemo(() => {
-    const g: Record<string, any[]> = {};
+    const g: Record<string, typeof roster> = {};
     for (const rs of roster ?? []) {
-      const k = rs.stop_id ?? "unassigned";
+      const k = rs.stopId ?? "unassigned";
       (g[k] ||= []).push(rs);
     }
     return g;
@@ -77,8 +82,8 @@ function Page() {
 
   const removeAssignment = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("route_students").delete().eq("id", id);
-      if (error) throw error;
+      const res = await apiFetch(`/fleet/route-students/${id}`, { method: "DELETE" });
+      if (!res || !res.ok) throw new Error("Remove failed");
     },
     onSuccess: () => {
       toast.success("Removed");
@@ -111,6 +116,37 @@ function Page() {
           </div>
         }
       />
+
+      {capacity > 0 && (
+        <Card className="p-4 rounded-2xl mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-medium">Seat utilization</div>
+            <div className="text-sm">
+              <span className={filled > capacity ? "text-red-600 font-semibold" : "font-semibold"}>
+                {filled}
+              </span>{" "}
+              <span className="text-muted-foreground">/ {capacity}</span>
+              {filled > capacity && (
+                <Badge className="ml-2 bg-red-100 text-red-800 border-0">
+                  Over capacity by {filled - capacity}
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                filled > capacity
+                  ? "bg-red-500"
+                  : filled / capacity > 0.85
+                    ? "bg-amber-500"
+                    : "bg-emerald-500"
+              }`}
+              style={{ width: `${Math.min(100, capacity ? (filled / capacity) * 100 : 0)}%` }}
+            />
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.6fr] gap-4">
         <Card className="rounded-2xl overflow-hidden min-w-0">
@@ -153,9 +189,9 @@ function Page() {
                         className="px-3 py-2 flex items-center justify-between gap-2 text-sm"
                       >
                         <div className="min-w-0 truncate">
-                          {rs.student?.profiles?.full_name}{" "}
+                          {rs.studentName}{" "}
                           <span className="text-xs text-muted-foreground font-mono">
-                            · {rs.student?.admission_no}
+                            · {rs.admissionNo}
                           </span>
                         </div>
                         <Button
@@ -182,7 +218,7 @@ function Page() {
                       key={rs.id}
                       className="px-3 py-2 flex items-center justify-between gap-2 text-sm"
                     >
-                      <div className="min-w-0 truncate">{rs.student?.profiles?.full_name}</div>
+                      <div className="min-w-0 truncate">{rs.studentName}</div>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -240,39 +276,25 @@ function AssignDialog({
 
   const { data: students } = useQuery({
     queryKey: ["students-picker", q],
-    queryFn: async () => {
-      const query = supabase
-        .from("students")
-        .select("id, admission_no, profiles!students_profile_id_fkey(full_name)")
-        .eq("status", "active")
-        .limit(50);
-      const { data } = await query;
-      const list = (data ?? []).filter(
-        (s: any) =>
-          !q ||
-          s.profiles?.full_name?.toLowerCase().includes(q.toLowerCase()) ||
-          s.admission_no?.toLowerCase().includes(q.toLowerCase()),
-      );
-      return list;
-    },
+    queryFn: () =>
+      apiGet<{ id: string; admission_no: string | null; full_name: string | null }[]>(
+        `/fleet/students-picker?q=${encodeURIComponent(q)}`,
+      ),
     enabled: open,
   });
 
   const mut = useMutation({
     mutationFn: async () => {
       if (!stopId) throw new Error("Pick a stop");
-      const rows = Array.from(picked).map((sid) => ({
-        route_id: routeId,
-        student_id: sid,
-        stop_id: stopId,
-        pickup_time: "07:00 AM",
-        drop_time: "03:30 PM",
-      }));
-      if (!rows.length) throw new Error("Pick at least one student");
-      const { error } = await supabase
-        .from("route_students")
-        .upsert(rows, { onConflict: "route_id,student_id" });
-      if (error) throw error;
+      if (picked.size === 0) throw new Error("Pick at least one student");
+      const res = await apiFetch("/fleet/route-students", {
+        method: "POST",
+        body: JSON.stringify({ routeId, stopId, studentIds: Array.from(picked) }),
+      });
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Assign failed");
+      }
     },
     onSuccess: () => {
       toast.success(`Assigned ${picked.size} student(s)`);
@@ -329,7 +351,7 @@ function AssignDialog({
                   setPicked(c);
                 }}
               />
-              <span className="min-w-0 truncate">{s.profiles?.full_name}</span>
+              <span className="min-w-0 truncate">{s.full_name}</span>
               <span className="text-xs text-muted-foreground font-mono ml-auto">
                 {s.admission_no}
               </span>

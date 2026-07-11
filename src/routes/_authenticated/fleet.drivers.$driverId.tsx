@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { badgeClass, daysUntil, fmtDate, niceLabel } from "@/lib/module-util";
 import { ArrowLeft, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
-import { DriverDialog } from "./fleet.drivers";
+import { DriverDialog } from "./fleet.drivers.index";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/fleet/drivers/$driverId")({
@@ -42,33 +42,39 @@ function Page() {
 
   const { data: d, isLoading } = useQuery({
     queryKey: ["driver-detail", driverId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("drivers")
-          .select("*, fleet_vehicles:assigned_vehicle_id(id,registration_no,model)")
-          .eq("id", driverId)
-          .maybeSingle()
-      ).data,
+    queryFn: () =>
+      apiGet<{
+        id: string;
+        full_name: string;
+        license_no: string;
+        license_expiry: string | null;
+        phone: string | null;
+        years_experience: number;
+        assigned_vehicle_id: string | null;
+        vehicle: { id: string; registration_no: string } | null;
+      }>(`/fleet/drivers/${driverId}`),
   });
   const { data: incidents } = useQuery({
     queryKey: ["driver-incidents", driverId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("driver_incidents")
-          .select("*")
-          .eq("driver_id", driverId)
-          .order("incident_date", { ascending: false })
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          incident_date: string | null;
+          incident_type: string;
+          severity: string;
+          description: string;
+          status: string;
+        }[]
+      >(`/fleet/drivers/${driverId}/incidents`),
   });
 
   if (isLoading) return <div className="p-6">Loading…</div>;
   if (!d) return <div className="p-6">Driver not found.</div>;
 
   const days = daysUntil(d.license_expiry);
-  const veh = d.fleet_vehicles;
-  const openCount = (incidents ?? []).filter((i: any) => i.status === "open").length;
+  const veh = d.vehicle;
+  const openCount = (incidents ?? []).filter((i) => i.status === "open").length;
 
   return (
     <>
@@ -216,15 +222,20 @@ function IncidentDialog({
   });
   const mut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("driver_incidents").insert({
-        driver_id: driverId,
-        incident_type: form.incident_type,
-        severity: form.severity,
-        status: form.status,
-        incident_date: form.incident_date,
-        description: form.description,
+      const res = await apiFetch(`/fleet/drivers/${driverId}/incidents`, {
+        method: "POST",
+        body: JSON.stringify({
+          incidentType: form.incident_type,
+          severity: form.severity,
+          status: form.status,
+          incidentDate: form.incident_date,
+          description: form.description,
+        }),
       });
-      if (error) throw error;
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Save failed");
+      }
     },
     onSuccess: () => {
       toast.success("Incident logged");

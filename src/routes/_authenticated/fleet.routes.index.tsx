@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ import { Plus, Pencil, ChevronRight, Trash2, ArrowUp, ArrowDown } from "lucide-r
 import { useState, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/fleet/routes")({ component: Page });
+export const Route = createFileRoute("/_authenticated/fleet/routes/")({ component: Page });
 
 function Page() {
   const qc = useQueryClient();
@@ -34,15 +34,19 @@ function Page() {
 
   const { data: routes } = useQuery({
     queryKey: ["f-routes-full"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("transport_routes")
-          .select(
-            "*, vehicle:vehicle_id(id,registration_no), driver:driver_id(id,full_name), route_stops(id,name,sequence,eta,estimated_minutes), route_students(id)",
-          )
-          .order("name")
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          name: string;
+          vehicle_id: string | null;
+          driver_id: string | null;
+          vehicle: { id: string; registration_no: string; capacity: number } | null;
+          driver: { id: string; full_name: string } | null;
+          stops: { id: string; name: string; sequence: number; eta: string | null }[];
+          studentCount: number;
+        }[]
+      >("/fleet/routes-full"),
   });
 
   return (
@@ -63,7 +67,7 @@ function Page() {
         }
       />
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {(routes ?? []).map((r: any) => (
+        {(routes ?? []).map((r) => (
           <Card
             key={r.id}
             className="rounded-2xl overflow-hidden hover:shadow-md transition cursor-pointer"
@@ -74,7 +78,7 @@ function Page() {
                 <div className="font-medium truncate">{r.name}</div>
                 <div className="text-xs text-muted-foreground truncate">
                   {r.vehicle?.registration_no ?? "—"} · {r.driver?.full_name ?? "—"} ·{" "}
-                  {(r.route_students ?? []).length} students
+                  {r.studentCount} students
                 </div>
               </div>
               <div className="flex gap-1 shrink-0">
@@ -93,9 +97,9 @@ function Page() {
               </div>
             </div>
             <ol className="divide-y text-sm">
-              {[...(r.route_stops ?? [])]
-                .sort((a: any, b: any) => a.sequence - b.sequence)
-                .map((s: any) => (
+              {[...(r.stops ?? [])]
+                .sort((a, b) => a.sequence - b.sequence)
+                .map((s) => (
                   <li key={s.id} className="p-3 flex justify-between gap-2">
                     <span className="truncate">
                       {s.sequence}. {s.name}
@@ -140,9 +144,7 @@ export function RouteDialog({
         vehicle_id: editing?.vehicle_id ?? "__none",
         driver_id: editing?.driver_id ?? "__none",
       });
-      const es = (editing?.route_stops ?? [])
-        .slice()
-        .sort((a: any, b: any) => a.sequence - b.sequence);
+      const es = (editing?.stops ?? []).slice().sort((a: any, b: any) => a.sequence - b.sequence);
       setStops(
         es.map((s: any) => ({
           name: s.name,
@@ -155,13 +157,12 @@ export function RouteDialog({
 
   const { data: vehicles } = useQuery({
     queryKey: ["route-veh-picker"],
-    queryFn: async () =>
-      (await supabase.from("fleet_vehicles").select("id,registration_no")).data ?? [],
+    queryFn: () => apiGet<{ id: string; registration_no: string }[]>("/fleet/vehicles"),
     enabled: open,
   });
   const { data: drivers } = useQuery({
     queryKey: ["route-drv-picker"],
-    queryFn: async () => (await supabase.from("drivers").select("id,full_name")).data ?? [],
+    queryFn: () => apiGet<{ id: string; full_name: string }[]>("/fleet/drivers"),
     enabled: open,
   });
 
@@ -180,39 +181,23 @@ export function RouteDialog({
   const mut = useMutation({
     mutationFn: async () => {
       const payload = {
+        id: editing?.id ?? null,
         name: form.name,
-        vehicle_id: form.vehicle_id === "__none" ? null : form.vehicle_id,
-        driver_id: form.driver_id === "__none" ? null : form.driver_id,
-      };
-      let routeId: string;
-      if (editing) {
-        const { error } = await supabase
-          .from("transport_routes")
-          .update(payload)
-          .eq("id", editing.id);
-        if (error) throw error;
-        routeId = editing.id;
-        // Replace all stops.
-        await supabase.from("route_stops").delete().eq("route_id", routeId);
-      } else {
-        const { data, error } = await supabase
-          .from("transport_routes")
-          .insert(payload)
-          .select("id")
-          .single();
-        if (error) throw error;
-        routeId = data.id;
-      }
-      if (stops.length) {
-        const rows = stops.map((s, idx) => ({
-          route_id: routeId,
+        vehicleId: form.vehicle_id === "__none" ? null : form.vehicle_id,
+        driverId: form.driver_id === "__none" ? null : form.driver_id,
+        stops: stops.map((s) => ({
           name: s.name,
-          sequence: idx + 1,
           eta: s.eta || null,
-          estimated_minutes: Number(s.estimated_minutes) || 0,
-        }));
-        const { error } = await supabase.from("route_stops").insert(rows);
-        if (error) throw error;
+          estimatedMinutes: Number(s.estimated_minutes) || 0,
+        })),
+      };
+      const res = await apiFetch("/fleet/routes", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Save failed");
       }
     },
     onSuccess: () => {
