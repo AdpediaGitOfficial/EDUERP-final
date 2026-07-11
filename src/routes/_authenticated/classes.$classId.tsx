@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { RequireRole } from "@/components/require-role";
 import { Card } from "@/components/ui/card";
@@ -44,139 +44,19 @@ function ClassDetailPage() {
   const { classId } = Route.useParams();
   const navigate = useNavigate();
 
-  const { data: cls } = useQuery({
-    queryKey: ["class-detail", classId],
-    queryFn: async () =>
-      (await supabase.from("classes").select("*").eq("id", classId).maybeSingle()).data,
+  const { data: detail } = useQuery({
+    queryKey: ["class-detail-bundle", classId],
+    queryFn: () => apiGet<any>(`/classes/${classId}/detail`),
   });
+  const cls = detail?.cls ?? null;
+  const classTeacher = detail?.classTeacher ?? null;
+  const students = (detail?.students ?? []) as any[];
+  const extras = detail?.extras as { att: any[]; ex: any[]; fa: any[]; ps: any[] } | undefined;
+  const assignments = detail?.assignments as
+    { tc: any[]; tt: any[]; profById: Record<string, any> } | undefined;
+  const schoolAvgBySubject = (detail?.schoolAvgBySubject ?? {}) as Record<string, number>;
 
-  const { data: classTeacher } = useQuery({
-    enabled: !!cls?.class_teacher_id,
-    queryKey: ["class-teacher", cls?.class_teacher_id],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("profiles")
-          .select("id,full_name,email")
-          .eq("id", cls!.class_teacher_id!)
-          .maybeSingle()
-      ).data,
-  });
-
-  const { data: students } = useQuery({
-    queryKey: ["class-students", classId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("students")
-          .select(
-            "id, admission_no, roll_no, gender, status, profile_id, profiles(full_name,email)",
-          )
-          .eq("class_id", classId)
-          .order("roll_no")
-      ).data ?? [],
-  });
-
-  const studentIds = useMemo(() => (students ?? []).map((s: any) => s.id), [students]);
-
-  const { data: extras } = useQuery({
-    enabled: studentIds.length > 0,
-    queryKey: ["class-students-extras", classId, studentIds.length],
-    queryFn: async () => {
-      const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-      const [{ data: att }, { data: ex }, { data: fa }, { data: ps }] = await Promise.all([
-        supabase
-          .from("attendance")
-          .select("student_id,status,date")
-          .in("student_id", studentIds)
-          .gte("date", since),
-        supabase
-          .from("exam_results")
-          .select("student_id,marks_obtained,exams(max_marks,subjects(name))")
-          .in("student_id", studentIds),
-        supabase
-          .from("fee_assignments")
-          .select("student_id,status,amount_due,amount_paid")
-          .in("student_id", studentIds),
-        supabase
-          .from("parent_student")
-          .select("student_id,relationship,profiles!parent_student_parent_id_fkey(full_name,email)")
-          .in("student_id", studentIds),
-      ]);
-      return { att: att ?? [], ex: ex ?? [], fa: fa ?? [], ps: ps ?? [] };
-    },
-  });
-
-  const { data: assignments } = useQuery({
-    queryKey: ["class-assignments", classId],
-    queryFn: async () => {
-      const [{ data: tc }, { data: tt }] = await Promise.all([
-        supabase.from("teacher_classes").select("teacher_id").eq("class_id", classId),
-        supabase
-          .from("timetable")
-          .select("id,teacher_id,day_of_week,start_time,end_time,room,subjects(id,name)")
-          .eq("class_id", classId)
-          .order("day_of_week")
-          .order("start_time"),
-      ]);
-      const ids = Array.from(
-        new Set(
-          [
-            ...(tc ?? []).map((r: any) => r.teacher_id),
-            ...(tt ?? []).map((r: any) => r.teacher_id),
-          ].filter(Boolean),
-        ),
-      );
-      const { data: profs } = ids.length
-        ? await supabase.from("profiles").select("id,full_name,email").in("id", ids)
-        : { data: [] };
-      const { data: teacherRows } =
-        profs && profs.length
-          ? await supabase
-              .from("teachers")
-              .select("id,email,subject")
-              .in("email", profs.map((p: any) => p.email).filter(Boolean))
-          : { data: [] };
-      const teacherByEmail: Record<string, any> = {};
-      (teacherRows ?? []).forEach((t: any) => {
-        teacherByEmail[t.email] = t;
-      });
-      const profById: Record<string, any> = {};
-      (profs ?? []).forEach((p: any) => {
-        profById[p.id] = { ...p, teacher: teacherByEmail[p.email] ?? null };
-      });
-      return { tc: tc ?? [], tt: tt ?? [], profById };
-    },
-  });
-
-  const { data: schoolAvgBySubject } = useQuery({
-    enabled: !!cls?.name,
-    queryKey: ["class-school-avg", cls?.name],
-    queryFn: async () => {
-      // Average exam performance across the same grade (all sections)
-      const { data: sameGrade } = await supabase
-        .from("classes")
-        .select("id")
-        .eq("name", cls!.name)
-        .eq("academic_year", cls!.academic_year);
-      const ids = (sameGrade ?? []).map((r: any) => r.id);
-      if (!ids.length) return {};
-      const { data } = await supabase
-        .from("exam_results")
-        .select("marks_obtained,exams!inner(class_id,max_marks,subjects(name))")
-        .in("exams.class_id", ids);
-      const bySubject: Record<string, { got: number; max: number }> = {};
-      for (const r of (data as any[]) ?? []) {
-        const name = r.exams?.subjects?.name ?? "—";
-        const m = (bySubject[name] ||= { got: 0, max: 0 });
-        m.got += Number(r.marks_obtained) || 0;
-        m.max += Number(r.exams?.max_marks) || 0;
-      }
-      return Object.fromEntries(
-        Object.entries(bySubject).map(([k, v]) => [k, v.max ? (v.got / v.max) * 100 : 0]),
-      );
-    },
-  });
+  const studentIds = useMemo(() => students.map((s: any) => s.id), [students]);
 
   const attByStudent = useMemo(() => {
     const m: Record<string, { t: number; p: number }> = {};

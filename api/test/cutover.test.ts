@@ -1909,3 +1909,29 @@ describe("Child detail dashboard (parent child-detail + report pages)", () => {
     expect((await get(`/students/${anyStudent.id}/dashboard`, "admin")).status).toBe(200);
   });
 });
+
+describe("Class detail bundle (admin/hr class page)", () => {
+  it("returns roster + extras + assignments + school averages; non-admin/hr blocked", async () => {
+    const cls = (await get("/classes", "admin")).body[0];
+    expect((await get(`/classes/${cls.id}/detail`, "teacher")).status).toBe(403);
+    const d = await get(`/classes/${cls.id}/detail`, "admin");
+    expect(d.status).toBe(200);
+    for (const k of [
+      "cls",
+      "classTeacher",
+      "students",
+      "extras",
+      "assignments",
+      "schoolAvgBySubject",
+    ]) {
+      expect(d.body).toHaveProperty(k);
+    }
+    expect(Array.isArray(d.body.students)).toBe(true);
+    for (const k of ["att", "ex", "fa", "ps"]) expect(Array.isArray(d.body.extras[k])).toBe(true);
+    expect(Array.isArray(d.body.assignments.tt)).toBe(true);
+    // timetable times shaped HH:MM
+    if (d.body.assignments.tt[0]?.start_time)
+      expect(d.body.assignments.tt[0].start_time).toMatch(/^\d{2}:\d{2}$/);
+    if (d.body.students[0]) expect(d.body.students[0]).toHaveProperty("profiles");
+  });
+});

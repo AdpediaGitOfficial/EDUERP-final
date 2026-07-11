@@ -66,6 +66,11 @@ export class AcademicsController {
     return this.academics.listSubjects(actor, classId);
   }
 
+  @Get("classes/:id/detail")
+  classDetail(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.academics.classDetail(actor, id);
+  }
+
   @Get("timetable/mine")
   myTimetable(@CurrentUser() actor: AuthUser) {
     return this.academics.myTimetable(actor);

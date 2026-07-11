@@ -159,6 +159,198 @@ export class AcademicsService {
     return rows.map((s) => ({ id: s.id, classId: s.class_id, name: s.name, code: s.code }));
   }
 
+  /**
+   * Full class-detail bundle for the admin/HR class page: class row + class
+   * teacher, roster, per-student 30-day attendance / performance / fee / parent
+   * extras, teacher assignments + timetable, and same-grade school averages.
+   * Gated to admin|hr (the page's RequireRole).
+   */
+  async classDetail(actor: AuthUser, classId: string) {
+    if (!actor.roles.some((r) => r === "admin" || r === "hr")) throw new ForbiddenException();
+    const cls = await this.prisma.classes.findUnique({ where: { id: classId } });
+    if (!cls) throw new NotFoundException();
+
+    const dstr = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+    const hhmm = (d: Date | null) => (d ? d.toISOString().slice(11, 16) : null);
+    const num = (v: unknown) => (v == null ? null : Number(v));
+
+    const [classTeacher, students, tc, tt, sameGrade] = await Promise.all([
+      cls.class_teacher_id
+        ? this.prisma.profiles.findUnique({
+            where: { id: cls.class_teacher_id },
+            select: { id: true, full_name: true, email: true },
+          })
+        : Promise.resolve(null),
+      this.prisma.students.findMany({
+        where: { class_id: classId },
+        orderBy: { roll_no: "asc" },
+        select: {
+          id: true,
+          admission_no: true,
+          roll_no: true,
+          gender: true,
+          status: true,
+          profile_id: true,
+          profiles: { select: { full_name: true, email: true } },
+        },
+      }),
+      this.prisma.teacher_classes.findMany({
+        where: { class_id: classId },
+        select: { teacher_id: true },
+      }),
+      this.prisma.timetable.findMany({
+        where: { class_id: classId },
+        orderBy: [{ day_of_week: "asc" }, { start_time: "asc" }],
+        select: {
+          id: true,
+          teacher_id: true,
+          day_of_week: true,
+          start_time: true,
+          end_time: true,
+          room: true,
+          subjects: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.classes.findMany({
+        where: { name: cls.name, academic_year: cls.academic_year },
+        select: { id: true },
+      }),
+    ]);
+
+    const studentIds = students.map((s) => s.id);
+    const since = new Date(Date.now() - 30 * 86_400_000);
+    const [att, ex, fa, ps] = await Promise.all([
+      studentIds.length
+        ? this.prisma.attendance.findMany({
+            where: { student_id: { in: studentIds }, date: { gte: since } },
+            select: { student_id: true, status: true, date: true },
+          })
+        : Promise.resolve([]),
+      studentIds.length
+        ? this.prisma.exam_results.findMany({
+            where: { student_id: { in: studentIds } },
+            select: {
+              student_id: true,
+              marks_obtained: true,
+              exams: { select: { max_marks: true, subjects: { select: { name: true } } } },
+            },
+          })
+        : Promise.resolve([]),
+      studentIds.length
+        ? this.prisma.fee_assignments.findMany({
+            where: { student_id: { in: studentIds } },
+            select: { student_id: true, status: true, amount_due: true, amount_paid: true },
+          })
+        : Promise.resolve([]),
+      studentIds.length
+        ? this.prisma.parent_student.findMany({
+            where: { student_id: { in: studentIds } },
+            select: {
+              student_id: true,
+              relationship: true,
+              profiles: { select: { full_name: true, email: true } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    // Teacher profiles (for tc + tt), enriched with the teachers row (by email).
+    const teacherIds = Array.from(
+      new Set([...tc.map((r) => r.teacher_id), ...tt.map((r) => r.teacher_id)].filter(Boolean)),
+    ) as string[];
+    const profs = teacherIds.length
+      ? await this.prisma.profiles.findMany({
+          where: { id: { in: teacherIds } },
+          select: { id: true, full_name: true, email: true },
+        })
+      : [];
+    const emails = profs.map((p) => p.email).filter(Boolean) as string[];
+    const teacherRows = emails.length
+      ? await this.prisma.teachers.findMany({
+          where: { email: { in: emails } },
+          select: { id: true, email: true, subject: true },
+        })
+      : [];
+    const teacherByEmail = new Map(teacherRows.map((t) => [t.email, t]));
+    const profById: Record<string, any> = {};
+    for (const p of profs) {
+      profById[p.id] = {
+        id: p.id,
+        full_name: p.full_name,
+        email: p.email,
+        teacher: p.email ? (teacherByEmail.get(p.email) ?? null) : null,
+      };
+    }
+
+    // Same-grade school average by subject.
+    const gradeIds = sameGrade.map((c) => c.id);
+    const gradeResults = gradeIds.length
+      ? await this.prisma.exam_results.findMany({
+          where: { exams: { class_id: { in: gradeIds } } },
+          select: {
+            marks_obtained: true,
+            exams: { select: { max_marks: true, subjects: { select: { name: true } } } },
+          },
+        })
+      : [];
+    const bySubject: Record<string, { got: number; max: number }> = {};
+    for (const r of gradeResults) {
+      const name = r.exams?.subjects?.name ?? "—";
+      const m = (bySubject[name] ||= { got: 0, max: 0 });
+      m.got += Number(r.marks_obtained) || 0;
+      m.max += Number(r.exams?.max_marks) || 0;
+    }
+    const schoolAvgBySubject = Object.fromEntries(
+      Object.entries(bySubject).map(([k, v]) => [k, v.max ? (v.got / v.max) * 100 : 0]),
+    );
+
+    return {
+      cls,
+      classTeacher,
+      students,
+      extras: {
+        att: att.map((a) => ({ student_id: a.student_id, status: a.status, date: dstr(a.date) })),
+        ex: ex.map((r) => ({
+          student_id: r.student_id,
+          marks_obtained: num(r.marks_obtained),
+          exams: r.exams
+            ? {
+                max_marks: r.exams.max_marks,
+                subjects: r.exams.subjects ? { name: r.exams.subjects.name } : null,
+              }
+            : null,
+        })),
+        fa: fa.map((f) => ({
+          student_id: f.student_id,
+          status: f.status,
+          amount_due: num(f.amount_due),
+          amount_paid: num(f.amount_paid),
+        })),
+        ps: ps.map((p) => ({
+          student_id: p.student_id,
+          relationship: p.relationship,
+          profiles: p.profiles
+            ? { full_name: p.profiles.full_name, email: p.profiles.email }
+            : null,
+        })),
+      },
+      assignments: {
+        tc,
+        tt: tt.map((t) => ({
+          id: t.id,
+          teacher_id: t.teacher_id,
+          day_of_week: t.day_of_week,
+          start_time: hhmm(t.start_time),
+          end_time: hhmm(t.end_time),
+          room: t.room,
+          subjects: t.subjects ? { id: t.subjects.id, name: t.subjects.name } : null,
+        })),
+        profById,
+      },
+      schoolAvgBySubject,
+    };
+  }
+
   /** The caller's own weekly timetable — student sees their class, staff their teaching classes. */
   async myTimetable(actor: AuthUser) {
     let classIds: string[] = [];

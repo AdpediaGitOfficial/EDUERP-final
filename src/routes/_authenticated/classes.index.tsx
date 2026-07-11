@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import { Plus, Search, Users, GraduationCap, DoorOpen } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/classes")({
+export const Route = createFileRoute("/_authenticated/classes/")({
   component: () => (
     <RequireRole roles={["admin"]}>
       <ClassesPage />

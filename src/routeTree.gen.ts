@@ -36,7 +36,6 @@ import { Route as AuthenticatedEssRouteImport } from './routes/_authenticated/es
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedComplaintsRouteImport } from './routes/_authenticated/complaints'
 import { Route as AuthenticatedCommunicationRouteImport } from './routes/_authenticated/communication'
-import { Route as AuthenticatedClassesRouteImport } from './routes/_authenticated/classes'
 import { Route as AuthenticatedChildrenRouteImport } from './routes/_authenticated/children'
 import { Route as AuthenticatedAttendanceOverviewRouteImport } from './routes/_authenticated/attendance-overview'
 import { Route as AuthenticatedAttendanceRouteImport } from './routes/_authenticated/attendance'
@@ -50,6 +49,7 @@ import { Route as AuthenticatedHrIndexRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedFleetIndexRouteImport } from './routes/_authenticated/fleet.index'
 import { Route as AuthenticatedFinanceIndexRouteImport } from './routes/_authenticated/finance.index'
 import { Route as AuthenticatedEssIndexRouteImport } from './routes/_authenticated/ess.index'
+import { Route as AuthenticatedClassesIndexRouteImport } from './routes/_authenticated/classes.index'
 import { Route as AuthenticatedChildrenIndexRouteImport } from './routes/_authenticated/children.index'
 import { Route as AuthenticatedAssetsIndexRouteImport } from './routes/_authenticated/assets.index'
 import { Route as AuthenticatedTeachersTeacherIdRouteImport } from './routes/_authenticated/teachers.$teacherId'
@@ -248,11 +248,6 @@ const AuthenticatedCommunicationRoute =
     path: '/communication',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedClassesRoute = AuthenticatedClassesRouteImport.update({
-  id: '/classes',
-  path: '/classes',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedChildrenRoute = AuthenticatedChildrenRouteImport.update({
   id: '/children',
   path: '/children',
@@ -324,6 +319,12 @@ const AuthenticatedEssIndexRoute = AuthenticatedEssIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedEssRoute,
 } as any)
+const AuthenticatedClassesIndexRoute =
+  AuthenticatedClassesIndexRouteImport.update({
+    id: '/classes/',
+    path: '/classes/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChildrenIndexRoute =
   AuthenticatedChildrenIndexRouteImport.update({
     id: '/',
@@ -546,9 +547,9 @@ const AuthenticatedEssAssetsRoute = AuthenticatedEssAssetsRouteImport.update({
 } as any)
 const AuthenticatedClassesClassIdRoute =
   AuthenticatedClassesClassIdRouteImport.update({
-    id: '/$classId',
-    path: '/$classId',
-    getParentRoute: () => AuthenticatedClassesRoute,
+    id: '/classes/$classId',
+    path: '/classes/$classId',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedChildrenStudentIdRoute =
   AuthenticatedChildrenStudentIdRouteImport.update({
@@ -670,7 +671,6 @@ export interface FileRoutesByFullPath {
   '/attendance': typeof AuthenticatedAttendanceRoute
   '/attendance-overview': typeof AuthenticatedAttendanceOverviewRoute
   '/children': typeof AuthenticatedChildrenRouteWithChildren
-  '/classes': typeof AuthenticatedClassesRouteWithChildren
   '/communication': typeof AuthenticatedCommunicationRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -740,6 +740,7 @@ export interface FileRoutesByFullPath {
   '/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
   '/assets/': typeof AuthenticatedAssetsIndexRoute
   '/children/': typeof AuthenticatedChildrenIndexRoute
+  '/classes/': typeof AuthenticatedClassesIndexRoute
   '/ess/': typeof AuthenticatedEssIndexRoute
   '/finance/': typeof AuthenticatedFinanceIndexRoute
   '/fleet/': typeof AuthenticatedFleetIndexRoute
@@ -768,7 +769,6 @@ export interface FileRoutesByTo {
   '/assignments': typeof AuthenticatedAssignmentsRoute
   '/attendance': typeof AuthenticatedAttendanceRoute
   '/attendance-overview': typeof AuthenticatedAttendanceOverviewRoute
-  '/classes': typeof AuthenticatedClassesRouteWithChildren
   '/communication': typeof AuthenticatedCommunicationRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -831,6 +831,7 @@ export interface FileRoutesByTo {
   '/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
   '/assets': typeof AuthenticatedAssetsIndexRoute
   '/children': typeof AuthenticatedChildrenIndexRoute
+  '/classes': typeof AuthenticatedClassesIndexRoute
   '/ess': typeof AuthenticatedEssIndexRoute
   '/finance': typeof AuthenticatedFinanceIndexRoute
   '/fleet': typeof AuthenticatedFleetIndexRoute
@@ -863,7 +864,6 @@ export interface FileRoutesById {
   '/_authenticated/attendance': typeof AuthenticatedAttendanceRoute
   '/_authenticated/attendance-overview': typeof AuthenticatedAttendanceOverviewRoute
   '/_authenticated/children': typeof AuthenticatedChildrenRouteWithChildren
-  '/_authenticated/classes': typeof AuthenticatedClassesRouteWithChildren
   '/_authenticated/communication': typeof AuthenticatedCommunicationRoute
   '/_authenticated/complaints': typeof AuthenticatedComplaintsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -933,6 +933,7 @@ export interface FileRoutesById {
   '/_authenticated/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
   '/_authenticated/assets/': typeof AuthenticatedAssetsIndexRoute
   '/_authenticated/children/': typeof AuthenticatedChildrenIndexRoute
+  '/_authenticated/classes/': typeof AuthenticatedClassesIndexRoute
   '/_authenticated/ess/': typeof AuthenticatedEssIndexRoute
   '/_authenticated/finance/': typeof AuthenticatedFinanceIndexRoute
   '/_authenticated/fleet/': typeof AuthenticatedFleetIndexRoute
@@ -965,7 +966,6 @@ export interface FileRouteTypes {
     | '/attendance'
     | '/attendance-overview'
     | '/children'
-    | '/classes'
     | '/communication'
     | '/complaints'
     | '/dashboard'
@@ -1035,6 +1035,7 @@ export interface FileRouteTypes {
     | '/teachers/$teacherId'
     | '/assets/'
     | '/children/'
+    | '/classes/'
     | '/ess/'
     | '/finance/'
     | '/fleet/'
@@ -1063,7 +1064,6 @@ export interface FileRouteTypes {
     | '/assignments'
     | '/attendance'
     | '/attendance-overview'
-    | '/classes'
     | '/communication'
     | '/complaints'
     | '/dashboard'
@@ -1126,6 +1126,7 @@ export interface FileRouteTypes {
     | '/teachers/$teacherId'
     | '/assets'
     | '/children'
+    | '/classes'
     | '/ess'
     | '/finance'
     | '/fleet'
@@ -1157,7 +1158,6 @@ export interface FileRouteTypes {
     | '/_authenticated/attendance'
     | '/_authenticated/attendance-overview'
     | '/_authenticated/children'
-    | '/_authenticated/classes'
     | '/_authenticated/communication'
     | '/_authenticated/complaints'
     | '/_authenticated/dashboard'
@@ -1227,6 +1227,7 @@ export interface FileRouteTypes {
     | '/_authenticated/teachers/$teacherId'
     | '/_authenticated/assets/'
     | '/_authenticated/children/'
+    | '/_authenticated/classes/'
     | '/_authenticated/ess/'
     | '/_authenticated/finance/'
     | '/_authenticated/fleet/'
@@ -1445,13 +1446,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCommunicationRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/classes': {
-      id: '/_authenticated/classes'
-      path: '/classes'
-      fullPath: '/classes'
-      preLoaderRoute: typeof AuthenticatedClassesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/children': {
       id: '/_authenticated/children'
       path: '/children'
@@ -1542,6 +1536,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/ess/'
       preLoaderRoute: typeof AuthenticatedEssIndexRouteImport
       parentRoute: typeof AuthenticatedEssRoute
+    }
+    '/_authenticated/classes/': {
+      id: '/_authenticated/classes/'
+      path: '/classes'
+      fullPath: '/classes/'
+      preLoaderRoute: typeof AuthenticatedClassesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/children/': {
       id: '/_authenticated/children/'
@@ -1818,10 +1819,10 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/classes/$classId': {
       id: '/_authenticated/classes/$classId'
-      path: '/$classId'
+      path: '/classes/$classId'
       fullPath: '/classes/$classId'
       preLoaderRoute: typeof AuthenticatedClassesClassIdRouteImport
-      parentRoute: typeof AuthenticatedClassesRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/children/$studentId': {
       id: '/_authenticated/children/$studentId'
@@ -2012,17 +2013,6 @@ const AuthenticatedChildrenRouteWithChildren =
     AuthenticatedChildrenRouteChildren,
   )
 
-interface AuthenticatedClassesRouteChildren {
-  AuthenticatedClassesClassIdRoute: typeof AuthenticatedClassesClassIdRoute
-}
-
-const AuthenticatedClassesRouteChildren: AuthenticatedClassesRouteChildren = {
-  AuthenticatedClassesClassIdRoute: AuthenticatedClassesClassIdRoute,
-}
-
-const AuthenticatedClassesRouteWithChildren =
-  AuthenticatedClassesRoute._addFileChildren(AuthenticatedClassesRouteChildren)
-
 interface AuthenticatedEssRouteChildren {
   AuthenticatedEssAssetsRoute: typeof AuthenticatedEssAssetsRoute
   AuthenticatedEssAttendanceRoute: typeof AuthenticatedEssAttendanceRoute
@@ -2197,7 +2187,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAttendanceRoute: typeof AuthenticatedAttendanceRoute
   AuthenticatedAttendanceOverviewRoute: typeof AuthenticatedAttendanceOverviewRoute
   AuthenticatedChildrenRoute: typeof AuthenticatedChildrenRouteWithChildren
-  AuthenticatedClassesRoute: typeof AuthenticatedClassesRouteWithChildren
   AuthenticatedCommunicationRoute: typeof AuthenticatedCommunicationRoute
   AuthenticatedComplaintsRoute: typeof AuthenticatedComplaintsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -2221,6 +2210,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedTeachersRoute: typeof AuthenticatedTeachersRouteWithChildren
   AuthenticatedTimetableRoute: typeof AuthenticatedTimetableRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
+  AuthenticatedClassesClassIdRoute: typeof AuthenticatedClassesClassIdRoute
+  AuthenticatedClassesIndexRoute: typeof AuthenticatedClassesIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -2231,7 +2222,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAttendanceRoute: AuthenticatedAttendanceRoute,
   AuthenticatedAttendanceOverviewRoute: AuthenticatedAttendanceOverviewRoute,
   AuthenticatedChildrenRoute: AuthenticatedChildrenRouteWithChildren,
-  AuthenticatedClassesRoute: AuthenticatedClassesRouteWithChildren,
   AuthenticatedCommunicationRoute: AuthenticatedCommunicationRoute,
   AuthenticatedComplaintsRoute: AuthenticatedComplaintsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
@@ -2255,6 +2245,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedTeachersRoute: AuthenticatedTeachersRouteWithChildren,
   AuthenticatedTimetableRoute: AuthenticatedTimetableRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
+  AuthenticatedClassesClassIdRoute: AuthenticatedClassesClassIdRoute,
+  AuthenticatedClassesIndexRoute: AuthenticatedClassesIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
