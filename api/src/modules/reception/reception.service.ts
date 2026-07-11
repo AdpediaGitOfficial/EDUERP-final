@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
@@ -186,6 +186,11 @@ export class ReceptionService {
     data: { routeId: string; stopId?: string; studentId: string },
   ) {
     this.assertTransport(actor);
+    // UNIQUE (route_id, student_id): a student can only be on a route once.
+    const existing = await this.prisma.route_students.findFirst({
+      where: { route_id: data.routeId, student_id: data.studentId },
+    });
+    if (existing) throw new ConflictException("That student is already assigned to this route");
     const row = await this.prisma.route_students.create({
       data: {
         route_id: data.routeId,

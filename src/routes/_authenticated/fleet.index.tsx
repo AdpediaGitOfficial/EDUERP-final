@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Bus, Users, Route as RouteIcon, Fuel, Wrench, AlertTriangle } from "lucide-react";
+import {
+  Bus,
+  Users,
+  Route as RouteIcon,
+  Fuel,
+  Wrench,
+  AlertTriangle,
+  Wrench as WrenchIcon,
+  UserX,
+} from "lucide-react";
 import { money, fmtDate } from "@/lib/module-util";
 import { useMemo, useState } from "react";
 
@@ -39,49 +48,24 @@ function Page() {
   const [period, setPeriod] = useState<Period>("month");
   const since = periodStart(period);
 
-  const { data: vehicles } = useQuery({
-    queryKey: ["f-veh"],
-    queryFn: async () => (await supabase.from("fleet_vehicles").select("id,status")).data ?? [],
-  });
-  const { data: drivers } = useQuery({
-    queryKey: ["f-drv"],
-    queryFn: async () => (await supabase.from("drivers").select("id")).data ?? [],
-  });
-  const { data: routes } = useQuery({
-    queryKey: ["f-rte"],
-    queryFn: async () => (await supabase.from("transport_routes").select("id")).data ?? [],
+  const { data } = useQuery({
+    queryKey: ["fleet-dashboard", period],
+    queryFn: async () => apiGet<any>(`/fleet/dashboard${since ? `?since=${since}` : ""}`),
   });
 
-  const { data: fuel } = useQuery({
-    queryKey: ["f-fuel", period],
-    queryFn: async () => {
-      let q = supabase.from("fuel_logs").select("cost,date");
-      if (since) q = q.gte("date", since);
-      return (await q).data ?? [];
-    },
-  });
-  const { data: maint } = useQuery({
-    queryKey: ["f-maint", period],
-    queryFn: async () => {
-      let q = supabase.from("vehicle_maintenance").select("cost,service_date");
-      if (since) q = q.gte("service_date", since);
-      return (await q).data ?? [];
-    },
-  });
-  const { data: renewals } = useQuery({
-    queryKey: ["f-renewals"],
-    queryFn: async () => (await supabase.rpc("fleet_renewals_due", { _days: 60 })).data ?? [],
-  });
-
-  const fuelSpend = (fuel ?? []).reduce((a: number, f: any) => a + Number(f.cost || 0), 0);
-  const maintSpend = (maint ?? []).reduce((a: number, m: any) => a + Number(m.cost || 0), 0);
-  const activeV = (vehicles ?? []).filter((v: any) => v.status === "active").length;
+  const totalV = data?.vehicles?.total ?? 0;
+  const activeV = data?.vehicles?.active ?? 0;
+  const inMaint = data?.vehicles?.inMaintenance ?? 0;
+  const unassigned = data?.vehicles?.unassigned ?? 0;
+  const fuelSpend = data?.fuelSpend ?? 0;
+  const maintSpend = data?.maintSpend ?? 0;
+  const renewals = data?.renewals ?? [];
 
   const groupedRenewals = useMemo(() => {
     const src = (renewals ?? []) as any[];
     return {
-      urgent: src.filter((r) => r.days_left <= 15),
-      soon: src.filter((r) => r.days_left > 15 && r.days_left <= 60),
+      urgent: src.filter((r) => r.daysLeft <= 15),
+      soon: src.filter((r) => r.daysLeft > 15 && r.daysLeft <= 60),
     };
   }, [renewals]);
 
@@ -106,13 +90,9 @@ function Page() {
         }
       />
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Stat
-          icon={Bus}
-          label="Vehicles (active)"
-          value={`${activeV} / ${(vehicles ?? []).length}`}
-        />
-        <Stat icon={Users} label="Drivers" value={String((drivers ?? []).length)} />
-        <Stat icon={RouteIcon} label="Routes" value={String((routes ?? []).length)} />
+        <Stat icon={Bus} label="Vehicles (active)" value={`${activeV} / ${totalV}`} />
+        <Stat icon={Users} label="Drivers" value={String(data?.drivers ?? 0)} />
+        <Stat icon={RouteIcon} label="Routes" value={String(data?.routes ?? 0)} />
         <Stat icon={Fuel} label="Fuel spend" value={money(fuelSpend)} />
         <Stat icon={Wrench} label="Maintenance" value={money(maintSpend)} />
         <Stat
@@ -120,6 +100,32 @@ function Page() {
           label="Renewals due (60d)"
           value={String((renewals ?? []).length)}
           tint="text-amber-600"
+        />
+      </div>
+
+      {/* Enhancement: fleet-health quick stats surfaced by the dashboard endpoint. */}
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Stat
+          icon={WrenchIcon}
+          label="In maintenance"
+          value={String(inMaint)}
+          tint={inMaint > 0 ? "text-amber-600" : "text-foreground"}
+        />
+        <Stat
+          icon={UserX}
+          label="Without a driver"
+          value={String(unassigned)}
+          tint={unassigned > 0 ? "text-red-600" : "text-emerald-600"}
+        />
+        <Stat
+          icon={Fuel}
+          label="Avg fuel / vehicle"
+          value={money(totalV ? fuelSpend / totalV : 0)}
+        />
+        <Stat
+          icon={Wrench}
+          label="Avg maint / vehicle"
+          value={money(totalV ? maintSpend / totalV : 0)}
         />
       </div>
 
@@ -137,7 +143,7 @@ function Page() {
             <ul className="text-sm divide-y">
               {groupedRenewals.urgent.map((r) => (
                 <li
-                  key={`${r.kind}-${r.ref_id}`}
+                  key={`${r.kind}-${r.refId}`}
                   className="py-2 flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0 truncate">
@@ -145,7 +151,7 @@ function Page() {
                     <span className="font-medium">{r.label}</span>
                   </div>
                   <div className="text-xs text-muted-foreground shrink-0">
-                    {fmtDate(r.expiry_date)} · {r.days_left}d
+                    {fmtDate(r.expiryDate)} · {r.daysLeft}d
                   </div>
                 </li>
               ))}
@@ -165,7 +171,7 @@ function Page() {
             <ul className="text-sm divide-y">
               {groupedRenewals.soon.map((r) => (
                 <li
-                  key={`${r.kind}-${r.ref_id}`}
+                  key={`${r.kind}-${r.refId}`}
                   className="py-2 flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0 truncate">
@@ -173,7 +179,7 @@ function Page() {
                     <span className="font-medium">{r.label}</span>
                   </div>
                   <div className="text-xs text-muted-foreground shrink-0">
-                    {fmtDate(r.expiry_date)} · {r.days_left}d
+                    {fmtDate(r.expiryDate)} · {r.daysLeft}d
                   </div>
                 </li>
               ))}

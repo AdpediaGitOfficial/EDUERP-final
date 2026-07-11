@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -41,15 +41,22 @@ function Page() {
 
   const { data } = useQuery({
     queryKey: ["fleet-vehicles-list"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("fleet_vehicles")
-          .select(
-            "*, drivers!drivers_assigned_vehicle_id_fkey(id,full_name), transport_routes!transport_routes_vehicle_id_fkey(id,name)",
-          )
-          .order("registration_no")
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/fleet/vehicles");
+      return rows.map((v) => ({
+        id: v.id,
+        registration_no: v.registrationNo,
+        vehicle_type: v.vehicleType,
+        model: v.model,
+        capacity: v.capacity,
+        purchase_date: v.purchaseDate,
+        insurance_expiry: v.insuranceExpiry,
+        permit_expiry: v.permitExpiry,
+        status: v.status,
+        drivers: v.driver ? [{ id: v.driver.id, full_name: v.driver.fullName }] : [],
+        transport_routes: v.route ? [{ id: v.route.id, name: v.route.name }] : [],
+      }));
+    },
   });
 
   const filtered = (data ?? []).filter((v: any) => {
@@ -209,25 +216,19 @@ export function VehicleDialog({
   const mut = useMutation({
     mutationFn: async () => {
       const payload = {
-        registration_no: form.registration_no,
-        vehicle_type: form.vehicle_type,
-        model: form.model || null,
+        registrationNo: form.registration_no,
+        vehicleType: form.vehicle_type,
+        model: form.model || undefined,
         capacity: Number(form.capacity),
-        purchase_date: form.purchase_date || null,
-        insurance_expiry: form.insurance_expiry || null,
-        permit_expiry: form.permit_expiry || null,
+        purchaseDate: form.purchase_date || undefined,
+        insuranceExpiry: form.insurance_expiry || undefined,
+        permitExpiry: form.permit_expiry || undefined,
         status: form.status,
       };
-      if (editing) {
-        const { error } = await supabase
-          .from("fleet_vehicles")
-          .update(payload)
-          .eq("id", editing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("fleet_vehicles").insert(payload);
-        if (error) throw error;
-      }
+      await apiFetch(editing ? `/fleet/vehicles/${editing.id}` : "/fleet/vehicles", {
+        method: editing ? "PATCH" : "POST",
+        body: JSON.stringify(payload),
+      });
     },
     onSuccess: () => {
       toast.success(editing ? "Vehicle updated" : "Vehicle added");

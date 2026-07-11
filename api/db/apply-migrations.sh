@@ -25,4 +25,6 @@ done
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/03-payment-demo-seed.sql
 # Reception demo data (routes/stops/assignments, visitors, admission enquiries).
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/04-reception-demo-seed.sql
+# Fleet demo data (vehicles/drivers, fuel + maintenance logs).
+psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/05-fleet-demo-seed.sql
 echo "done."

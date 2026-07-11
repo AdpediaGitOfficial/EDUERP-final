@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,13 +37,19 @@ function Page() {
 
   const { data } = useQuery({
     queryKey: ["fleet-drivers-list"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("drivers")
-          .select("*, fleet_vehicles:assigned_vehicle_id(id,registration_no)")
-          .order("full_name")
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/fleet/drivers");
+      return rows.map((d) => ({
+        id: d.id,
+        full_name: d.fullName,
+        license_no: d.licenseNo,
+        license_expiry: d.licenseExpiry,
+        phone: d.phone,
+        years_experience: d.yearsExperience,
+        assigned_vehicle_id: d.assignedVehicleId,
+        fleet_vehicles: d.vehicleReg ? { registration_no: d.vehicleReg } : null,
+      }));
+    },
   });
 
   const filtered = (data ?? []).filter(
@@ -170,30 +176,28 @@ export function DriverDialog({
 
   const { data: vehicles } = useQuery({
     queryKey: ["driver-veh-picker"],
-    queryFn: async () =>
-      (await supabase.from("fleet_vehicles").select("id,registration_no").order("registration_no"))
-        .data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/fleet/vehicles");
+      return rows.map((v) => ({ id: v.id, registration_no: v.registrationNo }));
+    },
     enabled: open,
   });
 
   const mut = useMutation({
     mutationFn: async () => {
       const payload = {
-        full_name: form.full_name,
-        license_no: form.license_no,
-        license_expiry: form.license_expiry || null,
-        phone: form.phone || null,
-        years_experience: Number(form.years_experience || 0),
-        assigned_vehicle_id:
-          form.assigned_vehicle_id === "__none" ? null : form.assigned_vehicle_id || null,
+        fullName: form.full_name,
+        licenseNo: form.license_no,
+        licenseExpiry: form.license_expiry || undefined,
+        phone: form.phone || undefined,
+        yearsExperience: Number(form.years_experience || 0),
+        assignedVehicleId:
+          form.assigned_vehicle_id === "__none" ? undefined : form.assigned_vehicle_id || undefined,
       };
-      if (editing) {
-        const { error } = await supabase.from("drivers").update(payload).eq("id", editing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("drivers").insert(payload);
-        if (error) throw error;
-      }
+      await apiFetch(editing ? `/fleet/drivers/${editing.id}` : "/fleet/drivers", {
+        method: editing ? "PATCH" : "POST",
+        body: JSON.stringify(payload),
+      });
     },
     onSuccess: () => {
       toast.success(editing ? "Driver updated" : "Driver added");
