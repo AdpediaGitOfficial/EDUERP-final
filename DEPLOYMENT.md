@@ -110,21 +110,56 @@ to the NestJS API (rate limited), `/_serverFn/` RPCs to the web app (rate limite
 
 ## 6. Updating a deployment
 
+**The Prisma client MUST be regenerated on every code update.** `schema.prisma` and the generated
+client (`node_modules/@prisma/client`) are two separate things: pulling new code that adds a Prisma
+model does *not* update the client. If you skip `prisma generate`, the API crashes at runtime with
+`TypeError: Cannot read properties of undefined (reading 'findMany')` because `this.prisma.<newModel>`
+is `undefined`. `npm ci`/`npm install` now runs `prisma generate` automatically via a `postinstall`
+hook, so a clean install is enough — but never restart the API on a stale client.
+
+**If you deploy by pulling the repo directly on the server**, the one-liner that syncs everything
+safely (installs deps, regenerates the client, rebuilds — never touches the database) is:
+
+```sh
+cd /var/www/greenwood-erp/api && ./scripts/refresh.sh && pm2 reload greenwood-api
+```
+
+**If you build on a separate machine and rsync artifacts:**
+
 ```sh
 # Web:
 bun install --frozen-lockfile && bun run build      # on build machine
 rsync -a --delete .output/ server:/var/www/greenwood-erp/.output/
 
 # API:
-cd api && npm ci && npx prisma generate && npm run build
+cd api && npm ci && npx prisma generate && npm run build   # npm ci also regenerates via postinstall
 rsync -a --delete dist/ node_modules/ server:/var/www/greenwood-erp/api/
 
 ssh server 'cd /var/www/greenwood-erp && pm2 reload greenwood-erp greenwood-api'
 ```
 
-Schema changes: apply the new migration to Postgres (`api/db/apply-migrations.sh` against the
-production `DATABASE_URL`, or your migration tool of choice) and `npx prisma generate` before the
-API reload.
+Schema changes that add **tables/columns**: also apply the new migration SQL to Postgres before the
+reload — run the new file(s) from `supabase/migrations/` with `psql -f` against the production
+`DATABASE_URL`. Do **not** re-run `api/db/apply-migrations.sh` against a live database — it rebuilds
+from scratch and reseeds demo data; it is for first-time setup only.
+
+## 9. Troubleshooting
+
+**API 500s with `Cannot read properties of undefined (reading 'findMany')` (or `create`/`update`),
+dashboards show "Couldn't load the dashboard", and forms show "Database error".**
+The generated Prisma client is older than `schema.prisma` on this host — new models were added but
+the client was never regenerated after the code was pulled/deployed. Fix:
+
+```sh
+cd /var/www/greenwood-erp/api
+./scripts/refresh.sh        # npm ci (postinstall generate) + prisma generate + build
+pm2 reload greenwood-api
+```
+
+If some endpoints still fail with a *database* error (e.g. `relation "..." does not exist`) after
+that, the release also added tables the running database is missing — apply the new
+`supabase/migrations/*.sql` file(s) with `psql -f` against the production `DATABASE_URL`, then reload
+again.
 
 ## 7. Security checklist
 
