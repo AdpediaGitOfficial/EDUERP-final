@@ -33,6 +33,17 @@ export class AuthService {
     ) {
       throw new UnauthorizedException("Invalid email or password");
     }
+    // An admin can deactivate an account (profiles.status = 'inactive') to block
+    // access without deleting rows referenced by payments/attendance/holidays.
+    const profile = await this.prisma.profiles.findUnique({
+      where: { id: account.id },
+      select: { status: true },
+    });
+    if (profile?.status === "inactive") {
+      throw new UnauthorizedException(
+        "This account has been deactivated. Contact an administrator.",
+      );
+    }
     const user = await this.resolveSessionUser(account.id, account.email!);
     await this.prisma.users.update({
       where: { id: account.id },
@@ -153,6 +164,12 @@ export class AuthService {
     if (payload.typ !== "refresh") throw new UnauthorizedException("Invalid refresh token");
     const account = await this.prisma.users.findUnique({ where: { id: payload.sub } });
     if (!account) throw new UnauthorizedException("Account no longer exists");
+    const profile = await this.prisma.profiles.findUnique({
+      where: { id: account.id },
+      select: { status: true },
+    });
+    if (profile?.status === "inactive")
+      throw new UnauthorizedException("This account has been deactivated.");
     const user = await this.resolveSessionUser(account.id, account.email!);
     return { user, tokens: await this.issueTokens(user) };
   }

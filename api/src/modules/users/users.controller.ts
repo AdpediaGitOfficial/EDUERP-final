@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
   ParseIntPipe,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -52,6 +54,27 @@ class CreateUserDto {
   phone?: string;
 }
 
+class UpdateUserDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string | null;
+
+  @IsOptional()
+  @IsIn(APP_ROLES)
+  role?: string;
+
+  @IsOptional()
+  @IsIn(["active", "inactive"])
+  status?: "active" | "inactive";
+}
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("users")
 export class UsersController {
@@ -64,8 +87,13 @@ export class UsersController {
     @Query("page", new ParseIntPipe({ optional: true })) page?: number,
     @Query("pageSize", new ParseIntPipe({ optional: true })) pageSize?: number,
     @Query("q") q?: string,
+    @Query("role") role?: string,
+    @Query("status") status?: string,
   ) {
-    return this.users.listUsers(actor, page ?? 1, Math.min(pageSize ?? 50, 200), q);
+    return this.users.listUsers(actor, page ?? 1, Math.min(pageSize ?? 50, 200), q, {
+      role: role || undefined,
+      status: status === "active" || status === "inactive" ? status : undefined,
+    });
   }
 
   @Post()
@@ -85,5 +113,21 @@ export class UsersController {
   @Get(":id")
   get(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.users.getProfile(actor, id);
+  }
+
+  @Patch(":id")
+  @Roles("admin")
+  update(
+    @CurrentUser() actor: AuthUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.users.updateUser(actor, id, dto);
+  }
+
+  @Delete(":id")
+  @Roles("admin")
+  remove(@CurrentUser() actor: AuthUser, @Param("id", new ParseUUIDPipe()) id: string) {
+    return this.users.deleteUser(actor, id);
   }
 }

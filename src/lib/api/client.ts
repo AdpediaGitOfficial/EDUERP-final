@@ -201,6 +201,23 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Convenience JSON PATCH for React Query mutationFns. */
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  const res = await apiFetch(path, {
+    method: "PATCH",
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res) throw new Error("Not authenticated");
+  return (await res.json()) as T;
+}
+
+/** Convenience DELETE for React Query mutationFns. */
+export async function apiDelete<T>(path: string): Promise<T> {
+  const res = await apiFetch(path, { method: "DELETE" });
+  if (!res) throw new Error("Not authenticated");
+  return (await res.json()) as T;
+}
+
 export type UploadedFileMeta = {
   key: string;
   url: string;
