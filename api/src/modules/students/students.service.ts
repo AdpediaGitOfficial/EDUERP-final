@@ -19,6 +19,18 @@ function randomSuffix(): string {
     .slice(0, 8);
 }
 
+/** Letter grade from an overall percentage (standard Indian CBSE-style bands). */
+function gradeForPct(pct: number): string {
+  if (pct >= 91) return "A1";
+  if (pct >= 81) return "A2";
+  if (pct >= 71) return "B1";
+  if (pct >= 61) return "B2";
+  if (pct >= 51) return "C1";
+  if (pct >= 41) return "C2";
+  if (pct >= 33) return "D";
+  return "E";
+}
+
 export type AdmitStudentInput = {
   fullName: string;
   email: string;
@@ -140,6 +152,85 @@ export class StudentsService {
       data: { status },
     });
     return { updated: res.count };
+  }
+
+  /**
+   * Report-card data for a student (scoped like the dashboard: admin, the
+   * teacher of their class, their parent, or the student themselves). Aggregates
+   * exam results (optionally filtered by term) into a subject table plus overall
+   * percentage/grade, and a term-wide attendance summary.
+   */
+  async reportCard(actor: AuthUser, studentId: string, term?: string) {
+    const scope = this.scopeFilter(actor);
+    if (scope === null) throw new ForbiddenException();
+    const student = await this.prisma.students.findFirst({
+      where: { AND: [{ id: studentId }, scope] },
+      include: {
+        profiles: { select: { full_name: true } },
+        classes: { select: { name: true, section: true, academic_year: true } },
+      },
+    });
+    if (!student) throw new NotFoundException();
+
+    const [results, attnGroups] = await Promise.all([
+      this.prisma.exam_results.findMany({
+        where: { student_id: studentId, ...(term ? { exams: { term } } : {}) },
+        include: {
+          exams: {
+            select: {
+              name: true,
+              term: true,
+              exam_date: true,
+              max_marks: true,
+              subjects: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { exams: { exam_date: "asc" } },
+      }),
+      this.prisma.attendance.groupBy({
+        by: ["status"],
+        where: { student_id: studentId },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const subjects = results.map((r) => ({
+      subject: r.exams?.subjects?.name ?? "—",
+      exam: r.exams?.name ?? "—",
+      term: r.exams?.term ?? null,
+      marks: Number(r.marks_obtained),
+      max: Number(r.exams?.max_marks ?? 100),
+      grade: r.grade ?? null,
+    }));
+    const totalMarks = subjects.reduce((s, x) => s + x.marks, 0);
+    const totalMax = subjects.reduce((s, x) => s + x.max, 0);
+    const percentage = totalMax ? (totalMarks / totalMax) * 100 : 0;
+
+    let present = 0;
+    let total = 0;
+    for (const g of attnGroups) {
+      total += g._count._all;
+      if (g.status === "present" || g.status === "late") present += g._count._all;
+    }
+
+    return {
+      studentName: student.profiles?.full_name ?? null,
+      admissionNo: student.admission_no,
+      className: student.classes
+        ? `${student.classes.name}${student.classes.section ? " · " + student.classes.section : ""}`
+        : null,
+      academicYear: student.classes?.academic_year ?? null,
+      term: term ?? null,
+      subjects,
+      totalMarks,
+      totalMax,
+      percentage,
+      overallGrade: gradeForPct(percentage),
+      attendancePresent: present,
+      attendanceTotal: total,
+      attendancePct: total ? (present / total) * 100 : 0,
+    };
   }
 
   private scopeFilter(actor: AuthUser): Prisma.studentsWhereInput | null {

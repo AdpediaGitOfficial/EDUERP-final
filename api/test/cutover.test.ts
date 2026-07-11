@@ -2185,6 +2185,20 @@ describe("PDF receipts", () => {
     // Unauthenticated → 401.
     expect((await request(http).get(`/api/payments/${paymentId}/receipt.pdf`)).status).toBe(401);
   });
+
+  it("streams a student report-card PDF (scoped); non-uuid 400; unauth 401", async () => {
+    const studentId = (await get("/students?pageSize=1", "admin")).body.rows[0].id;
+
+    const pdf = await asPdf("admin", `/students/${studentId}/report-card.pdf`);
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers["content-type"]).toContain("application/pdf");
+    expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe("%PDF-");
+
+    expect((await get("/students/not-a-uuid/report-card.pdf", "admin")).status).toBe(400);
+    expect((await request(http).get(`/api/students/${studentId}/report-card.pdf`)).status).toBe(
+      401,
+    );
+  });
 });
 
 describe("Auth: password reset flow (B40 final cutover)", () => {

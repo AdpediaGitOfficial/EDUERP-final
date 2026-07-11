@@ -7,8 +7,11 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import type { Response } from "express";
+import { streamReportCardPdf } from "../../common/pdf/report-card-pdf";
 import {
   ArrayMinSize,
   IsArray,
@@ -185,6 +188,22 @@ export class StudentsController {
   @Get(":id/transport")
   transport(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.students.transport(actor, id);
+  }
+
+  // Downloadable PDF report card (scoped like the dashboard). ?term= filters to
+  // one term; omit for a full-year card.
+  @Get(":id/report-card.pdf")
+  async reportCard(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Res() res: Response,
+    @Query("term") term?: string,
+  ) {
+    const data = await this.students.reportCard(actor, id, term);
+    streamReportCardPdf(res, {
+      schoolName: process.env.SCHOOL_NAME || "Greenwood International School",
+      ...data,
+    });
   }
 
   @Get(":id")

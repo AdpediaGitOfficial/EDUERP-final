@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/lib/api/client";
+import { apiGet, apiFileObjectUrl } from "@/lib/api/client";
+import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -392,8 +393,16 @@ function StudentReportPage() {
               />
             </div>
           )}
-          <Button size="sm" onClick={() => window.print()}>
-            <Download className="size-4" /> <span className="hidden sm:inline">Download PDF</span>
+          <Button
+            size="sm"
+            onClick={async () => {
+              const url = await apiFileObjectUrl(`/students/${studentId}/report-card.pdf`);
+              if (url) window.open(url, "_blank", "noopener");
+              else toast.error("Could not open the report card");
+            }}
+          >
+            <Download className="size-4" />{" "}
+            <span className="hidden sm:inline">Report card PDF</span>
             <span className="sm:hidden">PDF</span>
           </Button>
         </div>
