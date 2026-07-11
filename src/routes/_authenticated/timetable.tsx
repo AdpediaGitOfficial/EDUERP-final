@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Clock, MapPin } from "lucide-react";
 
@@ -17,37 +17,11 @@ function TimetablePage() {
   const { data } = useQuery({
     enabled: !!user,
     queryKey: ["timetable", user?.id, user?.primaryRole],
-    queryFn: async () => {
-      let classIds: string[] = [];
-      if (user!.primaryRole === "student") {
-        const { data: s } = await supabase
-          .from("students")
-          .select("class_id")
-          .eq("profile_id", user!.id)
-          .maybeSingle();
-        if (s?.class_id) classIds = [s.class_id];
-      } else {
-        const { data: tc } = await supabase
-          .from("teacher_classes")
-          .select("class_id")
-          .eq("teacher_id", user!.id);
-        classIds = (tc ?? []).map((t) => t.class_id);
-      }
-      if (classIds.length === 0) return [];
-      const { data } = await supabase
-        .from("timetable")
-        .select(
-          "id, day_of_week, start_time, end_time, room, subjects(name), classes(name, section)",
-        )
-        .in("class_id", classIds)
-        .order("day_of_week")
-        .order("start_time");
-      return data ?? [];
-    },
+    queryFn: () => apiGet<any[]>("/timetable/mine"),
   });
 
   const byDay = (data ?? []).reduce<Record<number, any[]>>((acc, t) => {
-    (acc[t.day_of_week] ||= []).push(t);
+    (acc[t.dayOfWeek] ||= []).push(t);
     return acc;
   }, {});
 
@@ -71,15 +45,11 @@ function TimetablePage() {
               )}
               {(byDay[d] ?? []).map((t) => (
                 <div key={t.id} className="rounded-xl border p-3">
-                  <div className="font-medium text-sm">{t.subjects?.name ?? "Class"}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {t.classes?.name}
-                    {t.classes?.section && ` · ${t.classes.section}`}
-                  </div>
+                  <div className="font-medium text-sm">{t.subjectName ?? "Class"}</div>
+                  <div className="text-xs text-muted-foreground">{t.className}</div>
                   <div className="text-xs text-muted-foreground flex items-center gap-3 mt-1">
                     <span className="flex items-center gap-1">
-                      <Clock className="size-3" /> {t.start_time?.slice(0, 5)}–
-                      {t.end_time?.slice(0, 5)}
+                      <Clock className="size-3" /> {t.startTime}–{t.endTime}
                     </span>
                     {t.room && (
                       <span className="flex items-center gap-1">

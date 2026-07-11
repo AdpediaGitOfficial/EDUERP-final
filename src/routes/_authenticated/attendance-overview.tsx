@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,83 +32,61 @@ function Page() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [classId, setClassId] = useState<string>("");
 
-  const { data: classes } = useQuery({
-    queryKey: ["ao-classes"],
-    queryFn: async () =>
-      (await supabase.from("classes").select("id,name,section").order("name")).data ?? [],
+  const { data } = useQuery({
+    queryKey: ["ao-overview", date],
+    queryFn: () =>
+      apiGet<{
+        classes: { id: string; name: string; section: string | null }[];
+        perClass: {
+          id: string;
+          name: string;
+          total: number;
+          present: number;
+          absent: number;
+          late: number;
+          excused: number;
+        }[];
+        totals: {
+          total: number;
+          present: number;
+          absent: number;
+          late: number;
+          excused: number;
+          marked: number;
+        };
+        rows: {
+          student_id: string;
+          class_id: string;
+          status: string;
+          student_name: string | null;
+          roll_no: string | null;
+          admission_no: string | null;
+        }[];
+      }>(`/attendance/overview?date=${date}`),
   });
 
-  const { data: rows } = useQuery({
-    queryKey: ["ao-attendance", date],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("attendance")
-          .select(
-            "status,class_id,student_id,students(admission_no,roll_no,profiles(full_name)),classes(name,section)",
-          )
-          .eq("date", date)
-      ).data ?? [],
-  });
-
-  const { data: studentsAll } = useQuery({
-    queryKey: ["ao-students"],
-    queryFn: async () => (await supabase.from("students").select("id,class_id")).data ?? [],
-  });
+  const classes = data?.classes ?? [];
+  const rows = data?.rows ?? [];
 
   const byClass = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        name: string;
-        total: number;
-        present: number;
-        absent: number;
-        late: number;
-        excused: number;
-      }
-    >();
-    for (const c of classes ?? []) {
-      map.set(c.id, {
-        name: `${c.name}${c.section ? ` · ${c.section}` : ""}`,
-        total: 0,
-        present: 0,
-        absent: 0,
-        late: 0,
-        excused: 0,
-      });
-    }
-    for (const s of studentsAll ?? []) {
-      if (s.class_id && map.has(s.class_id)) map.get(s.class_id)!.total += 1;
-    }
-    for (const r of rows ?? []) {
-      if (!r.class_id || !map.has(r.class_id)) continue;
-      const entry = map.get(r.class_id)!;
-      (entry as any)[r.status] = ((entry as any)[r.status] ?? 0) + 1;
-    }
+    const perClassList = data?.perClass ?? [];
+    const map = new Map<string, (typeof perClassList)[number]>();
+    for (const c of perClassList) map.set(c.id, c);
     return map;
-  }, [classes, studentsAll, rows]);
+  }, [data]);
 
-  const totals = useMemo(() => {
-    let total = 0,
-      present = 0,
-      absent = 0,
-      late = 0,
-      excused = 0;
-    for (const v of byClass.values()) {
-      total += v.total;
-      present += v.present;
-      absent += v.absent;
-      late += v.late;
-      excused += v.excused;
-    }
-    const marked = present + absent + late + excused;
-    return { total, present, absent, late, excused, marked };
-  }, [byClass]);
+  const totals = data?.totals ?? {
+    total: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    excused: 0,
+    marked: 0,
+  };
 
   const drill = useMemo(() => {
     if (!classId) return [] as any[];
-    return (rows ?? []).filter((r: any) => r.class_id === classId);
+    return rows.filter((r) => r.class_id === classId);
   }, [rows, classId]);
 
   const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : 0);
@@ -246,9 +224,9 @@ function Page() {
               <tbody>
                 {drill.map((r: any) => (
                   <tr key={r.student_id} className="border-t">
-                    <td className="p-3 font-medium">{r.students?.profiles?.full_name}</td>
+                    <td className="p-3 font-medium">{r.student_name}</td>
                     <td className="p-3 text-muted-foreground font-mono">
-                      {r.students?.roll_no ?? r.students?.admission_no ?? "—"}
+                      {r.roll_no ?? r.admission_no ?? "—"}
                     </td>
                     <td className="p-3">
                       <Badge className={`${statMeta[r.status]?.cls ?? ""} border-0 capitalize`}>

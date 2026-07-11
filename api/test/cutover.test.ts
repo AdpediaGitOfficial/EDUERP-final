@@ -1740,3 +1740,49 @@ describe("Reports: admin analytics + generator (admin only)", () => {
     );
   });
 });
+
+describe("Admin views: payments list, attendance overview, my timetable", () => {
+  it("attendance overview is admin-only and shapes per-class + totals", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    expect((await get(`/attendance/overview?date=${today}`, "teacher")).status).toBe(403);
+    const o = await get(`/attendance/overview?date=${today}`, "admin");
+    expect(o.status).toBe(200);
+    expect(Array.isArray(o.body.classes)).toBe(true);
+    expect(Array.isArray(o.body.perClass)).toBe(true);
+    expect(o.body.totals).toHaveProperty("marked");
+    // marked == present + absent + late + excused
+    const t = o.body.totals;
+    expect(t.marked).toBe(t.present + t.absent + t.late + t.excused);
+    if (o.body.perClass[0]) {
+      for (const k of ["id", "name", "total", "present", "absent", "late", "excused"]) {
+        expect(o.body.perClass[0]).toHaveProperty(k);
+      }
+    }
+  });
+
+  it("my timetable self-resolves the caller's classes (HH:MM times)", async () => {
+    const tt = await get("/timetable/mine", "teacher");
+    expect(tt.status).toBe(200);
+    expect(Array.isArray(tt.body)).toBe(true);
+    if (tt.body[0]) {
+      expect(tt.body[0]).toHaveProperty("dayOfWeek");
+      // times are HH:MM strings, not raw timestamps
+      if (tt.body[0].startTime) expect(tt.body[0].startTime).toMatch(/^\d{2}:\d{2}$/);
+    }
+    // a student sees their own class timetable too
+    const st = await get("/timetable/mine", "student");
+    expect(st.status).toBe(200);
+    expect(Array.isArray(st.body)).toBe(true);
+  });
+
+  it("payments list (reused) returns the rows the admin payments page renders", async () => {
+    const p = await get("/payments?pageSize=5", "admin");
+    expect(p.status).toBe(200);
+    expect(p.body).toHaveProperty("rows");
+    if (p.body.rows[0]) {
+      for (const k of ["receiptNo", "studentName", "paidAt", "method", "amount"]) {
+        expect(p.body.rows[0]).toHaveProperty(k);
+      }
+    }
+  });
+});

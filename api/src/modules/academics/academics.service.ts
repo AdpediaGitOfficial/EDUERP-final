@@ -159,6 +159,53 @@ export class AcademicsService {
     return rows.map((s) => ({ id: s.id, classId: s.class_id, name: s.name, code: s.code }));
   }
 
+  /** The caller's own weekly timetable — student sees their class, staff their teaching classes. */
+  async myTimetable(actor: AuthUser) {
+    let classIds: string[] = [];
+    if (actor.roles.includes("student")) {
+      const s = await this.prisma.students.findFirst({
+        where: { profile_id: actor.id },
+        select: { class_id: true },
+      });
+      if (s?.class_id) classIds = [s.class_id];
+    } else {
+      const tc = await this.prisma.teacher_classes.findMany({
+        where: { teacher_id: actor.id },
+        select: { class_id: true },
+      });
+      classIds = tc.map((t) => t.class_id);
+    }
+    if (classIds.length === 0) return [];
+    return this.shapeTimetable(await this.timetableRows({ class_id: { in: classIds } }));
+  }
+
+  private timetableRows(where: any) {
+    return this.prisma.timetable.findMany({
+      where,
+      orderBy: [{ day_of_week: "asc" }, { start_time: "asc" }],
+      include: {
+        subjects: { select: { name: true } },
+        classes: { select: { name: true, section: true } },
+      },
+    });
+  }
+  private shapeTimetable(rows: any[]) {
+    const hhmm = (d: Date | null) => (d ? d.toISOString().slice(11, 16) : null);
+    return rows.map((t) => ({
+      id: t.id,
+      classId: t.class_id,
+      className: t.classes ? `${t.classes.name} ${t.classes.section ?? ""}`.trim() : null,
+      section: t.classes?.section ?? null,
+      subjectId: t.subject_id,
+      subjectName: t.subjects?.name ?? null,
+      teacherId: t.teacher_id,
+      dayOfWeek: t.day_of_week,
+      startTime: hhmm(t.start_time),
+      endTime: hhmm(t.end_time),
+      room: t.room,
+    }));
+  }
+
   async listTimetable(_actor: AuthUser, classId?: string, teacherId?: string) {
     const rows = await this.prisma.timetable.findMany({
       where: {

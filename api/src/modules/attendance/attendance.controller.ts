@@ -81,4 +81,9 @@ export class AttendanceController {
   markSelf(@CurrentUser() actor: AuthUser, @Body() dto: MarkSelfDto) {
     return this.attendance.markSelf(actor, dto.status);
   }
+
+  @Get("overview")
+  overview(@CurrentUser() actor: AuthUser, @Query("date") date: string) {
+    return this.attendance.overview(actor, date);
+  }
 }

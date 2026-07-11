@@ -167,4 +167,94 @@ export class AttendanceService {
     });
     return { ok: true, id: row.id };
   }
+
+  /** School-wide attendance for one date, per class + drill-down rows (admin, attendance_admin_all). */
+  async overview(actor: AuthUser, date: string) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const day = new Date(`${date.slice(0, 10)}T00:00:00.000Z`);
+    const next = new Date(day.getTime() + 86_400_000);
+
+    const [classes, enrolments, rows] = await Promise.all([
+      this.prisma.classes.findMany({
+        select: { id: true, name: true, section: true },
+        orderBy: [{ name: "asc" }, { section: "asc" }],
+      }),
+      this.prisma.students.findMany({ select: { class_id: true } }),
+      this.prisma.attendance.findMany({
+        where: { date: { gte: day, lt: next } },
+        select: {
+          student_id: true,
+          class_id: true,
+          status: true,
+          students: {
+            select: {
+              admission_no: true,
+              roll_no: true,
+              profiles: { select: { full_name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const perClass = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        section: string | null;
+        total: number;
+        present: number;
+        absent: number;
+        late: number;
+        excused: number;
+      }
+    >();
+    for (const c of classes) {
+      perClass.set(c.id, {
+        id: c.id,
+        name: `${c.name}${c.section ? ` · ${c.section}` : ""}`,
+        section: c.section,
+        total: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        excused: 0,
+      });
+    }
+    for (const s of enrolments) {
+      if (s.class_id && perClass.has(s.class_id)) perClass.get(s.class_id)!.total += 1;
+    }
+    for (const r of rows) {
+      if (!r.class_id || !perClass.has(r.class_id)) continue;
+      const e = perClass.get(r.class_id)! as any;
+      if (r.status in e) e[r.status] += 1;
+    }
+
+    const perClassArr = Array.from(perClass.values());
+    const totals = perClassArr.reduce(
+      (a, v) => ({
+        total: a.total + v.total,
+        present: a.present + v.present,
+        absent: a.absent + v.absent,
+        late: a.late + v.late,
+        excused: a.excused + v.excused,
+      }),
+      { total: 0, present: 0, absent: 0, late: 0, excused: 0 },
+    );
+
+    return {
+      classes: classes.map((c) => ({ id: c.id, name: c.name, section: c.section })),
+      perClass: perClassArr,
+      totals: { ...totals, marked: totals.present + totals.absent + totals.late + totals.excused },
+      rows: rows.map((r) => ({
+        student_id: r.student_id,
+        class_id: r.class_id,
+        status: r.status,
+        student_name: r.students?.profiles?.full_name ?? null,
+        roll_no: r.students?.roll_no ?? null,
+        admission_no: r.students?.admission_no ?? null,
+      })),
+    };
+  }
 }

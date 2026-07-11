@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
 
@@ -18,14 +18,18 @@ export const Route = createFileRoute("/_authenticated/payments")({
 function PaymentsPage() {
   const { data } = useQuery({
     queryKey: ["payments-list"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("payments")
-          .select("*, students(admission_no, profiles(full_name))")
-          .order("paid_at", { ascending: false })
-          .limit(200)
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/payments?pageSize=200");
+      return res.rows.map((p) => ({
+        id: p.id,
+        receipt_no: p.receiptNo,
+        student_name: p.studentName,
+        paid_at: p.paidAt,
+        method: p.method,
+        reference: p.reference,
+        amount: p.amount,
+      }));
+    },
   });
   const total = (data ?? []).reduce((s, p) => s + Number(p.amount), 0);
   return (
@@ -52,7 +56,7 @@ function PaymentsPage() {
               {(data ?? []).map((p: any) => (
                 <tr key={p.id} className="border-t">
                   <td className="p-3 font-mono text-xs">{p.receipt_no}</td>
-                  <td className="p-3">{p.students?.profiles?.full_name}</td>
+                  <td className="p-3">{p.student_name}</td>
                   <td className="p-3 text-muted-foreground">
                     {format(new Date(p.paid_at), "MMM d, yyyy")}
                   </td>
