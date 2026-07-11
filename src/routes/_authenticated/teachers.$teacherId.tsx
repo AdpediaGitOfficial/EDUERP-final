@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { RequireRole } from "@/components/require-role";
 import { Card } from "@/components/ui/card";
@@ -52,200 +52,27 @@ function Empty({ colSpan, msg }: { colSpan: number; msg: string }) {
 function TeacherDetailPage() {
   const { teacherId } = Route.useParams();
 
-  const { data: teacher } = useQuery({
-    queryKey: ["teacher", teacherId],
-    queryFn: async () =>
-      (await supabase.from("teachers").select("*").eq("id", teacherId).maybeSingle()).data,
+  const { data: detail } = useQuery({
+    queryKey: ["teacher-detail", teacherId],
+    queryFn: () => apiGet<any>(`/teachers/${teacherId}/detail`),
   });
-
-  const staffId = teacher?.staff_id ?? null;
-
-  const { data: staff } = useQuery({
-    enabled: !!staffId,
-    queryKey: ["teacher-staff", staffId],
-    queryFn: async () =>
-      (await supabase.from("staff").select("*").eq("id", staffId!).maybeSingle()).data,
-  });
-
-  const profileId = staff?.profile_id ?? null;
-
-  const { data: qualifications } = useQuery({
-    queryKey: ["teacher-quals", teacherId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_qualifications")
-          .select("*")
-          .eq("teacher_id", teacherId)
-          .order("year", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: experience } = useQuery({
-    queryKey: ["teacher-exp", teacherId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_experience")
-          .select("*")
-          .eq("teacher_id", teacherId)
-          .order("start_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: classes } = useQuery({
-    enabled: !!profileId,
-    queryKey: ["teacher-classes", profileId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_classes")
-          .select("id, class_id, classes(id,name,section,academic_year)")
-          .eq("teacher_id", profileId!)
-      ).data ?? [],
-  });
-  const classIds = (classes ?? []).map((c: any) => c.class_id);
-  const { data: timetable } = useQuery({
-    enabled: !!profileId,
-    queryKey: ["teacher-timetable", profileId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("timetable")
-          .select("*, classes(name,section), subjects(name,code)")
-          .eq("teacher_id", profileId!)
-          .order("day_of_week")
-      ).data ?? [],
-  });
-  const { data: homework } = useQuery({
-    enabled: !!profileId,
-    queryKey: ["teacher-homework", profileId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("homework")
-          .select("*, classes(name,section), subjects(name)")
-          .eq("teacher_id", profileId!)
-          .order("assigned_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: exams } = useQuery({
-    enabled: classIds.length > 0,
-    queryKey: ["teacher-exams", classIds.join(",")],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("exams")
-          .select("*, classes(name,section), subjects(name), exam_results(id,marks_obtained,grade)")
-          .in("class_id", classIds)
-          .order("exam_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: attendance } = useQuery({
-    queryKey: ["teacher-att", teacherId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_attendance")
-          .select("*")
-          .eq("teacher_id", teacherId)
-          .order("date", { ascending: false })
-          .limit(60)
-      ).data ?? [],
-  });
-  const { data: reviews } = useQuery({
-    queryKey: ["teacher-reviews", teacherId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_performance_reviews")
-          .select("*, profiles!teacher_performance_reviews_reviewer_id_fkey(full_name)")
-          .eq("teacher_id", teacherId)
-          .order("period", { ascending: false })
-      ).data ?? [],
-  });
-
-  // Staff-scoped data
-  const { data: payroll } = useQuery({
-    enabled: !!staffId,
-    queryKey: ["teacher-payroll", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("payroll_runs")
-          .select("*")
-          .eq("staff_id", staffId!)
-          .order("month", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: leaves } = useQuery({
-    enabled: !!staffId,
-    queryKey: ["teacher-leaves", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("leave_requests")
-          .select("*")
-          .eq("staff_id", staffId!)
-          .order("start_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: docs } = useQuery({
-    enabled: !!staffId,
-    queryKey: ["teacher-docs", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("staff_documents")
-          .select("*")
-          .eq("staff_id", staffId!)
-          .order("uploaded_at", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: history } = useQuery({
-    enabled: !!staffId,
-    queryKey: ["teacher-history", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("staff_employment_history")
-          .select("*")
-          .eq("staff_id", staffId!)
-          .order("effective_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: assets } = useQuery({
-    enabled: !!profileId,
-    queryKey: ["teacher-assets", profileId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("assets")
-          .select("id,asset_code,name,category,status,condition,updated_at")
-          .eq("assigned_to_profile_id", profileId!)
-      ).data ?? [],
-  });
-  const { data: training } = useQuery({
-    enabled: !!staffId,
-    queryKey: ["teacher-training", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("training_attendance")
-          .select("*, training_programs(name,start_date,end_date,provider)")
-          .eq("staff_id", staffId!)
-      ).data ?? [],
-  });
-  const { data: announcements } = useQuery({
-    enabled: !!profileId,
-    queryKey: ["teacher-announcements", profileId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("announcements")
-          .select("id,title,body,audience,created_at,class_id")
-          .eq("author_id", profileId!)
-          .order("created_at", { ascending: false })
-      ).data ?? [],
-  });
+  const teacher = detail?.teacher ?? null;
+  const staff = detail?.staff ?? null;
+  const qualifications = (detail?.qualifications ?? []) as any[];
+  const experience = (detail?.experience ?? []) as any[];
+  const classes = (detail?.classes ?? []) as any[];
+  const timetable = (detail?.timetable ?? []) as any[];
+  const homework = (detail?.homework ?? []) as any[];
+  const exams = (detail?.exams ?? []) as any[];
+  const attendance = (detail?.attendance ?? []) as any[];
+  const reviews = (detail?.reviews ?? []) as any[];
+  const payroll = (detail?.payroll ?? []) as any[];
+  const leaves = (detail?.leaves ?? []) as any[];
+  const docs = (detail?.docs ?? []) as any[];
+  const history = (detail?.history ?? []) as any[];
+  const assets = (detail?.assets ?? []) as any[];
+  const training = (detail?.training ?? []) as any[];
+  const announcements = (detail?.announcements ?? []) as any[];
 
   if (!teacher) {
     return (

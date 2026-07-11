@@ -33,6 +33,11 @@ export class StaffController {
     return this.staff.listTeachers(actor, page ?? 1, Math.min(pageSize ?? 50, 200), q);
   }
 
+  @Get("teachers/:id/detail")
+  teacherDetail(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.staff.teacherDetail(actor, id);
+  }
+
   @Get("teachers/:id")
   getTeacher(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.staff.getTeacher(actor, id);

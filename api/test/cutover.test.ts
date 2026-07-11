@@ -1935,3 +1935,36 @@ describe("Class detail bundle (admin/hr class page)", () => {
     if (d.body.students[0]) expect(d.body.students[0]).toHaveProperty("profiles");
   });
 });
+
+describe("Teacher detail bundle (admin/HR teacher page, 17 tables)", () => {
+  it("returns every section resolved via teacher->staff->profile; non-admin/hr blocked", async () => {
+    const t = (await get("/teachers?pageSize=1", "admin")).body.rows[0];
+    expect((await get(`/teachers/${t.id}/detail`, "student")).status).toBe(403);
+    const d = await get(`/teachers/${t.id}/detail`, "admin");
+    expect(d.status).toBe(200);
+    for (const k of [
+      "teacher",
+      "staff",
+      "qualifications",
+      "experience",
+      "classes",
+      "timetable",
+      "homework",
+      "exams",
+      "attendance",
+      "reviews",
+      "payroll",
+      "leaves",
+      "docs",
+      "history",
+      "assets",
+      "training",
+      "announcements",
+    ]) {
+      expect(d.body).toHaveProperty(k);
+    }
+    expect(d.body.teacher.id).toBe(t.id);
+    expect(Array.isArray(d.body.timetable)).toBe(true);
+    expect(Array.isArray(d.body.payroll)).toBe(true);
+  });
+});
