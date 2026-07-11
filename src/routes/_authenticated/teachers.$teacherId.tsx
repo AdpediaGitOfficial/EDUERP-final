@@ -1,14 +1,35 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/lib/api/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api/client";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { RequireRole } from "@/components/require-role";
+import { useConfirm } from "@/components/confirm-dialog";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { badgeClass, fmtDate, fmtDateTime, money, niceLabel, downloadCsv } from "@/lib/module-util";
-import { Download, Printer, Mail, Phone } from "lucide-react";
+import { badgeClass, fmtDate, money, niceLabel, downloadCsv } from "@/lib/module-util";
+import { Download, Printer, Mail, Phone, Pencil, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/teachers/$teacherId")({
   component: () => (
@@ -19,6 +40,7 @@ export const Route = createFileRoute("/_authenticated/teachers/$teacherId")({
 });
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = [1, 2, 3, 4, 5];
 
 function initials(name?: string | null) {
   if (!name) return "?";
@@ -49,21 +71,247 @@ function Empty({ colSpan, msg }: { colSpan: number; msg: string }) {
   );
 }
 
+/* ---------------------------- generic form dialog ---------------------------- */
+type FieldSpec = {
+  name: string;
+  label: string;
+  kind?: "text" | "number" | "date" | "textarea" | "select";
+  options?: { value: string; label: string }[];
+  required?: boolean;
+  placeholder?: string;
+  full?: boolean;
+};
+
+function RecordFormDialog({
+  open,
+  onOpenChange,
+  title,
+  fields,
+  initial,
+  submitLabel,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  title: string;
+  fields: FieldSpec[];
+  initial?: Record<string, string>;
+  submitLabel?: string;
+  onSubmit: (values: Record<string, string>) => Promise<void>;
+}) {
+  const [values, setValues] = useState<Record<string, string>>(initial ?? {});
+  const [saving, setSaving] = useState(false);
+  // Reset when reopened with new initial values.
+  const key = open ? JSON.stringify(initial ?? {}) : "";
+  const [seenKey, setSeenKey] = useState("");
+  if (open && key !== seenKey) {
+    setValues(initial ?? {});
+    setSeenKey(key);
+  }
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSubmit(values);
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {fields.map((f) => {
+            const fid = `fld-${f.name}`;
+            return (
+              <div key={f.name} className={`space-y-1.5 ${f.full ? "sm:col-span-2" : ""}`}>
+                <Label htmlFor={fid}>{f.label}</Label>
+                {f.kind === "textarea" ? (
+                  <Textarea
+                    id={fid}
+                    value={values[f.name] ?? ""}
+                    onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                    placeholder={f.placeholder}
+                  />
+                ) : f.kind === "select" ? (
+                  <Select
+                    value={values[f.name] ?? ""}
+                    onValueChange={(val) => setValues((v) => ({ ...v, [f.name]: val }))}
+                  >
+                    <SelectTrigger id={fid} aria-label={f.label}>
+                      <SelectValue placeholder="Select…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(f.options ?? []).map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id={fid}
+                    type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
+                    value={values[f.name] ?? ""}
+                    required={f.required}
+                    placeholder={f.placeholder}
+                    onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                  />
+                )}
+              </div>
+            );
+          })}
+          <DialogFooter className="sm:col-span-2">
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving…" : (submitLabel ?? "Save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------- generic collection (CRUD) ------------------------- */
+function CollectionCard<T extends { id: string }>({
+  title,
+  teacherId,
+  path,
+  rows,
+  columns,
+  addTitle,
+  addFields,
+  mapAdd,
+  canManage,
+  emptyMsg,
+  onChanged,
+}: {
+  title: string;
+  teacherId: string;
+  path: string; // e.g. "qualifications"
+  rows: T[];
+  columns: { header: string; cell: (row: T) => React.ReactNode }[];
+  addTitle: string;
+  addFields: FieldSpec[];
+  mapAdd: (v: Record<string, string>) => Record<string, unknown>;
+  canManage: boolean;
+  emptyMsg: string;
+  onChanged: () => void;
+}) {
+  const confirm = useConfirm();
+  const [adding, setAdding] = useState(false);
+
+  const del = async (row: T) => {
+    if (
+      !(await confirm({
+        title: `Remove this ${title.toLowerCase()} entry?`,
+        destructive: true,
+        confirmText: "Remove",
+      }))
+    )
+      return;
+    try {
+      await apiDelete(`/teachers/${teacherId}/${path}/${row.id}`);
+      toast.success("Removed.");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Remove failed");
+    }
+  };
+
+  return (
+    <Card className="rounded-2xl overflow-hidden">
+      <div className="p-4 border-b flex items-center justify-between">
+        <div className="font-medium text-sm">{title}</div>
+        {canManage && (
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Plus className="size-4 mr-1" /> Add
+          </Button>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
+          <thead className="bg-muted/40">
+            <tr className="text-left">
+              {columns.map((c) => (
+                <th key={c.header} className="p-3">
+                  {c.header}
+                </th>
+              ))}
+              {canManage && <th className="p-3 w-10" />}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-t">
+                {columns.map((c) => (
+                  <td key={c.header} className="p-3 align-top">
+                    {c.cell(row)}
+                  </td>
+                ))}
+                {canManage && (
+                  <td className="p-3">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove entry"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => del(row)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <Empty colSpan={columns.length + (canManage ? 1 : 0)} msg={emptyMsg} />
+            )}
+          </tbody>
+        </table>
+      </div>
+      <RecordFormDialog
+        open={adding}
+        onOpenChange={setAdding}
+        title={addTitle}
+        fields={addFields}
+        submitLabel="Add"
+        onSubmit={async (v) => {
+          await apiPost(`/teachers/${teacherId}/${path}`, mapAdd(v));
+          toast.success("Added.");
+          onChanged();
+        }}
+      />
+    </Card>
+  );
+}
+
 function TeacherDetailPage() {
   const { teacherId } = Route.useParams();
+  const qc = useQueryClient();
+  const { user } = useCurrentUser();
+  const canManage = !!user?.roles.some((r) => r === "admin" || r === "hr");
 
   const { data: detail } = useQuery({
     queryKey: ["teacher-detail", teacherId],
     queryFn: () => apiGet<any>(`/teachers/${teacherId}/detail`),
   });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["teacher-detail", teacherId] });
+
   const teacher = detail?.teacher ?? null;
   const staff = detail?.staff ?? null;
   const qualifications = (detail?.qualifications ?? []) as any[];
   const experience = (detail?.experience ?? []) as any[];
   const classes = (detail?.classes ?? []) as any[];
-  const timetable = (detail?.timetable ?? []) as any[];
-  const homework = (detail?.homework ?? []) as any[];
-  const exams = (detail?.exams ?? []) as any[];
   const attendance = (detail?.attendance ?? []) as any[];
   const reviews = (detail?.reviews ?? []) as any[];
   const payroll = (detail?.payroll ?? []) as any[];
@@ -72,7 +320,17 @@ function TeacherDetailPage() {
   const history = (detail?.history ?? []) as any[];
   const assets = (detail?.assets ?? []) as any[];
   const training = (detail?.training ?? []) as any[];
-  const announcements = (detail?.announcements ?? []) as any[];
+
+  const [editCore, setEditCore] = useState(false);
+  const [editPersonal, setEditPersonal] = useState(false);
+  const [editEmployment, setEditEmployment] = useState(false);
+  const [editBank, setEditBank] = useState(false);
+
+  const patchStaff = async (body: Record<string, unknown>) => {
+    await apiPatch(`/teachers/${teacherId}/staff`, body);
+    toast.success("Saved.");
+    invalidate();
+  };
 
   if (!teacher) {
     return (
@@ -112,9 +370,13 @@ function TeacherDetailPage() {
         action={
           <div className="flex items-center gap-2">
             <Badge className={badgeClass(teacher.status)}>{niceLabel(teacher.status)}</Badge>
+            {canManage && (
+              <Button size="sm" variant="outline" onClick={() => setEditCore(true)}>
+                <Pencil className="size-4 mr-1" /> Edit
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={() => window.print()}>
-              <Printer className="size-4 mr-1" />
-              Print
+              <Printer className="size-4 mr-1" /> Print
             </Button>
           </div>
         }
@@ -168,7 +430,7 @@ function TeacherDetailPage() {
       </Card>
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="personal">Personal</TabsTrigger>
           <TabsTrigger value="employment">Employment</TabsTrigger>
@@ -176,26 +438,22 @@ function TeacherDetailPage() {
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="leave">Leave</TabsTrigger>
           <TabsTrigger value="timetable">Timetable</TabsTrigger>
-          <TabsTrigger value="academics">Academics</TabsTrigger>
-          <TabsTrigger value="homework">Homework</TabsTrigger>
-          <TabsTrigger value="exams">Exams</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="training">Training</TabsTrigger>
-          <TabsTrigger value="communication">Communication</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
         {/* OVERVIEW */}
         <TabsContent value="overview" className="pt-4">
           <Card className="p-6 rounded-2xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-            <Field label="Employee ID" value={staff?.employee_code ?? "—"} />
+            <Field label="Employee ID" value={staff?.employee_code ?? teacher.id.slice(0, 8)} />
             <Field label="Staff Code" value={teacher.id.slice(0, 8)} />
             <Field label="Full name" value={teacher.full_name} />
             <Field label="Designation" value={staff?.designation ?? "Teacher"} />
-            <Field label="Department" value={staff?.department ?? "—"} />
-            <Field label="Qualification" value={teacher.qualification ?? "—"} />
+            <Field label="Department" value={staff?.department ?? "Academic"} />
+            <Field label="Qualification" value={teacher.qualification} />
             <Field label="Experience" value={`${teacher.experience_years} yrs`} />
             <Field
               label="Employment status"
@@ -203,197 +461,258 @@ function TeacherDetailPage() {
                 <Badge className={badgeClass(teacher.status)}>{niceLabel(teacher.status)}</Badge>
               }
             />
-            <Field label="Joining date" value={fmtDate(teacher.joined_date)} />
+            <Field label="Joining date" value={fmtDate(staff?.join_date ?? teacher.joined_date)} />
             <Field label="Email" value={teacher.email} />
             <Field label="Phone" value={teacher.phone ?? "—"} />
             <Field
               label="Reporting manager"
-              value={staff?.reporting_manager_id ? staff.reporting_manager_id.slice(0, 8) : "—"}
+              value={staff?.reporting_manager_id ? "Assigned" : "—"}
             />
           </Card>
         </TabsContent>
 
         {/* PERSONAL */}
-        <TabsContent value="personal" className="pt-4">
-          <Card className="p-6 rounded-2xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-            <Field label="Date of birth" value={fmtDate(staff?.dob)} />
-            <Field label="Blood group" value={staff?.blood_group ?? "—"} />
-            <Field label="Address" value={staff?.address ?? "—"} />
-            <Field
-              label="Emergency contact"
-              value={
-                staff?.emergency_contact
-                  ? `${(staff.emergency_contact as any).name} · ${(staff.emergency_contact as any).phone}`
-                  : "—"
-              }
-            />
-            <Field
-              label="Medical info"
-              value={staff?.medical_info ? JSON.stringify(staff.medical_info) : "—"}
-            />
-            <Field label="Skills" value={(staff?.skills ?? []).join(", ") || "—"} />
+        <TabsContent value="personal" className="pt-4 space-y-4">
+          <Card className="p-6 rounded-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="font-medium text-sm">Personal details</div>
+              {canManage && (
+                <Button size="sm" variant="outline" onClick={() => setEditPersonal(true)}>
+                  <Pencil className="size-4 mr-1" /> Edit
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+              <Field label="Date of birth" value={fmtDate(staff?.dob)} />
+              <Field label="Blood group" value={staff?.blood_group ?? "—"} />
+              <Field label="Address" value={staff?.address ?? "—"} />
+              <Field
+                label="Emergency contact"
+                value={
+                  staff?.emergency_contact
+                    ? `${(staff.emergency_contact as any).name ?? ""} · ${(staff.emergency_contact as any).phone ?? ""}`
+                    : "—"
+                }
+              />
+              <Field label="Medical info" value={(staff?.medical_info as any)?.notes ?? "—"} />
+              <Field label="Skills" value={(staff?.skills ?? []).join(", ") || "—"} />
+            </div>
           </Card>
         </TabsContent>
 
         {/* EMPLOYMENT */}
         <TabsContent value="employment" className="pt-4 space-y-4">
-          <Card className="p-6 rounded-2xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-            <Field label="Department" value={staff?.department ?? "—"} />
-            <Field label="Designation" value={staff?.designation ?? "—"} />
-            <Field label="Employment type" value={staff ? niceLabel(staff.employment_type) : "—"} />
-            <Field
-              label="Confirmation"
-              value={staff ? niceLabel(staff.confirmation_status) : "—"}
-            />
-            <Field label="Probation end" value={fmtDate(staff?.probation_end_date)} />
-            <Field label="Join date" value={fmtDate(staff?.join_date)} />
-          </Card>
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b font-medium text-sm">Promotion & transfer history</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Event</th>
-                    <th className="p-3">From</th>
-                    <th className="p-3">To</th>
-                    <th className="p-3">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(history ?? []).map((h: any) => (
-                    <tr key={h.id} className="border-t">
-                      <td className="p-3">{fmtDate(h.effective_date)}</td>
-                      <td className="p-3">{niceLabel(h.event_type)}</td>
-                      <td className="p-3">{h.from_value ?? "—"}</td>
-                      <td className="p-3">{h.to_value ?? "—"}</td>
-                      <td className="p-3 text-xs text-muted-foreground">{h.notes ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {(history ?? []).length === 0 && <Empty colSpan={5} msg="No history records." />}
-                </tbody>
-              </table>
+          <Card className="p-6 rounded-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="font-medium text-sm">Employment details</div>
+              {canManage && (
+                <Button size="sm" variant="outline" onClick={() => setEditEmployment(true)}>
+                  <Pencil className="size-4 mr-1" /> Edit
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+              <Field label="Department" value={staff?.department ?? "—"} />
+              <Field label="Designation" value={staff?.designation ?? "—"} />
+              <Field
+                label="Employment type"
+                value={staff ? niceLabel(staff.employment_type) : "—"}
+              />
+              <Field
+                label="Confirmation"
+                value={staff ? niceLabel(staff.confirmation_status) : "—"}
+              />
+              <Field label="Probation end" value={fmtDate(staff?.probation_end_date)} />
+              <Field label="Join date" value={fmtDate(staff?.join_date)} />
             </div>
           </Card>
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b font-medium text-sm">Prior experience</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Employer</th>
-                    <th className="p-3">Role</th>
-                    <th className="p-3">From</th>
-                    <th className="p-3">To</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(experience ?? []).map((e: any) => (
-                    <tr key={e.id} className="border-t">
-                      <td className="p-3">{e.employer}</td>
-                      <td className="p-3">{e.role ?? "—"}</td>
-                      <td className="p-3">{fmtDate(e.start_date)}</td>
-                      <td className="p-3">{fmtDate(e.end_date)}</td>
-                    </tr>
-                  ))}
-                  {(experience ?? []).length === 0 && (
-                    <Empty colSpan={4} msg="No prior experience recorded." />
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b font-medium text-sm">Qualifications</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Degree</th>
-                    <th className="p-3">Institution</th>
-                    <th className="p-3">Year</th>
-                    <th className="p-3">Certification</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(qualifications ?? []).map((q: any) => (
-                    <tr key={q.id} className="border-t">
-                      <td className="p-3">{q.degree}</td>
-                      <td className="p-3">{q.institution ?? "—"}</td>
-                      <td className="p-3">{q.year ?? "—"}</td>
-                      <td className="p-3">{q.certification ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {(qualifications ?? []).length === 0 && (
-                    <Empty colSpan={4} msg="No qualifications recorded." />
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+
+          <CollectionCard
+            title="Promotion & transfer history"
+            teacherId={teacherId}
+            path="history"
+            rows={history}
+            canManage={canManage}
+            onChanged={invalidate}
+            emptyMsg="No history records."
+            columns={[
+              { header: "Date", cell: (h: any) => fmtDate(h.effective_date) },
+              { header: "Event", cell: (h: any) => niceLabel(h.event_type) },
+              { header: "From", cell: (h: any) => h.from_value ?? "—" },
+              { header: "To", cell: (h: any) => h.to_value ?? "—" },
+              {
+                header: "Notes",
+                cell: (h: any) => (
+                  <span className="text-xs text-muted-foreground">{h.notes ?? "—"}</span>
+                ),
+              },
+            ]}
+            addTitle="Add history record"
+            addFields={[
+              {
+                name: "eventType",
+                label: "Event",
+                kind: "select",
+                required: true,
+                options: ["promotion", "transfer", "revised", "increment", "warning"].map((v) => ({
+                  value: v,
+                  label: niceLabel(v),
+                })),
+              },
+              { name: "effectiveDate", label: "Effective date", kind: "date", required: true },
+              { name: "fromValue", label: "From" },
+              { name: "toValue", label: "To" },
+              { name: "notes", label: "Notes", full: true },
+            ]}
+            mapAdd={(v) => ({
+              eventType: v.eventType,
+              effectiveDate: v.effectiveDate,
+              fromValue: v.fromValue || undefined,
+              toValue: v.toValue || undefined,
+              notes: v.notes || undefined,
+            })}
+          />
+
+          <CollectionCard
+            title="Prior experience"
+            teacherId={teacherId}
+            path="experience"
+            rows={experience}
+            canManage={canManage}
+            onChanged={invalidate}
+            emptyMsg="No prior experience recorded."
+            columns={[
+              { header: "Employer", cell: (e: any) => e.employer },
+              { header: "Role", cell: (e: any) => e.role ?? "—" },
+              { header: "From", cell: (e: any) => fmtDate(e.start_date) },
+              { header: "To", cell: (e: any) => fmtDate(e.end_date) },
+            ]}
+            addTitle="Add prior experience"
+            addFields={[
+              { name: "employer", label: "Employer", required: true },
+              { name: "role", label: "Role" },
+              { name: "startDate", label: "From", kind: "date" },
+              { name: "endDate", label: "To", kind: "date" },
+            ]}
+            mapAdd={(v) => ({
+              employer: v.employer,
+              role: v.role || undefined,
+              startDate: v.startDate || undefined,
+              endDate: v.endDate || undefined,
+            })}
+          />
+
+          <CollectionCard
+            title="Qualifications"
+            teacherId={teacherId}
+            path="qualifications"
+            rows={qualifications}
+            canManage={canManage}
+            onChanged={invalidate}
+            emptyMsg="No qualifications recorded."
+            columns={[
+              { header: "Degree", cell: (q: any) => q.degree },
+              { header: "Institution", cell: (q: any) => q.institution ?? "—" },
+              { header: "Year", cell: (q: any) => q.year ?? "—" },
+              { header: "Certification", cell: (q: any) => q.certification ?? "—" },
+            ]}
+            addTitle="Add qualification"
+            addFields={[
+              { name: "degree", label: "Degree", required: true },
+              { name: "institution", label: "Institution" },
+              { name: "year", label: "Year", kind: "number" },
+              { name: "certification", label: "Certification" },
+            ]}
+            mapAdd={(v) => ({
+              degree: v.degree,
+              institution: v.institution || undefined,
+              year: v.year ? Number(v.year) : undefined,
+              certification: v.certification || undefined,
+            })}
+          />
         </TabsContent>
 
         {/* PAYROLL */}
         <TabsContent value="payroll" className="pt-4 space-y-4">
-          <Card className="p-6 rounded-2xl grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <Field label="Latest month" value={payroll?.[0] ? fmtDate(payroll[0].month) : "—"} />
-            <Field label="Latest net" value={payroll?.[0] ? money(payroll[0].net_salary) : "—"} />
-            <Field
-              label="Bank"
-              value={staff?.bank_details ? `${(staff.bank_details as any).bank}` : "—"}
-            />
-            <Field
-              label="Account"
-              value={staff?.bank_details ? `${(staff.bank_details as any).account}` : "—"}
-            />
-          </Card>
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="font-medium text-sm">Payroll history</div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => downloadCsv(payroll ?? [], `payroll-${teacher.full_name}`)}
-              >
-                <Download className="size-4 mr-1" /> Export CSV
-              </Button>
+          <Card className="p-6 rounded-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="font-medium text-sm">Bank & latest pay</div>
+              {canManage && (
+                <Button size="sm" variant="outline" onClick={() => setEditBank(true)}>
+                  <Pencil className="size-4 mr-1" /> Edit bank
+                </Button>
+              )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Month</th>
-                    <th className="p-3">Base</th>
-                    <th className="p-3">Allowances</th>
-                    <th className="p-3">Deductions</th>
-                    <th className="p-3">Overtime</th>
-                    <th className="p-3">Net</th>
-                    <th className="p-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(payroll ?? []).map((p: any) => (
-                    <tr key={p.id} className="border-t">
-                      <td className="p-3">{fmtDate(p.month)}</td>
-                      <td className="p-3">{money(p.base_salary)}</td>
-                      <td className="p-3">{money(p.allowances)}</td>
-                      <td className="p-3">{money(p.deductions)}</td>
-                      <td className="p-3">{money((p as any).overtime ?? 0)}</td>
-                      <td className="p-3 font-medium">{money(p.net_salary)}</td>
-                      <td className="p-3">
-                        <Badge className={badgeClass(p.status)}>{niceLabel(p.status)}</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                  {(payroll ?? []).length === 0 && <Empty colSpan={7} msg="No payroll records." />}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <Field label="Latest month" value={payroll?.[0] ? fmtDate(payroll[0].month) : "—"} />
+              <Field label="Latest net" value={payroll?.[0] ? money(payroll[0].net_salary) : "—"} />
+              <Field label="Bank" value={(staff?.bank_details as any)?.bank ?? "—"} />
+              <Field label="Account" value={(staff?.bank_details as any)?.account ?? "—"} />
             </div>
           </Card>
+
+          <CollectionCard
+            title="Payroll history"
+            teacherId={teacherId}
+            path="payroll"
+            rows={payroll}
+            canManage={canManage}
+            onChanged={invalidate}
+            emptyMsg="No payroll records."
+            columns={[
+              { header: "Month", cell: (p: any) => fmtDate(p.month) },
+              { header: "Base", cell: (p: any) => money(p.base_salary) },
+              { header: "Allowances", cell: (p: any) => money(p.allowances) },
+              { header: "Deductions", cell: (p: any) => money(p.deductions) },
+              {
+                header: "Net",
+                cell: (p: any) => <span className="font-medium">{money(p.net_salary)}</span>,
+              },
+              {
+                header: "Status",
+                cell: (p: any) => (
+                  <Badge className={badgeClass(p.status)}>{niceLabel(p.status)}</Badge>
+                ),
+              },
+            ]}
+            addTitle="Add / update payroll (by month)"
+            addFields={[
+              { name: "month", label: "Month", kind: "date", required: true },
+              { name: "baseSalary", label: "Base salary", kind: "number", required: true },
+              { name: "allowances", label: "Allowances", kind: "number" },
+              { name: "deductions", label: "Deductions", kind: "number" },
+              {
+                name: "status",
+                label: "Status",
+                kind: "select",
+                options: ["pending", "processed", "paid"].map((v) => ({
+                  value: v,
+                  label: niceLabel(v),
+                })),
+              },
+              { name: "payDate", label: "Pay date", kind: "date" },
+            ]}
+            mapAdd={(v) => ({
+              month: v.month,
+              baseSalary: Number(v.baseSalary),
+              allowances: v.allowances ? Number(v.allowances) : undefined,
+              deductions: v.deductions ? Number(v.deductions) : undefined,
+              status: v.status || undefined,
+              payDate: v.payDate || undefined,
+            })}
+          />
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => downloadCsv(payroll ?? [], `payroll-${teacher.full_name}`)}
+            >
+              <Download className="size-4 mr-1" /> Export CSV
+            </Button>
+          </div>
         </TabsContent>
 
-        {/* ATTENDANCE */}
+        {/* ATTENDANCE (read-only — sourced from HR attendance) */}
         <TabsContent value="attendance" className="pt-4 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-5 rounded-2xl">
@@ -415,7 +734,7 @@ function TeacherDetailPage() {
           </div>
           <Card className="rounded-2xl overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
-              <div className="font-medium text-sm">Daily attendance (last 60)</div>
+              <div className="font-medium text-sm">Daily attendance (last 90)</div>
               <Button
                 size="sm"
                 variant="outline"
@@ -452,7 +771,7 @@ function TeacherDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* LEAVE */}
+        {/* LEAVE (read-only — managed by the leave workflow) */}
         <TabsContent value="leave" className="pt-4 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-5 rounded-2xl">
@@ -507,244 +826,90 @@ function TeacherDetailPage() {
 
         {/* TIMETABLE */}
         <TabsContent value="timetable" className="pt-4">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b font-medium text-sm">Weekly timetable</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Day</th>
-                    <th className="p-3">Time</th>
-                    <th className="p-3">Class</th>
-                    <th className="p-3">Subject</th>
-                    <th className="p-3">Room</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(timetable ?? []).map((t: any) => (
-                    <tr key={t.id} className="border-t">
-                      <td className="p-3">{DAYS[t.day_of_week] ?? t.day_of_week}</td>
-                      <td className="p-3">
-                        {t.start_time?.slice(0, 5)} – {t.end_time?.slice(0, 5)}
-                      </td>
-                      <td className="p-3">
-                        {t.classes
-                          ? `${t.classes.name}${t.classes.section ? " · " + t.classes.section : ""}`
-                          : "—"}
-                      </td>
-                      <td className="p-3">{t.subjects?.name ?? "—"}</td>
-                      <td className="p-3 text-muted-foreground">{t.room ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {(timetable ?? []).length === 0 && (
-                    <Empty colSpan={5} msg="No timetable entries." />
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </TabsContent>
-
-        {/* ACADEMICS: classes + subjects + class-teacher */}
-        <TabsContent value="academics" className="pt-4 space-y-4">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b font-medium text-sm">Assigned classes & sections</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Class</th>
-                    <th className="p-3">Section</th>
-                    <th className="p-3">Academic year</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(classes ?? []).map((c: any) => (
-                    <tr key={c.id} className="border-t">
-                      <td className="p-3">{c.classes?.name ?? "—"}</td>
-                      <td className="p-3">{c.classes?.section ?? "—"}</td>
-                      <td className="p-3">{c.classes?.academic_year ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {(classes ?? []).length === 0 && <Empty colSpan={3} msg="No classes assigned." />}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-          <Card className="p-6 rounded-2xl text-sm">
-            <div className="text-xs text-muted-foreground mb-1">Primary teaching subject</div>
-            <Badge variant="secondary" className="text-base">
-              {teacher.subject}
-            </Badge>
-          </Card>
-        </TabsContent>
-
-        {/* HOMEWORK */}
-        <TabsContent value="homework" className="pt-4">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="font-medium text-sm">Homework & assignments</div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  downloadCsv(
-                    (homework ?? []).map((h: any) => ({
-                      title: h.title,
-                      class: h.classes?.name,
-                      subject: h.subjects?.name,
-                      assigned: h.assigned_date,
-                      due: h.due_date,
-                      status: h.status,
-                    })),
-                    `homework-${teacher.full_name}`,
-                  )
-                }
-              >
-                <Download className="size-4 mr-1" /> Export CSV
-              </Button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Title</th>
-                    <th className="p-3">Class</th>
-                    <th className="p-3">Subject</th>
-                    <th className="p-3">Assigned</th>
-                    <th className="p-3">Due</th>
-                    <th className="p-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(homework ?? []).map((h: any) => (
-                    <tr key={h.id} className="border-t">
-                      <td className="p-3">{h.title}</td>
-                      <td className="p-3">{h.classes?.name ?? "—"}</td>
-                      <td className="p-3">{h.subjects?.name ?? "—"}</td>
-                      <td className="p-3">{fmtDate(h.assigned_date)}</td>
-                      <td className="p-3">{fmtDate(h.due_date)}</td>
-                      <td className="p-3">
-                        <Badge className={badgeClass(h.status)}>{niceLabel(h.status)}</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                  {(homework ?? []).length === 0 && (
-                    <Empty colSpan={6} msg="No homework assigned yet." />
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </TabsContent>
-
-        {/* EXAMS */}
-        <TabsContent value="exams" className="pt-4">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b font-medium text-sm">Exams for assigned classes</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Exam</th>
-                    <th className="p-3">Class</th>
-                    <th className="p-3">Subject</th>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Max</th>
-                    <th className="p-3">Results</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(exams ?? []).map((e: any) => {
-                    const results = e.exam_results ?? [];
-                    const avg = results.length
-                      ? Math.round(
-                          results.reduce((s: number, r: any) => s + (r.marks_obtained ?? 0), 0) /
-                            results.length,
-                        )
-                      : 0;
-                    return (
-                      <tr key={e.id} className="border-t">
-                        <td className="p-3">{e.name}</td>
-                        <td className="p-3">{e.classes?.name ?? "—"}</td>
-                        <td className="p-3">{e.subjects?.name ?? "—"}</td>
-                        <td className="p-3">{fmtDate(e.exam_date)}</td>
-                        <td className="p-3">{e.max_marks}</td>
-                        <td className="p-3 text-muted-foreground">
-                          {results.length ? `${results.length} scored · avg ${avg}` : "Pending"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {(exams ?? []).length === 0 && (
-                    <Empty colSpan={6} msg="No exams for assigned classes." />
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <TimetableTab teacherId={teacherId} canManage={canManage} />
         </TabsContent>
 
         {/* PERFORMANCE */}
         <TabsContent value="performance" className="pt-4">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b font-medium text-sm">Performance reviews</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Period</th>
-                    <th className="p-3">Rating</th>
-                    <th className="p-3">Reviewer</th>
-                    <th className="p-3">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(reviews ?? []).map((r: any) => (
-                    <tr key={r.id} className="border-t">
-                      <td className="p-3">{r.period}</td>
-                      <td className="p-3 font-medium">{r.rating}/5</td>
-                      <td className="p-3">{r.profiles?.full_name ?? "—"}</td>
-                      <td className="p-3 text-muted-foreground">{r.notes ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {(reviews ?? []).length === 0 && <Empty colSpan={4} msg="No reviews yet." />}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <CollectionCard
+            title="Performance reviews"
+            teacherId={teacherId}
+            path="reviews"
+            rows={reviews}
+            canManage={canManage}
+            onChanged={invalidate}
+            emptyMsg="No reviews yet."
+            columns={[
+              { header: "Period", cell: (r: any) => r.period },
+              {
+                header: "Rating",
+                cell: (r: any) => <span className="font-medium">{r.rating}/5</span>,
+              },
+              { header: "Reviewer", cell: (r: any) => r.profiles?.full_name ?? "—" },
+              {
+                header: "Notes",
+                cell: (r: any) => <span className="text-muted-foreground">{r.notes ?? "—"}</span>,
+              },
+            ]}
+            addTitle="Add performance review"
+            addFields={[
+              { name: "period", label: "Period", required: true, placeholder: "2026-H1" },
+              { name: "rating", label: "Rating (0–5)", kind: "number", required: true },
+              { name: "notes", label: "Notes", kind: "textarea", full: true },
+            ]}
+            mapAdd={(v) => ({
+              period: v.period,
+              rating: Number(v.rating),
+              notes: v.notes || undefined,
+            })}
+          />
         </TabsContent>
 
         {/* DOCUMENTS */}
         <TabsContent value="documents" className="pt-4">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Type</th>
-                    <th className="p-3">Title</th>
-                    <th className="p-3">Uploaded</th>
-                    <th className="p-3">Expiry</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(docs ?? []).map((d: any) => (
-                    <tr key={d.id} className="border-t">
-                      <td className="p-3">{niceLabel(d.doc_type)}</td>
-                      <td className="p-3">{d.title}</td>
-                      <td className="p-3">{fmtDate(d.uploaded_at)}</td>
-                      <td className="p-3">{d.expiry_date ? fmtDate(d.expiry_date) : "—"}</td>
-                    </tr>
-                  ))}
-                  {(docs ?? []).length === 0 && <Empty colSpan={4} msg="No documents uploaded." />}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <CollectionCard
+            title="Documents"
+            teacherId={teacherId}
+            path="documents"
+            rows={docs}
+            canManage={canManage}
+            onChanged={invalidate}
+            emptyMsg="No documents uploaded."
+            columns={[
+              { header: "Type", cell: (d: any) => niceLabel(d.doc_type) },
+              { header: "Title", cell: (d: any) => d.title },
+              { header: "Uploaded", cell: (d: any) => fmtDate(d.uploaded_at) },
+              {
+                header: "Expiry",
+                cell: (d: any) => (d.expiry_date ? fmtDate(d.expiry_date) : "—"),
+              },
+            ]}
+            addTitle="Add document"
+            addFields={[
+              {
+                name: "docType",
+                label: "Type",
+                kind: "select",
+                required: true,
+                options: ["certificate", "id_proof", "contract", "resume", "other"].map((v) => ({
+                  value: v,
+                  label: niceLabel(v),
+                })),
+              },
+              { name: "title", label: "Title", required: true, full: true },
+              { name: "fileUrl", label: "File URL", full: true, placeholder: "Optional link" },
+              { name: "expiryDate", label: "Expiry", kind: "date" },
+            ]}
+            mapAdd={(v) => ({
+              docType: v.docType,
+              title: v.title,
+              fileUrl: v.fileUrl || undefined,
+              expiryDate: v.expiryDate || undefined,
+            })}
+          />
         </TabsContent>
 
-        {/* ASSETS */}
+        {/* ASSETS (read-only — managed by the asset module) */}
         <TabsContent value="assets" className="pt-4">
           <Card className="rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -779,72 +944,65 @@ function TeacherDetailPage() {
 
         {/* TRAINING */}
         <TabsContent value="training" className="pt-4">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Program</th>
-                    <th className="p-3">Provider</th>
-                    <th className="p-3">From</th>
-                    <th className="p-3">To</th>
-                    <th className="p-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(training ?? []).map((t: any) => (
-                    <tr key={t.id} className="border-t">
-                      <td className="p-3">{t.training_programs?.name ?? "—"}</td>
-                      <td className="p-3">{t.training_programs?.provider ?? "—"}</td>
-                      <td className="p-3">{fmtDate(t.training_programs?.start_date)}</td>
-                      <td className="p-3">{fmtDate(t.training_programs?.end_date)}</td>
-                      <td className="p-3">
-                        <Badge className={badgeClass(t.status ?? "pending")}>
-                          {niceLabel(t.status ?? "pending")}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                  {(training ?? []).length === 0 && (
-                    <Empty colSpan={5} msg="No training records." />
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <CollectionCard
+            title="Training"
+            teacherId={teacherId}
+            path="training"
+            rows={training}
+            canManage={canManage}
+            onChanged={invalidate}
+            emptyMsg="No training records."
+            columns={[
+              { header: "Program", cell: (t: any) => t.training_programs?.name ?? "—" },
+              { header: "Provider", cell: (t: any) => t.training_programs?.provider ?? "—" },
+              { header: "From", cell: (t: any) => fmtDate(t.training_programs?.start_date) },
+              { header: "To", cell: (t: any) => fmtDate(t.training_programs?.end_date) },
+              {
+                header: "Status",
+                cell: (t: any) => (
+                  <Badge className={badgeClass(t.attended ? "completed" : "pending")}>
+                    {t.attended ? "Completed" : "Pending"}
+                  </Badge>
+                ),
+              },
+            ]}
+            addTitle="Add training"
+            addFields={[
+              { name: "title", label: "Program", required: true, full: true },
+              { name: "provider", label: "Provider" },
+              {
+                name: "programType",
+                label: "Type",
+                kind: "select",
+                options: ["workshop", "seminar", "course", "certification"].map((v) => ({
+                  value: v,
+                  label: niceLabel(v),
+                })),
+              },
+              { name: "startDate", label: "From", kind: "date" },
+              { name: "endDate", label: "To", kind: "date" },
+              {
+                name: "status",
+                label: "Status",
+                kind: "select",
+                options: ["pending", "enrolled", "completed"].map((v) => ({
+                  value: v,
+                  label: niceLabel(v),
+                })),
+              },
+            ]}
+            mapAdd={(v) => ({
+              title: v.title,
+              provider: v.provider || undefined,
+              programType: v.programType || undefined,
+              startDate: v.startDate || undefined,
+              endDate: v.endDate || undefined,
+              status: v.status || undefined,
+            })}
+          />
         </TabsContent>
 
-        {/* COMMUNICATION */}
-        <TabsContent value="communication" className="pt-4">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="p-4 border-b font-medium text-sm">Announcements authored</div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3">Title</th>
-                    <th className="p-3">Audience</th>
-                    <th className="p-3">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(announcements ?? []).map((a: any) => (
-                    <tr key={a.id} className="border-t">
-                      <td className="p-3">{a.title}</td>
-                      <td className="p-3">{niceLabel(a.audience)}</td>
-                      <td className="p-3">{fmtDateTime(a.created_at)}</td>
-                    </tr>
-                  ))}
-                  {(announcements ?? []).length === 0 && (
-                    <Empty colSpan={3} msg="No announcements sent." />
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </TabsContent>
-
-        {/* ACTIVITY LOGS */}
+        {/* ACTIVITY (read-only audit trail) */}
         <TabsContent value="activity" className="pt-4">
           <Card className="rounded-2xl overflow-hidden">
             <div className="p-4 border-b font-medium text-sm">Recent audit trail</div>
@@ -892,6 +1050,451 @@ function TeacherDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ---- Edit dialogs ---- */}
+      <RecordFormDialog
+        open={editCore}
+        onOpenChange={setEditCore}
+        title="Edit teacher"
+        initial={{
+          subject: teacher.subject ?? "",
+          qualification: teacher.qualification ?? "",
+          experienceYears: String(teacher.experience_years ?? 0),
+          phone: teacher.phone ?? "",
+          status: teacher.status ?? "active",
+          joinedDate: teacher.joined_date ? String(teacher.joined_date).slice(0, 10) : "",
+        }}
+        fields={[
+          { name: "subject", label: "Subject", required: true },
+          { name: "qualification", label: "Qualification" },
+          { name: "experienceYears", label: "Experience (yrs)", kind: "number" },
+          { name: "phone", label: "Phone" },
+          {
+            name: "status",
+            label: "Status",
+            kind: "select",
+            options: ["active", "on_leave", "inactive"].map((v) => ({
+              value: v,
+              label: niceLabel(v),
+            })),
+          },
+          { name: "joinedDate", label: "Joined date", kind: "date" },
+        ]}
+        onSubmit={async (v) => {
+          await apiPatch(`/teachers/${teacherId}`, {
+            subject: v.subject,
+            qualification: v.qualification || null,
+            experienceYears: v.experienceYears ? Number(v.experienceYears) : undefined,
+            phone: v.phone || null,
+            status: v.status,
+            joinedDate: v.joinedDate || undefined,
+          });
+          toast.success("Saved.");
+          invalidate();
+        }}
+      />
+
+      <RecordFormDialog
+        open={editPersonal}
+        onOpenChange={setEditPersonal}
+        title="Edit personal details"
+        initial={{
+          dob: staff?.dob ? String(staff.dob).slice(0, 10) : "",
+          bloodGroup: staff?.blood_group ?? "",
+          address: staff?.address ?? "",
+          emName: (staff?.emergency_contact as any)?.name ?? "",
+          emPhone: (staff?.emergency_contact as any)?.phone ?? "",
+          medicalInfo: (staff?.medical_info as any)?.notes ?? "",
+          skills: (staff?.skills ?? []).join(", "),
+        }}
+        fields={[
+          { name: "dob", label: "Date of birth", kind: "date" },
+          { name: "bloodGroup", label: "Blood group" },
+          { name: "address", label: "Address", full: true },
+          { name: "emName", label: "Emergency contact name" },
+          { name: "emPhone", label: "Emergency contact phone" },
+          { name: "medicalInfo", label: "Medical info", kind: "textarea", full: true },
+          { name: "skills", label: "Skills (comma-separated)", full: true },
+        ]}
+        onSubmit={(v) =>
+          patchStaff({
+            dob: v.dob || null,
+            bloodGroup: v.bloodGroup || null,
+            address: v.address || null,
+            emergencyContact: v.emName || v.emPhone ? { name: v.emName, phone: v.emPhone } : null,
+            medicalInfo: v.medicalInfo || null,
+            skills: v.skills
+              ? v.skills
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : [],
+          })
+        }
+      />
+
+      <RecordFormDialog
+        open={editEmployment}
+        onOpenChange={setEditEmployment}
+        title="Edit employment"
+        initial={{
+          department: staff?.department ?? "Academic",
+          designation: staff?.designation ?? "Teacher",
+          employmentType: staff?.employment_type ?? "full_time",
+          confirmationStatus: staff?.confirmation_status ?? "confirmed",
+          probationEndDate: staff?.probation_end_date
+            ? String(staff.probation_end_date).slice(0, 10)
+            : "",
+          joinDate: staff?.join_date ? String(staff.join_date).slice(0, 10) : "",
+        }}
+        fields={[
+          { name: "department", label: "Department" },
+          { name: "designation", label: "Designation" },
+          {
+            name: "employmentType",
+            label: "Employment type",
+            kind: "select",
+            options: ["full_time", "part_time", "contract", "visiting"].map((v) => ({
+              value: v,
+              label: niceLabel(v),
+            })),
+          },
+          {
+            name: "confirmationStatus",
+            label: "Confirmation",
+            kind: "select",
+            options: ["confirmed", "probation", "notice_period"].map((v) => ({
+              value: v,
+              label: niceLabel(v),
+            })),
+          },
+          { name: "probationEndDate", label: "Probation end", kind: "date" },
+          { name: "joinDate", label: "Join date", kind: "date" },
+        ]}
+        onSubmit={(v) =>
+          patchStaff({
+            department: v.department,
+            designation: v.designation,
+            employmentType: v.employmentType,
+            confirmationStatus: v.confirmationStatus,
+            probationEndDate: v.probationEndDate || null,
+            joinDate: v.joinDate || undefined,
+          })
+        }
+      />
+
+      <RecordFormDialog
+        open={editBank}
+        onOpenChange={setEditBank}
+        title="Edit bank details"
+        initial={{
+          bank: (staff?.bank_details as any)?.bank ?? "",
+          account: (staff?.bank_details as any)?.account ?? "",
+          ifsc: (staff?.bank_details as any)?.ifsc ?? "",
+        }}
+        fields={[
+          { name: "bank", label: "Bank" },
+          { name: "account", label: "Account number" },
+          { name: "ifsc", label: "IFSC" },
+        ]}
+        onSubmit={(v) =>
+          patchStaff({ bankDetails: { bank: v.bank, account: v.account, ifsc: v.ifsc } })
+        }
+      />
     </AppShell>
+  );
+}
+
+/* ------------------------------ Timetable tab ------------------------------ */
+type TTEntry = {
+  id?: string;
+  classId: string;
+  className?: string | null;
+  section?: string | null;
+  subjectId?: string | null;
+  subjectName?: string | null;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  room?: string | null;
+};
+
+function TimetableTab({ teacherId, canManage }: { teacherId: string; canManage: boolean }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<TTEntry[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const { data } = useQuery({
+    queryKey: ["teacher-timetable", teacherId],
+    queryFn: () =>
+      apiGet<{ profileLinked: boolean; entries: TTEntry[] }>(`/teachers/${teacherId}/timetable`),
+  });
+  const { data: classList } = useQuery({
+    queryKey: ["tt-classes"],
+    queryFn: () => apiGet<{ id: string; name: string; section: string }[]>("/classes"),
+    enabled: canManage,
+  });
+  const { data: subjectList } = useQuery({
+    queryKey: ["tt-subjects"],
+    queryFn: () => apiGet<{ id: string; classId: string; name: string }[]>("/subjects"),
+    enabled: canManage,
+  });
+
+  const entries = data?.entries ?? [];
+
+  // Derive the period grid: distinct start–end windows, sorted by start.
+  const periods = useMemo(() => {
+    const set = new Map<string, { start: string; end: string }>();
+    for (const e of entries)
+      set.set(`${e.startTime}-${e.endTime}`, { start: e.startTime, end: e.endTime });
+    return [...set.values()].sort((a, b) => a.start.localeCompare(b.start));
+  }, [entries]);
+
+  const cellFor = (day: number, start: string, end: string) =>
+    entries.find((e) => e.dayOfWeek === day && e.startTime === start && e.endTime === end);
+
+  const startEdit = () => {
+    setDraft(entries.map((e) => ({ ...e })));
+    setEditing(true);
+  };
+  const addRow = () =>
+    setDraft((d) => [
+      ...d,
+      {
+        classId: classList?.[0]?.id ?? "",
+        dayOfWeek: 1,
+        startTime: "08:00",
+        endTime: "08:45",
+        subjectId: null,
+        room: "",
+      },
+    ]);
+  const updateRow = (i: number, patch: Partial<TTEntry>) =>
+    setDraft((d) => d.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const removeRow = (i: number) => setDraft((d) => d.filter((_, idx) => idx !== i));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiPut(`/teachers/${teacherId}/timetable`, {
+        entries: draft.map((e) => ({
+          classId: e.classId,
+          subjectId: e.subjectId || null,
+          dayOfWeek: e.dayOfWeek,
+          startTime: e.startTime,
+          endTime: e.endTime,
+          room: e.room || null,
+        })),
+      });
+      toast.success("Timetable saved.");
+      setEditing(false);
+      qc.invalidateQueries({ queryKey: ["teacher-timetable", teacherId] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (data && !data.profileLinked && !editing) {
+    return (
+      <Card className="rounded-2xl p-6 text-sm text-muted-foreground">
+        This teacher has no linked login account yet, so a timetable can't be assigned. Create their
+        user account (Users → Add user with the same email) first.
+      </Card>
+    );
+  }
+
+  if (editing) {
+    return (
+      <Card className="rounded-2xl overflow-hidden">
+        <div className="p-4 border-b flex items-center justify-between">
+          <div className="font-medium text-sm">Edit weekly timetable</div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[820px]">
+            <thead className="bg-muted/40">
+              <tr className="text-left">
+                <th className="p-2">Day</th>
+                <th className="p-2">Start</th>
+                <th className="p-2">End</th>
+                <th className="p-2">Class</th>
+                <th className="p-2">Subject</th>
+                <th className="p-2">Room</th>
+                <th className="p-2 w-10" />
+              </tr>
+            </thead>
+            <tbody>
+              {draft.map((row, i) => (
+                <tr key={i} className="border-t">
+                  <td className="p-2">
+                    <select
+                      className="h-9 rounded-md border bg-background px-2"
+                      value={row.dayOfWeek}
+                      onChange={(e) => updateRow(i, { dayOfWeek: Number(e.target.value) })}
+                    >
+                      {WEEKDAYS.map((d) => (
+                        <option key={d} value={d}>
+                          {DAYS[d]}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      type="time"
+                      value={row.startTime}
+                      onChange={(e) => updateRow(i, { startTime: e.target.value })}
+                      className="w-28"
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      type="time"
+                      value={row.endTime}
+                      onChange={(e) => updateRow(i, { endTime: e.target.value })}
+                      className="w-28"
+                    />
+                  </td>
+                  <td className="p-2">
+                    <select
+                      className="h-9 rounded-md border bg-background px-2 max-w-[180px]"
+                      value={row.classId}
+                      onChange={(e) => updateRow(i, { classId: e.target.value, subjectId: null })}
+                    >
+                      {(classList ?? []).map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} {c.section}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="p-2">
+                    <select
+                      className="h-9 rounded-md border bg-background px-2 max-w-[160px]"
+                      value={row.subjectId ?? ""}
+                      onChange={(e) => updateRow(i, { subjectId: e.target.value || null })}
+                    >
+                      <option value="">—</option>
+                      {(subjectList ?? [])
+                        .filter((s) => s.classId === row.classId)
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                    </select>
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      value={row.room ?? ""}
+                      onChange={(e) => updateRow(i, { room: e.target.value })}
+                      className="w-24"
+                      placeholder="Room"
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove slot"
+                      className="text-destructive"
+                      onClick={() => removeRow(i)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {draft.length === 0 && <Empty colSpan={7} msg="No slots. Add one below." />}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-3 border-t">
+          <Button size="sm" variant="outline" onClick={addRow}>
+            <Plus className="size-4 mr-1" /> Add slot
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="rounded-2xl overflow-hidden">
+      <div className="p-4 border-b flex items-center justify-between">
+        <div className="font-medium text-sm">Weekly teaching schedule</div>
+        {canManage && (
+          <Button size="sm" variant="outline" onClick={startEdit}>
+            <Pencil className="size-4 mr-1" /> Edit timetable
+          </Button>
+        )}
+      </div>
+      {periods.length === 0 ? (
+        <div className="p-6 text-center text-sm text-muted-foreground">
+          No timetable set. {canManage ? "Use “Edit timetable” to add slots." : ""}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px] border-separate border-spacing-1 p-2">
+            <thead>
+              <tr className="text-left text-muted-foreground">
+                <th className="p-2 w-28">Period</th>
+                {WEEKDAYS.map((d) => (
+                  <th key={d} className="p-2 text-center font-medium">
+                    {DAYS[d]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {periods.map((p, pi) => (
+                <tr key={pi}>
+                  <td className="p-2 align-top">
+                    <div className="font-semibold">P{pi + 1}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {p.start}–{p.end}
+                    </div>
+                  </td>
+                  {WEEKDAYS.map((d) => {
+                    const cell = cellFor(d, p.start, p.end);
+                    return (
+                      <td key={d} className="p-1 align-top">
+                        {cell ? (
+                          <div className="rounded-lg border border-primary/20 bg-primary/5 p-2 text-center">
+                            <div className="text-primary font-semibold text-xs uppercase">
+                              {cell.subjectName ?? "Class"}
+                            </div>
+                            <div className="text-xs">
+                              {cell.className}
+                              {cell.section ? `-${cell.section}` : ""}
+                            </div>
+                            {cell.room && (
+                              <div className="text-[11px] text-muted-foreground">{cell.room}</div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed p-2 text-center text-muted-foreground">
+                            —
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
