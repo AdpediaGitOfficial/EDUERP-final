@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -14,10 +15,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, ArrowRightLeft } from "lucide-react";
+import { Plus, ArrowRightLeft, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { daysBetween } from "@/lib/assets-util";
+
+type ActiveAllocation = {
+  id: string;
+  asset_id: string;
+  assetName: string | null;
+  assetCode: string | null;
+  assignee_label: string;
+  allocated_at: string | null;
+  expected_return_at: string | null;
+  notes: string | null;
+  days: number;
+  overdue: boolean;
+  overdueDays: number;
+};
 
 export const Route = createFileRoute("/_authenticated/assets/allocation")({
   component: Allocation,
@@ -26,52 +40,40 @@ export const Route = createFileRoute("/_authenticated/assets/allocation")({
 function Allocation() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [returnOf, setReturnOf] = useState<any>(null);
+  const [returnOf, setReturnOf] = useState<ActiveAllocation | null>(null);
   const [returnCondition, setReturnCondition] = useState("good");
 
   const { data: assetsAvail } = useQuery({
     queryKey: ["assets-avail"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("assets")
-          .select("id,name,asset_code")
-          .eq("status", "available")
-          .order("asset_code")
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<{ id: string; name: string; asset_code: string | null }[]>("/assets?status=available"),
   });
   const { data: active } = useQuery({
     queryKey: ["allocations-active"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("asset_allocations")
-          .select(
-            "id,asset_id,assignee_label,allocated_at,expected_return_at,notes,assets(name,asset_code)",
-          )
-          .is("returned_at", null)
-          .order("allocated_at", { ascending: false })
-      ).data ?? [],
+    queryFn: () => apiGet<ActiveAllocation[]>("/assets/allocations?active=true"),
   });
+
+  const overdueCount = (active ?? []).filter((a) => a.overdue).length;
 
   const allocate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const asset_id = String(fd.get("asset_id") || "");
-    if (!asset_id) return toast.error("Select an asset");
-    const { error } = await supabase.from("asset_allocations").insert({
-      asset_id,
-      assignee_label: String(fd.get("assignee_label") || ""),
-      allocated_at: String(fd.get("allocated_at") || new Date().toISOString().slice(0, 10)),
-      expected_return_at: String(fd.get("expected_return_at") || "") || null,
-      notes: String(fd.get("notes") || "") || null,
+    const assetId = String(fd.get("asset_id") || "");
+    if (!assetId) return toast.error("Select an asset");
+    const res = await apiFetch("/assets/allocations", {
+      method: "POST",
+      body: JSON.stringify({
+        assetId,
+        assigneeLabel: String(fd.get("assignee_label") || ""),
+        allocatedAt: String(fd.get("allocated_at") || "") || null,
+        expectedReturnAt: String(fd.get("expected_return_at") || "") || null,
+        notes: String(fd.get("notes") || "") || null,
+      }),
     });
-    if (error) return toast.error(error.message);
-    const { error: e2 } = await supabase
-      .from("assets")
-      .update({ status: "in_use", assigned_to_label: String(fd.get("assignee_label") || "") })
-      .eq("id", asset_id);
-    if (e2) toast.error(e2.message);
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => null) : null;
+      return toast.error(body?.message ?? "Could not allocate");
+    }
     toast.success("Allocated");
     setOpen(false);
     qc.invalidateQueries();
@@ -79,19 +81,16 @@ function Allocation() {
 
   const doReturn = async () => {
     if (!returnOf) return;
-    const returned_at = new Date().toISOString().slice(0, 10);
-    const { error } = await supabase
-      .from("asset_allocations")
-      .update({ returned_at, return_condition: returnCondition })
-      .eq("id", returnOf.id);
-    if (error) return toast.error(error.message);
-    const newStatus =
-      returnCondition === "damaged" || returnCondition === "needs_repair" ? "repair" : "available";
-    await supabase
-      .from("assets")
-      .update({ status: newStatus, assigned_to_label: null })
-      .eq("id", returnOf.asset_id);
-    toast.success(newStatus === "repair" ? "Returned & routed to repair" : "Returned to available");
+    const res = await apiFetch(`/assets/allocations/${returnOf.id}/return`, {
+      method: "POST",
+      body: JSON.stringify({ condition: returnCondition }),
+    });
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => null) : null;
+      return toast.error(body?.message ?? "Could not return");
+    }
+    const routed = returnCondition === "damaged" || returnCondition === "needs_repair";
+    toast.success(routed ? "Returned & routed to repair" : "Returned to available");
     setReturnOf(null);
     qc.invalidateQueries();
   };
@@ -107,6 +106,25 @@ function Allocation() {
           </Button>
         }
       />
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <Card className="p-4 rounded-2xl">
+          <div className="text-xs text-muted-foreground">Active</div>
+          <div className="text-2xl font-semibold mt-1">{active?.length ?? 0}</div>
+        </Card>
+        <Card className="p-4 rounded-2xl">
+          <div className="text-xs text-muted-foreground">Overdue</div>
+          <div
+            className={`text-2xl font-semibold mt-1 ${overdueCount > 0 ? "text-red-600" : "text-foreground"}`}
+          >
+            {overdueCount}
+          </div>
+        </Card>
+        <Card className="p-4 rounded-2xl">
+          <div className="text-xs text-muted-foreground">Available to allocate</div>
+          <div className="text-2xl font-semibold mt-1">{assetsAvail?.length ?? 0}</div>
+        </Card>
+      </div>
 
       <Card className="rounded-2xl overflow-hidden">
         <div className="p-4 border-b flex items-center gap-2">
@@ -127,21 +145,30 @@ function Allocation() {
               </tr>
             </thead>
             <tbody>
-              {(active ?? []).map((a: any) => (
-                <tr key={a.id} className="border-t">
+              {(active ?? []).map((a) => (
+                <tr key={a.id} className={`border-t ${a.overdue ? "bg-red-50/60" : ""}`}>
                   <td className="p-3">
-                    <div className="font-medium">{a.assets?.name}</div>
-                    <div className="text-xs text-muted-foreground font-mono">
-                      {a.assets?.asset_code}
-                    </div>
+                    <div className="font-medium">{a.assetName}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{a.assetCode}</div>
                   </td>
                   <td className="p-3">{a.assignee_label}</td>
-                  <td className="p-3">{new Date(a.allocated_at).toLocaleDateString()}</td>
-                  <td className="p-3">{daysBetween(a.allocated_at)}</td>
                   <td className="p-3">
-                    {a.expected_return_at
-                      ? new Date(a.expected_return_at).toLocaleDateString()
-                      : "—"}
+                    {a.allocated_at ? new Date(a.allocated_at).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="p-3">{a.days}</td>
+                  <td className="p-3">
+                    {a.expected_return_at ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        {new Date(a.expected_return_at).toLocaleDateString()}
+                        {a.overdue && (
+                          <Badge className="bg-red-100 text-red-900 border border-red-200 gap-1">
+                            <AlertTriangle className="size-3" /> Overdue · {a.overdueDays}d
+                          </Badge>
+                        )}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="p-3 text-right">
                     <Button
@@ -226,10 +253,8 @@ function Allocation() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="text-sm">
-              {returnOf?.assets?.name}{" "}
-              <span className="text-muted-foreground font-mono">
-                ({returnOf?.assets?.asset_code})
-              </span>
+              {returnOf?.assetName}{" "}
+              <span className="text-muted-foreground font-mono">({returnOf?.assetCode})</span>
             </div>
             <div className="space-y-1.5">
               <Label>Condition on return</Label>

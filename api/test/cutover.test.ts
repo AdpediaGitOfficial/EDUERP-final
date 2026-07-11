@@ -983,3 +983,102 @@ describe("assets: dashboard, registry, categories, vendors", () => {
     expect((await post("/assets/vendors", "teacher", { name: "x" })).status).toBe(403);
   });
 });
+
+describe("assets: allocation, maintenance, AMC (admin-only tables)", () => {
+  it("allocate -> overdue flag -> return round-trip; conflicts are clean", async () => {
+    const avail = await get("/assets?status=available", "admin");
+    expect(avail.status).toBe(200);
+    expect(avail.body.length).toBeGreaterThan(0);
+    const assetId = avail.body[0].id;
+
+    // Allocate with a past expected-return so the overdue enhancement fires.
+    const alloc = await post("/assets/allocations", "admin", {
+      assetId,
+      assigneeLabel: `Test Room ${process.env.VITEST_WORKER_ID ?? "0"}`,
+      expectedReturnAt: "2020-01-01",
+    });
+    expect(alloc.status).toBe(201);
+
+    // Asset flips to in_use.
+    expect((await get(`/assets/${assetId}`, "admin")).body.status).toBe("in_use");
+
+    // Active list marks it overdue.
+    const active = await get("/assets/allocations?active=true", "admin");
+    const mine = active.body.find((a: any) => a.id === alloc.body.id);
+    expect(mine.overdue).toBe(true);
+    expect(mine.overdueDays).toBeGreaterThan(0);
+
+    // Re-allocating a non-available asset is a clean 409.
+    expect(
+      (await post("/assets/allocations", "admin", { assetId, assigneeLabel: "x" })).status,
+    ).toBe(409);
+
+    // Return damaged routes the asset to repair.
+    const ret = await post(`/assets/allocations/${alloc.body.id}/return`, "admin", {
+      condition: "damaged",
+    });
+    expect(ret.status).toBe(201);
+    expect(ret.body.status).toBe("repair");
+    expect((await get(`/assets/${assetId}`, "admin")).body.status).toBe("repair");
+
+    // Double-return is a clean 409.
+    expect(
+      (await post(`/assets/allocations/${alloc.body.id}/return`, "admin", { condition: "good" }))
+        .status,
+    ).toBe(409);
+
+    // Reset so re-runs against the persistent DB still find an available asset.
+    await patch(`/assets/${assetId}`, "admin", { status: "available" }).catch(() => {});
+  });
+
+  it("maintenance: schedule -> complete; double-complete is 409; reads admin-only", async () => {
+    const assetId = (await get("/assets", "admin")).body[0].id;
+    const sched = await post("/assets/maintenance", "admin", {
+      assetId,
+      type: "preventive",
+      scheduledFor: "2030-01-01",
+    });
+    expect(sched.status).toBe(201);
+    expect(sched.body.status).toBe("scheduled");
+
+    const done = await post(`/assets/maintenance/${sched.body.id}/complete`, "admin", {
+      cost: 500,
+    });
+    expect(done.status).toBe(201);
+    expect(done.body.status).toBe("completed");
+    expect(done.body.cost).toBe(500);
+
+    expect((await post(`/assets/maintenance/${sched.body.id}/complete`, "admin", {})).status).toBe(
+      409,
+    );
+
+    // asset_maintenance is admin-only (am_admin): teacher read -> 403.
+    expect((await get("/assets/maintenance?status=scheduled", "teacher")).status).toBe(403);
+    expect((await post("/assets/maintenance", "teacher", { assetId })).status).toBe(403);
+  });
+
+  it("AMC list is enriched with asset + vendor names; admin-only", async () => {
+    const res = await get("/assets/amc", "admin");
+    expect(res.status).toBe(200);
+    if (res.body.length > 0) {
+      expect(res.body[0]).toHaveProperty("assetName");
+      expect(res.body[0]).toHaveProperty("vendorName");
+      expect(res.body[0]).toHaveProperty("end_date");
+    }
+    // amc_admin: teacher read -> 403.
+    expect((await get("/assets/amc", "teacher")).status).toBe(403);
+  });
+
+  it("asset detail is admin|teacher; the admin-only sub-lists 403 a teacher", async () => {
+    const assetId = (await get("/assets", "admin")).body[0].id;
+    // Detail base (assets: a_read_staff) is readable by teacher...
+    expect((await get(`/assets/${assetId}`, "admin")).status).toBe(200);
+    expect((await get(`/assets/${assetId}`, "teacher")).status).toBe(200);
+    // ...but the allocation/maintenance/amc sub-lists are admin-only.
+    expect((await get(`/assets/${assetId}/allocations`, "teacher")).status).toBe(403);
+    expect((await get(`/assets/${assetId}/maintenance`, "teacher")).status).toBe(403);
+    expect((await get(`/assets/${assetId}/amc`, "teacher")).status).toBe(403);
+    // Student can't read assets at all.
+    expect((await get(`/assets/${assetId}`, "student")).status).toBe(403);
+  });
+});

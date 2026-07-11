@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -152,22 +153,58 @@ export class AssetsService {
     };
   }
 
-  async listAssets(actor: AuthUser, q?: string) {
+  async listAssets(actor: AuthUser, q?: string, status?: string) {
     this.assertRead(actor);
-    const where: Prisma.assetsWhereInput = q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { asset_code: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {};
+    const where: Prisma.assetsWhereInput = {
+      ...(status ? { status } : {}),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { asset_code: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
     const rows = await this.prisma.assets.findMany({
       where,
       orderBy: { asset_code: "asc" },
       include: { asset_categories: { select: { name: true } } },
     });
     return rows.map((a) => this.assetRow(a));
+  }
+
+  async getAsset(actor: AuthUser, id: string) {
+    this.assertRead(actor);
+    const a = await this.prisma.assets.findUnique({
+      where: { id },
+      include: {
+        asset_categories: { select: { name: true } },
+        asset_vendors: { select: { name: true } },
+      },
+    });
+    if (!a) throw new NotFoundException();
+    return {
+      id: a.id,
+      name: a.name,
+      asset_code: a.asset_code,
+      status: a.status,
+      condition: a.condition,
+      category: a.category,
+      categoryName: a.asset_categories?.name ?? a.category ?? null,
+      vendorName: a.asset_vendors?.name ?? null,
+      location: a.location,
+      assigned_to_label: a.assigned_to_label,
+      notes: a.notes,
+      purchase_date: a.purchase_date ? a.purchase_date.toISOString().slice(0, 10) : null,
+      purchase_price: a.purchase_price == null ? null : this.num(a.purchase_price),
+      current_value: a.current_value == null ? null : this.num(a.current_value),
+      warranty_expiry: a.warranty_expiry ? a.warranty_expiry.toISOString().slice(0, 10) : null,
+      useful_life_years: a.useful_life_years,
+      invoice_ref: a.invoice_ref,
+      qr_value: a.qr_value ?? a.asset_code ?? a.id,
+      barcode_value: a.barcode_value ?? a.asset_code ?? a.id,
+    };
   }
 
   private async nextAssetCode(): Promise<string> {
@@ -233,6 +270,50 @@ export class AssetsService {
       include: { asset_categories: { select: { name: true } } },
     });
     return this.assetRow(created);
+  }
+
+  async updateAsset(
+    actor: AuthUser,
+    id: string,
+    input: {
+      name?: string;
+      category_id?: string | null;
+      vendor_id?: string | null;
+      location?: string | null;
+      status?: string | null;
+      condition?: string | null;
+      notes?: string | null;
+      current_value?: number | null;
+    },
+  ) {
+    this.assertAdmin(actor);
+    const exists = await this.prisma.assets.findUnique({ where: { id } });
+    if (!exists) throw new NotFoundException();
+    let categoryPatch: { category_id: string | null; category: string | null } | undefined;
+    if (input.category_id !== undefined) {
+      const cat = input.category_id
+        ? await this.prisma.asset_categories.findUnique({
+            where: { id: input.category_id },
+            select: { name: true },
+          })
+        : null;
+      categoryPatch = { category_id: input.category_id || null, category: cat?.name ?? null };
+    }
+    const updated = await this.prisma.assets.update({
+      where: { id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(categoryPatch ?? {}),
+        ...(input.vendor_id !== undefined ? { vendor_id: input.vendor_id || null } : {}),
+        ...(input.location !== undefined ? { location: input.location || null } : {}),
+        ...(input.status !== undefined ? { status: input.status || "available" } : {}),
+        ...(input.condition !== undefined ? { condition: input.condition || "good" } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
+        ...(input.current_value !== undefined ? { current_value: input.current_value } : {}),
+      },
+      include: { asset_categories: { select: { name: true } } },
+    });
+    return this.assetRow(updated);
   }
 
   // ---- Categories ----------------------------------------------------------
@@ -424,13 +505,230 @@ export class AssetsService {
     return { id };
   }
 
-  // ---- Allocations ---------------------------------------------------------
-  async listAllocations(actor: AuthUser, assetId?: string) {
+  // ---- Allocations (asset_allocations: aa_admin -> admin only) --------------
+  private daysBetween(from: Date, to: Date): number {
+    return Math.floor((to.getTime() - from.getTime()) / (24 * 3600 * 1000));
+  }
+
+  async listAllocations(actor: AuthUser, opts: { assetId?: string; active?: boolean } = {}) {
     this.assertAdmin(actor);
-    return this.prisma.asset_allocations.findMany({
-      where: assetId ? { asset_id: assetId } : {},
+    const rows = await this.prisma.asset_allocations.findMany({
+      where: {
+        ...(opts.assetId ? { asset_id: opts.assetId } : {}),
+        ...(opts.active ? { returned_at: null } : {}),
+      },
       orderBy: { allocated_at: "desc" },
       take: 500,
+      include: { assets: { select: { name: true, asset_code: true } } },
     });
+    // Enhancement: flag overdue active allocations (expected return date passed).
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    return rows.map((a) => {
+      const overdue =
+        !a.returned_at && a.expected_return_at != null && a.expected_return_at < today;
+      return {
+        id: a.id,
+        asset_id: a.asset_id,
+        assetName: a.assets?.name ?? null,
+        assetCode: a.assets?.asset_code ?? null,
+        assignee_label: a.assignee_label,
+        allocated_at: a.allocated_at ? a.allocated_at.toISOString().slice(0, 10) : null,
+        expected_return_at: a.expected_return_at
+          ? a.expected_return_at.toISOString().slice(0, 10)
+          : null,
+        returned_at: a.returned_at ? a.returned_at.toISOString().slice(0, 10) : null,
+        return_condition: a.return_condition,
+        notes: a.notes,
+        days: a.allocated_at ? this.daysBetween(a.allocated_at, today) : 0,
+        overdue,
+        overdueDays:
+          overdue && a.expected_return_at ? this.daysBetween(a.expected_return_at, today) : 0,
+      };
+    });
+  }
+
+  async allocate(
+    actor: AuthUser,
+    input: {
+      assetId: string;
+      assigneeLabel: string;
+      allocatedAt?: string | null;
+      expectedReturnAt?: string | null;
+      notes?: string | null;
+    },
+  ) {
+    this.assertAdmin(actor);
+    if (!input.assetId) throw new BadRequestException("assetId required");
+    if (!input.assigneeLabel?.trim()) throw new BadRequestException("assigneeLabel required");
+    const asset = await this.prisma.assets.findUnique({ where: { id: input.assetId } });
+    if (!asset) throw new NotFoundException("asset not found");
+    if (asset.status !== "available")
+      throw new ConflictException("asset is not available for allocation");
+    const [alloc] = await this.prisma.$transaction([
+      this.prisma.asset_allocations.create({
+        data: {
+          asset_id: input.assetId,
+          assignee_label: input.assigneeLabel,
+          allocated_at: input.allocatedAt ? new Date(input.allocatedAt) : new Date(),
+          expected_return_at: input.expectedReturnAt ? new Date(input.expectedReturnAt) : null,
+          notes: input.notes || null,
+        },
+      }),
+      this.prisma.assets.update({
+        where: { id: input.assetId },
+        data: { status: "in_use", assigned_to_label: input.assigneeLabel },
+      }),
+    ]);
+    return { id: alloc.id };
+  }
+
+  async returnAllocation(actor: AuthUser, id: string, condition: string) {
+    this.assertAdmin(actor);
+    const alloc = await this.prisma.asset_allocations.findUnique({ where: { id } });
+    if (!alloc) throw new NotFoundException();
+    if (alloc.returned_at) throw new ConflictException("already returned");
+    const newStatus =
+      condition === "damaged" || condition === "needs_repair" ? "repair" : "available";
+    await this.prisma.$transaction([
+      this.prisma.asset_allocations.update({
+        where: { id },
+        data: { returned_at: new Date(), return_condition: condition },
+      }),
+      this.prisma.assets.update({
+        where: { id: alloc.asset_id },
+        data: { status: newStatus, assigned_to_label: null },
+      }),
+    ]);
+    return { ok: true, status: newStatus };
+  }
+
+  // ---- Maintenance (asset_maintenance: am_admin -> admin only) --------------
+  private maintenanceRow(m: {
+    id: string;
+    asset_id: string;
+    type: string;
+    status: string;
+    scheduled_for: Date | null;
+    completed_at: Date | null;
+    cost: Prisma.Decimal | null;
+    performed_by: string | null;
+    notes: string | null;
+    assets?: { name: string; asset_code: string | null } | null;
+  }) {
+    return {
+      id: m.id,
+      asset_id: m.asset_id,
+      assetName: m.assets?.name ?? null,
+      assetCode: m.assets?.asset_code ?? null,
+      type: m.type,
+      status: m.status,
+      scheduled_for: m.scheduled_for ? m.scheduled_for.toISOString().slice(0, 10) : null,
+      completed_at: m.completed_at ? m.completed_at.toISOString().slice(0, 10) : null,
+      cost: m.cost == null ? null : this.num(m.cost),
+      performed_by: m.performed_by,
+      notes: m.notes,
+    };
+  }
+
+  async listMaintenance(
+    actor: AuthUser,
+    opts: { status?: string; assetId?: string; limit?: number } = {},
+  ) {
+    this.assertAdmin(actor);
+    const rows = await this.prisma.asset_maintenance.findMany({
+      where: {
+        ...(opts.status ? { status: opts.status } : {}),
+        ...(opts.assetId ? { asset_id: opts.assetId } : {}),
+      },
+      orderBy:
+        opts.status === "completed"
+          ? { completed_at: "desc" }
+          : opts.status === "scheduled"
+            ? { scheduled_for: "asc" }
+            : { created_at: "desc" },
+      take: Math.min(opts.limit ?? 500, 500),
+      include: { assets: { select: { name: true, asset_code: true } } },
+    });
+    return rows.map((m) => this.maintenanceRow(m));
+  }
+
+  async createMaintenance(
+    actor: AuthUser,
+    input: {
+      assetId: string;
+      type?: string | null;
+      cost?: number | null;
+      performedBy?: string | null;
+      notes?: string | null;
+      completedAt?: string | null;
+      scheduledFor?: string | null;
+      status?: string | null;
+    },
+  ) {
+    this.assertAdmin(actor);
+    if (!input.assetId) throw new BadRequestException("assetId required");
+    const asset = await this.prisma.assets.findUnique({ where: { id: input.assetId } });
+    if (!asset) throw new NotFoundException("asset not found");
+    const status = input.status ?? (input.scheduledFor ? "scheduled" : "completed");
+    const created = await this.prisma.asset_maintenance.create({
+      data: {
+        asset_id: input.assetId,
+        type: input.type || "general",
+        cost: input.cost ?? 0,
+        performed_by: input.performedBy || null,
+        notes: input.notes || null,
+        status,
+        completed_at:
+          status === "completed"
+            ? input.completedAt
+              ? new Date(input.completedAt)
+              : new Date()
+            : null,
+        scheduled_for: input.scheduledFor ? new Date(input.scheduledFor) : null,
+      },
+      include: { assets: { select: { name: true, asset_code: true } } },
+    });
+    return this.maintenanceRow(created);
+  }
+
+  async completeMaintenance(actor: AuthUser, id: string, cost?: number | null) {
+    this.assertAdmin(actor);
+    const m = await this.prisma.asset_maintenance.findUnique({ where: { id } });
+    if (!m) throw new NotFoundException();
+    if (m.status === "completed") throw new ConflictException("already completed");
+    const updated = await this.prisma.asset_maintenance.update({
+      where: { id },
+      data: {
+        status: "completed",
+        completed_at: new Date(),
+        ...(cost != null ? { cost } : {}),
+      },
+      include: { assets: { select: { name: true, asset_code: true } } },
+    });
+    return this.maintenanceRow(updated);
+  }
+
+  // ---- AMC contracts (asset_amc: amc_admin -> admin only) ------------------
+  async listAmc(actor: AuthUser, assetId?: string) {
+    this.assertAdmin(actor);
+    const rows = await this.prisma.asset_amc.findMany({
+      where: assetId ? { asset_id: assetId } : {},
+      orderBy: { end_date: "asc" },
+      include: {
+        assets: { select: { name: true, asset_code: true } },
+        asset_vendors: { select: { name: true } },
+      },
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      asset_id: a.asset_id,
+      assetName: a.assets?.name ?? null,
+      assetCode: a.assets?.asset_code ?? null,
+      vendorName: a.asset_vendors?.name ?? null,
+      coverage: a.coverage,
+      start_date: a.start_date ? a.start_date.toISOString().slice(0, 10) : null,
+      end_date: a.end_date ? a.end_date.toISOString().slice(0, 10) : null,
+    }));
   }
 }

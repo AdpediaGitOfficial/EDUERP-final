@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,28 @@ import {
 import { toast } from "sonner";
 import { ArrowLeft, Wrench, ShieldCheck, ClipboardList, CalendarClock } from "lucide-react";
 
+type AssetDetailData = {
+  id: string;
+  name: string;
+  asset_code: string | null;
+  status: string;
+  condition: string;
+  category: string | null;
+  categoryName: string | null;
+  vendorName: string | null;
+  location: string | null;
+  assigned_to_label: string | null;
+  notes: string | null;
+  purchase_date: string | null;
+  purchase_price: number | null;
+  current_value: number | null;
+  warranty_expiry: string | null;
+  useful_life_years: number | null;
+  invoice_ref: string | null;
+  qr_value: string;
+  barcode_value: string;
+};
+
 export const Route = createFileRoute("/_authenticated/assets/detail/$assetId")({
   component: AssetDetail,
 });
@@ -38,47 +60,46 @@ function AssetDetail() {
 
   const { data: asset } = useQuery({
     queryKey: ["asset", assetId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("assets")
-          .select("*, asset_categories(name), asset_vendors(name)")
-          .eq("id", assetId)
-          .maybeSingle()
-      ).data,
+    queryFn: () => apiGet<AssetDetailData>(`/assets/${assetId}`),
   });
   const { data: allocations } = useQuery({
     queryKey: ["asset-allocs", assetId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("asset_allocations")
-          .select("*")
-          .eq("asset_id", assetId)
-          .order("allocated_at", { ascending: false })
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          assignee_label: string;
+          allocated_at: string | null;
+          returned_at: string | null;
+          return_condition: string | null;
+        }[]
+      >(`/assets/${assetId}/allocations`),
   });
   const { data: maintenance } = useQuery({
     queryKey: ["asset-maints", assetId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("asset_maintenance")
-          .select("*")
-          .eq("asset_id", assetId)
-          .order("created_at", { ascending: false })
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          type: string;
+          performed_by: string | null;
+          cost: number | null;
+          completed_at: string | null;
+          scheduled_for: string | null;
+        }[]
+      >(`/assets/${assetId}/maintenance`),
   });
   const { data: amcs } = useQuery({
     queryKey: ["asset-amcs", assetId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("asset_amc")
-          .select("*, asset_vendors(name)")
-          .eq("asset_id", assetId)
-          .order("end_date")
-      ).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          vendorName: string | null;
+          coverage: string | null;
+          end_date: string | null;
+        }[]
+      >(`/assets/${assetId}/amc`),
   });
 
   if (!asset) return <div className="text-muted-foreground">Loading…</div>;
@@ -99,19 +120,26 @@ function AssetDetail() {
 
   const logMaintenance = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const { error } = await supabase.from("asset_maintenance").insert({
-      asset_id: assetId,
-      completed_at: String(fd.get("completed_at") || new Date().toISOString().slice(0, 10)),
-      type: String(fd.get("type") || "general"),
-      cost: Number(fd.get("cost") || 0),
-      performed_by: String(fd.get("performed_by") || "") || null,
-      notes: String(fd.get("notes") || "") || null,
-      status: "completed",
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const res = await apiFetch("/assets/maintenance", {
+      method: "POST",
+      body: JSON.stringify({
+        assetId,
+        completedAt: String(fd.get("completed_at") || "") || null,
+        type: String(fd.get("type") || "general"),
+        cost: Number(fd.get("cost") || 0),
+        performedBy: String(fd.get("performed_by") || "") || null,
+        notes: String(fd.get("notes") || "") || null,
+        status: "completed",
+      }),
     });
-    if (error) return toast.error(error.message);
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => null) : null;
+      return toast.error(body?.message ?? "Could not log maintenance");
+    }
     toast.success("Maintenance logged");
-    (e.currentTarget as HTMLFormElement).reset();
+    form.reset();
     qc.invalidateQueries({ queryKey: ["asset-maints", assetId] });
   };
 
@@ -139,18 +167,14 @@ function AssetDetail() {
         <Card className="p-5 rounded-2xl flex flex-col items-center gap-2">
           <div className="text-xs text-muted-foreground">QR</div>
           <div className="bg-white p-2 rounded-lg">
-            <QRCodeSVG value={asset.qr_value ?? asset.asset_code ?? asset.id} size={140} />
+            <QRCodeSVG value={asset.qr_value} size={140} />
           </div>
           <div className="text-xs font-mono text-muted-foreground">{asset.qr_value}</div>
         </Card>
         <Card className="p-5 rounded-2xl flex flex-col items-center gap-2 lg:col-span-2">
           <div className="text-xs text-muted-foreground">Barcode</div>
           <div className="bg-white p-2 rounded-lg overflow-x-auto max-w-full">
-            <Barcode
-              value={asset.barcode_value ?? asset.asset_code ?? asset.id}
-              height={60}
-              fontSize={12}
-            />
+            <Barcode value={asset.barcode_value} height={60} fontSize={12} />
           </div>
         </Card>
       </div>
@@ -160,7 +184,7 @@ function AssetDetail() {
           <div className="text-sm font-medium mb-3">Overview</div>
           <dl className="text-sm grid grid-cols-2 gap-y-2">
             <dt className="text-muted-foreground">Category</dt>
-            <dd>{asset.asset_categories?.name ?? asset.category ?? "—"}</dd>
+            <dd>{asset.categoryName ?? "—"}</dd>
             <dt className="text-muted-foreground">Location</dt>
             <dd>{asset.location ?? "—"}</dd>
             <dt className="text-muted-foreground">Assigned to</dt>
@@ -182,7 +206,7 @@ function AssetDetail() {
             <dt className="text-muted-foreground">Purchase price</dt>
             <dd>{formatMoney(asset.purchase_price)}</dd>
             <dt className="text-muted-foreground">Vendor</dt>
-            <dd>{asset.asset_vendors?.name ?? "—"}</dd>
+            <dd>{asset.vendorName ?? "—"}</dd>
             <dt className="text-muted-foreground">Invoice ref</dt>
             <dd className="font-mono text-xs">{asset.invoice_ref ?? "—"}</dd>
             <dt className="text-muted-foreground">Warranty expiry</dt>
@@ -222,10 +246,12 @@ function AssetDetail() {
                 </tr>
               </thead>
               <tbody>
-                {(allocations ?? []).map((a: any) => (
+                {(allocations ?? []).map((a) => (
                   <tr key={a.id} className="border-t">
                     <td className="p-1.5">{a.assignee_label}</td>
-                    <td className="p-1.5">{new Date(a.allocated_at).toLocaleDateString()}</td>
+                    <td className="p-1.5">
+                      {a.allocated_at ? new Date(a.allocated_at).toLocaleDateString() : "—"}
+                    </td>
                     <td className="p-1.5">
                       {a.returned_at ? (
                         new Date(a.returned_at).toLocaleDateString()
@@ -310,7 +336,7 @@ function AssetDetail() {
                 </tr>
               </thead>
               <tbody>
-                {(maintenance ?? []).map((m: any) => (
+                {(maintenance ?? []).map((m) => (
                   <tr key={m.id} className="border-t">
                     <td className="p-1.5">
                       {m.completed_at ? (
@@ -354,15 +380,17 @@ function AssetDetail() {
                 </tr>
               </thead>
               <tbody>
-                {(amcs ?? []).map((a: any) => {
-                  const days = daysBetween(new Date(), a.end_date);
+                {(amcs ?? []).map((a) => {
+                  const days = a.end_date ? daysBetween(new Date(), a.end_date) : 0;
                   const dueSoon = days >= 0 && days <= 30;
                   const expired = days < 0;
                   return (
                     <tr key={a.id} className="border-t">
-                      <td className="p-1.5">{a.asset_vendors?.name ?? "—"}</td>
+                      <td className="p-1.5">{a.vendorName ?? "—"}</td>
                       <td className="p-1.5">{a.coverage ?? "—"}</td>
-                      <td className="p-1.5">{new Date(a.end_date).toLocaleDateString()}</td>
+                      <td className="p-1.5">
+                        {a.end_date ? new Date(a.end_date).toLocaleDateString() : "—"}
+                      </td>
                       <td className="p-1.5">
                         {expired ? (
                           <Badge className="bg-red-100 text-red-900 border border-red-200">
