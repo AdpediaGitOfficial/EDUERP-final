@@ -38,7 +38,9 @@ export class ComplaintsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
-          students: { select: { profiles: { select: { full_name: true } } } },
+          students: {
+            select: { admission_no: true, profiles: { select: { full_name: true } } },
+          },
         },
       }),
     ]);
@@ -54,8 +56,11 @@ export class ComplaintsService {
         status: c.status,
         studentId: c.student_id,
         studentName: c.students?.profiles?.full_name ?? null,
+        admissionNo: c.students?.admission_no ?? null,
         raisedBy: c.raised_by,
+        escalatedToAdmin: c.escalated_to_admin,
         createdAt: c.created_at,
+        updatedAt: c.updated_at,
       })),
     };
   }
@@ -85,21 +90,61 @@ export class ComplaintsService {
     return { ok: true };
   }
 
-  async messages(actor: AuthUser, complaintId: string) {
+  /** Load a complaint the actor is allowed to see, or 404 (RLS invisibility). */
+  private async visibleComplaint(actor: AuthUser, complaintId: string) {
     const scope = this.scope(actor);
+    if (scope === null) throw new NotFoundException();
     const complaint = await this.prisma.complaints.findFirst({
-      where: { AND: [{ id: complaintId }, scope ?? {}] },
+      where: { AND: [{ id: complaintId }, scope] },
     });
     if (!complaint) throw new NotFoundException();
+    return complaint;
+  }
+
+  async messages(actor: AuthUser, complaintId: string) {
+    await this.visibleComplaint(actor, complaintId);
     const rows = await this.prisma.complaint_messages.findMany({
       where: { complaint_id: complaintId },
       orderBy: { created_at: "asc" },
     });
+    // sender_id -> users (auth); names live in public.profiles by id.
+    const senderIds = Array.from(new Set(rows.map((m) => m.sender_id)));
+    const profs = senderIds.length
+      ? await this.prisma.profiles.findMany({
+          where: { id: { in: senderIds } },
+          select: { id: true, full_name: true },
+        })
+      : [];
+    const name = new Map(profs.map((p) => [p.id, p.full_name]));
     return rows.map((m) => ({
       id: m.id,
       senderId: m.sender_id,
+      senderName: name.get(m.sender_id) ?? null,
       body: m.body,
       createdAt: m.created_at,
     }));
+  }
+
+  /** cm_read/cm_admin — anyone who can see the thread can reply; bumps updated_at. */
+  async addMessage(actor: AuthUser, complaintId: string, body: string) {
+    await this.visibleComplaint(actor, complaintId);
+    const row = await this.prisma.complaint_messages.create({
+      data: { complaint_id: complaintId, sender_id: actor.id, body },
+    });
+    await this.prisma.complaints.update({
+      where: { id: complaintId },
+      data: { updated_at: new Date() },
+    });
+    return { id: row.id };
+  }
+
+  /** Escalate to admin — the raiser (or admin) can flag a thread for attention. */
+  async escalate(actor: AuthUser, complaintId: string) {
+    await this.visibleComplaint(actor, complaintId);
+    await this.prisma.complaints.update({
+      where: { id: complaintId },
+      data: { escalated_to_admin: true },
+    });
+    return { ok: true };
   }
 }

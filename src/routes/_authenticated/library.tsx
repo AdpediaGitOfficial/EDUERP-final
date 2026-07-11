@@ -2,7 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -221,45 +221,73 @@ function Page() {
 
   const { data: books } = useQuery({
     queryKey: ["library-books"],
-    queryFn: async () =>
-      (await supabase.from("library_books").select("*").order("title")).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/library/books?pageSize=500");
+      return res.rows;
+    },
   });
 
   const { data: loans } = useQuery({
     queryKey: ["library-loans"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("library_loans")
-          .select(
-            "id,issued_at,due_at,returned_at,borrower_type,fine_amount,fine_status,fine_settled_at,library_books(id,title),students(id,admission_no,profiles(full_name),classes(name,section)),teachers(id,full_name,subject,staff:staff_id(employee_code))",
-          )
-          .order("issued_at", { ascending: false })
-          .limit(500)
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/library/loans?pageSize=500");
+      // Reshape the API's flat rows into the nested structure this page renders.
+      return res.rows.map((l) => ({
+        id: l.id,
+        issued_at: l.issuedAt,
+        due_at: l.dueAt,
+        returned_at: l.returnedAt,
+        borrower_type: l.borrowerType,
+        fine_amount: l.fineAmount,
+        fine_status: l.fineStatus,
+        fine_settled_at: l.fineSettledAt,
+        library_books: { id: l.bookId, title: l.bookTitle },
+        students:
+          l.borrowerType === "student"
+            ? {
+                id: l.studentId,
+                admission_no: l.admissionNo,
+                profiles: { full_name: l.borrowerName },
+                classes: l.className ? { name: l.className, section: "" } : null,
+              }
+            : null,
+        teachers:
+          l.borrowerType === "teacher"
+            ? {
+                id: l.teacherId,
+                full_name: l.borrowerName,
+                subject: l.subject,
+                staff: { employee_code: l.employeeCode },
+              }
+            : null,
+      }));
+    },
   });
 
   const { data: students } = useQuery({
     queryKey: ["library-borrower-students"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("students")
-          .select("id,admission_no,profiles(full_name),classes(name,section)")
-          .eq("status", "active")
-          .limit(2000)
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/students?pageSize=500");
+      return res.rows.map((s) => ({
+        id: s.id,
+        admission_no: s.admissionNo,
+        profiles: { full_name: s.fullName },
+        classes: s.class ? { name: s.class.name, section: s.class.section } : null,
+      }));
+    },
   });
 
   const { data: teachers } = useQuery({
     queryKey: ["library-borrower-teachers"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teachers")
-          .select("id,full_name,subject,staff:staff_id(employee_code)")
-          .limit(500)
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/teachers?pageSize=500");
+      return res.rows.map((t) => ({
+        id: t.id,
+        full_name: t.fullName,
+        subject: t.subject,
+        staff: { employee_code: t.employeeCode ?? null },
+      }));
+    },
   });
 
   const borrowers: Borrower[] = useMemo(() => {
@@ -644,31 +672,17 @@ function ReturnAction({ loan, onDone }: { loan: any; onDone: () => void }) {
   const submit = async () => {
     setSaving(true);
     const amt = Number(fine) || 0;
-    const { error } = await supabase
-      .from("library_loans")
-      .update({
-        returned_at: new Date().toISOString(),
-        fine_amount: amt,
-        fine_status: amt > 0 ? "pending" : "none",
-      })
-      .eq("id", loan.id);
-    if (!error && loan.library_books?.id) {
-      (await supabase.rpc) as any; // no-op
-      // increment available copies via a select+update (small volume)
-      const { data: b } = await supabase
-        .from("library_books")
-        .select("available_copies,total_copies")
-        .eq("id", loan.library_books.id)
-        .single();
-      if (b) {
-        await supabase
-          .from("library_books")
-          .update({ available_copies: Math.min(b.total_copies, (b.available_copies ?? 0) + 1) })
-          .eq("id", loan.library_books.id);
-      }
+    try {
+      // The API restores a catalogue copy + records the fine in one transaction.
+      await apiFetch(`/library/loans/${loan.id}/return`, {
+        method: "POST",
+        body: JSON.stringify({ fineAmount: amt }),
+      });
+    } catch (err) {
+      setSaving(false);
+      return toast.error(err instanceof Error ? err.message : "Could not return");
     }
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success("Book returned");
     setOpen(false);
     onDone();
@@ -722,14 +736,14 @@ function ReturnAction({ loan, onDone }: { loan: any; onDone: () => void }) {
 
 function FineAction({ loan, onDone }: { loan: any; onDone: () => void }) {
   const settle = async (status: "paid" | "waived") => {
-    const { error } = await supabase
-      .from("library_loans")
-      .update({
-        fine_status: status,
-        fine_settled_at: new Date().toISOString(),
-      })
-      .eq("id", loan.id);
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch(`/library/loans/${loan.id}/fine`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not update fine");
+    }
     toast.success(status === "paid" ? "Marked as paid" : "Fine waived");
     onDone();
   };
@@ -751,15 +765,20 @@ function AddBookDialog({ onDone }: { onDone: () => void }) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const copies = Number(fd.get("copies") || 1);
-    const { error } = await supabase.from("library_books").insert({
-      title: String(fd.get("title") || ""),
-      author: String(fd.get("author") || "") || null,
-      isbn: String(fd.get("isbn") || "") || null,
-      category: String(fd.get("category") || "") || null,
-      total_copies: copies,
-      available_copies: copies,
-    });
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch("/library/books", {
+        method: "POST",
+        body: JSON.stringify({
+          title: String(fd.get("title") || ""),
+          author: String(fd.get("author") || "") || undefined,
+          isbn: String(fd.get("isbn") || "") || undefined,
+          category: String(fd.get("category") || "") || undefined,
+          copies,
+        }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not add book");
+    }
     toast.success("Book added");
     setOpen(false);
     onDone();
@@ -834,25 +853,22 @@ function IssueBookDialog({
     if (!borrower) return toast.error("Select a borrower");
     if (!bookId) return toast.error("Select a book");
     setSaving(true);
-    const payload: any = {
-      book_id: bookId,
-      borrower_type: borrower.kind,
-      student_id: borrower.kind === "student" ? borrower.id : null,
-      teacher_id: borrower.kind === "teacher" ? borrower.id : null,
-      issued_at: new Date().toISOString(),
-      due_at: dueAt,
-    };
-    const { error } = await supabase.from("library_loans").insert(payload);
-    if (!error) {
-      const b = books.find((x) => x.id === bookId);
-      if (b)
-        await supabase
-          .from("library_books")
-          .update({ available_copies: Math.max(0, (b.available_copies ?? 0) - 1) })
-          .eq("id", bookId);
+    try {
+      // The API decrements available copies in the same transaction.
+      await apiFetch("/library/loans", {
+        method: "POST",
+        body: JSON.stringify({
+          bookId,
+          borrowerType: borrower.kind,
+          borrowerId: borrower.id,
+          dueAt,
+        }),
+      });
+    } catch (err) {
+      setSaving(false);
+      return toast.error(err instanceof Error ? err.message : "Could not issue book");
     }
     setSaving(false);
-    if (error) return toast.error(error.message);
     toast.success("Book issued");
     setOpen(false);
     setBorrower(null);

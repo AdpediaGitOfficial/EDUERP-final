@@ -1,4 +1,10 @@
-import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
@@ -55,11 +61,23 @@ export class LibraryService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
-          library_books: { select: { title: true, author: true } },
+          library_books: { select: { id: true, title: true, author: true } },
           students: {
-            select: { admission_no: true, profiles: { select: { full_name: true } } },
+            select: {
+              id: true,
+              admission_no: true,
+              profiles: { select: { full_name: true } },
+              classes: { select: { name: true, section: true } },
+            },
           },
-          teachers: { select: { full_name: true } },
+          teachers: {
+            select: {
+              id: true,
+              full_name: true,
+              subject: true,
+              staff: { select: { employee_code: true } },
+            },
+          },
         },
       }),
     ]);
@@ -69,27 +87,133 @@ export class LibraryService {
       pageSize,
       rows: rows.map((l) => ({
         id: l.id,
+        bookId: l.book_id,
         bookTitle: l.library_books?.title ?? null,
         bookAuthor: l.library_books?.author ?? null,
-        // Borrower identity (name + admission no / borrower type) on every record.
         borrowerType: l.borrower_type,
         studentId: l.student_id,
+        teacherId: l.teacher_id,
         borrowerName: l.students?.profiles?.full_name ?? l.teachers?.full_name ?? null,
         admissionNo: l.students?.admission_no ?? null,
+        className: l.students?.classes
+          ? `${l.students.classes.name}${l.students.classes.section ? "-" + l.students.classes.section : ""}`
+          : null,
+        employeeCode: l.teachers?.staff?.employee_code ?? null,
+        subject: l.teachers?.subject ?? null,
         issuedAt: l.issued_at,
         dueAt: l.due_at,
         returnedAt: l.returned_at,
+        fineAmount: l.fine_amount,
+        fineStatus: l.fine_status,
+        fineSettledAt: l.fine_settled_at,
         status: l.returned_at ? "returned" : "issued",
       })),
     };
   }
 
-  /** ll_admin_all is the only write policy — issuing/returning is admin. */
-  async returnLoan(actor: AuthUser, loanId: string) {
+  private assertAdmin(actor: AuthUser) {
     if (!actor.roles.includes("admin")) throw new ForbiddenException();
+  }
+
+  /** lb_admin_all — admins add catalogue titles. */
+  async createBook(
+    actor: AuthUser,
+    data: {
+      title: string;
+      author?: string;
+      isbn?: string;
+      category?: string;
+      copies?: number;
+    },
+  ) {
+    this.assertAdmin(actor);
+    const copies = Math.max(1, data.copies ?? 1);
+    const row = await this.prisma.library_books.create({
+      data: {
+        title: data.title,
+        author: data.author || null,
+        isbn: data.isbn || null,
+        category: data.category || null,
+        total_copies: copies,
+        available_copies: copies,
+      },
+    });
+    return { id: row.id };
+  }
+
+  /**
+   * ll_admin_all — issue a book to a student or teacher. Decrements the book's
+   * available copies in the same transaction so the catalogue stays consistent.
+   */
+  async issueLoan(
+    actor: AuthUser,
+    data: {
+      bookId: string;
+      borrowerType: "student" | "teacher";
+      borrowerId: string;
+      dueAt: string;
+    },
+  ) {
+    this.assertAdmin(actor);
+    const book = await this.prisma.library_books.findUnique({ where: { id: data.bookId } });
+    if (!book) throw new NotFoundException("Book not found");
+    if (book.available_copies <= 0) throw new BadRequestException("No copies available");
+    const [loan] = await this.prisma.$transaction([
+      this.prisma.library_loans.create({
+        data: {
+          book_id: data.bookId,
+          borrower_type: data.borrowerType,
+          student_id: data.borrowerType === "student" ? data.borrowerId : null,
+          teacher_id: data.borrowerType === "teacher" ? data.borrowerId : null,
+          due_at: new Date(data.dueAt),
+        },
+      }),
+      this.prisma.library_books.update({
+        where: { id: data.bookId },
+        data: { available_copies: { decrement: 1 } },
+      }),
+    ]);
+    return { id: loan.id };
+  }
+
+  /**
+   * ll_admin_all — return a book. Records an optional fine (pending) and restores
+   * a copy to the catalogue (capped at total_copies).
+   */
+  async returnLoan(actor: AuthUser, loanId: string, fineAmount = 0) {
+    this.assertAdmin(actor);
+    const loan = await this.prisma.library_loans.findUnique({ where: { id: loanId } });
+    if (!loan) throw new NotFoundException("Loan not found");
+    if (loan.returned_at) throw new BadRequestException("Already returned");
+    const book = await this.prisma.library_books.findUnique({ where: { id: loan.book_id } });
+    const fine = Math.max(0, fineAmount);
+    await this.prisma.$transaction([
+      this.prisma.library_loans.update({
+        where: { id: loanId },
+        data: {
+          returned_at: new Date(),
+          fine_amount: new Prisma.Decimal(fine),
+          fine_status: fine > 0 ? "pending" : "none",
+        },
+      }),
+      this.prisma.library_books.update({
+        where: { id: loan.book_id },
+        data: {
+          available_copies: Math.min(book?.total_copies ?? 1, (book?.available_copies ?? 0) + 1),
+        },
+      }),
+    ]);
+    return { ok: true };
+  }
+
+  /** ll_admin_all — settle an outstanding fine (paid or waived). */
+  async settleFine(actor: AuthUser, loanId: string, status: "paid" | "waived") {
+    this.assertAdmin(actor);
+    const loan = await this.prisma.library_loans.findUnique({ where: { id: loanId } });
+    if (!loan) throw new NotFoundException("Loan not found");
     await this.prisma.library_loans.update({
       where: { id: loanId },
-      data: { returned_at: new Date() },
+      data: { fine_status: status, fine_settled_at: new Date() },
     });
     return { ok: true };
   }

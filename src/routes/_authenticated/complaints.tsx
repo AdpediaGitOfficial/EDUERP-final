@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,11 +42,11 @@ const SEV: Record<string, string> = {
   medium: "bg-amber-100 text-amber-900",
   high: "bg-red-100 text-red-900",
 };
+// Values match the complaints_status_check DB constraint (open|in_review|resolved).
 const STATUS: Record<string, string> = {
   open: "bg-blue-100 text-blue-900",
-  in_progress: "bg-amber-100 text-amber-900",
+  in_review: "bg-amber-100 text-amber-900",
   resolved: "bg-emerald-100 text-emerald-900",
-  closed: "bg-slate-100 text-slate-900",
 };
 
 function Page() {
@@ -63,39 +63,51 @@ function Page() {
   const { data: students } = useQuery({
     queryKey: ["compl-students", role, user?.id],
     enabled: !!user,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("students")
-          .select("id,admission_no,profiles(full_name),classes(name,section)")
-          .order("admission_no")
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/students?pageSize=500");
+      return res.rows.map((s) => ({
+        id: s.id,
+        admission_no: s.admissionNo,
+        profiles: { full_name: s.fullName },
+      }));
+    },
   });
 
   const { data: complaints } = useQuery({
     queryKey: ["complaints-list"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("complaints")
-          .select(
-            "id,subject,body,severity,status,student_id,raised_by,escalated_to_admin,created_at,updated_at,students(admission_no,profiles(full_name))",
-          )
-          .order("updated_at", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/complaints?pageSize=200");
+      return res.rows
+        .map((c) => ({
+          id: c.id,
+          subject: c.subject,
+          body: c.body,
+          severity: c.severity,
+          status: c.status,
+          student_id: c.studentId,
+          raised_by: c.raisedBy,
+          escalated_to_admin: c.escalatedToAdmin,
+          created_at: c.createdAt,
+          updated_at: c.updatedAt,
+          students: { admission_no: c.admissionNo, profiles: { full_name: c.studentName } },
+        }))
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    },
   });
 
   const { data: messages } = useQuery({
     queryKey: ["complaint-msgs", selected],
     enabled: !!selected,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("complaint_messages")
-          .select("id,body,sender_id,created_at,profiles:sender_id(full_name)")
-          .eq("complaint_id", selected!)
-          .order("created_at", { ascending: true })
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>(`/complaints/${selected}/messages`);
+      return rows.map((m) => ({
+        id: m.id,
+        body: m.body,
+        sender_id: m.senderId,
+        created_at: m.createdAt,
+        profiles: { full_name: m.senderName },
+      }));
+    },
   });
 
   const selectedComplaint = useMemo(
@@ -107,14 +119,19 @@ function Page() {
     e.preventDefault();
     if (!user || !studentId) return toast.error("Pick a student");
     const fd = new FormData(e.currentTarget);
-    const { error } = await supabase.from("complaints").insert({
-      student_id: studentId,
-      raised_by: user.id,
-      subject: String(fd.get("subject") || ""),
-      body: String(fd.get("body") || ""),
-      severity,
-    });
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch("/complaints", {
+        method: "POST",
+        body: JSON.stringify({
+          studentId,
+          subject: String(fd.get("subject") || ""),
+          body: String(fd.get("body") || ""),
+          severity,
+        }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not raise complaint");
+    }
     toast.success("Complaint raised");
     setOpen(false);
     setStudentId("");
@@ -124,38 +141,43 @@ function Page() {
   const reply = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!user || !selected) return;
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const body = String(fd.get("msg") || "").trim();
     if (!body) return;
-    const { error } = await supabase.from("complaint_messages").insert({
-      complaint_id: selected,
-      sender_id: user.id,
-      body,
-    });
-    if (error) return toast.error(error.message);
-    await supabase
-      .from("complaints")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", selected);
-    (e.target as HTMLFormElement).reset();
+    try {
+      await apiFetch(`/complaints/${selected}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not send");
+    }
+    form.reset();
     qc.invalidateQueries({ queryKey: ["complaint-msgs", selected] });
     qc.invalidateQueries({ queryKey: ["complaints-list"] });
   };
 
   const changeStatus = async (status: string) => {
     if (!selected) return;
-    const { error } = await supabase.from("complaints").update({ status }).eq("id", selected);
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch(`/complaints/${selected}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not update status");
+    }
     qc.invalidateQueries({ queryKey: ["complaints-list"] });
   };
 
   const escalate = async () => {
     if (!selected) return;
-    const { error } = await supabase
-      .from("complaints")
-      .update({ escalated_to_admin: true })
-      .eq("id", selected);
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch(`/complaints/${selected}/escalate`, { method: "POST" });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not escalate");
+    }
     toast.success("Escalated to admin");
     qc.invalidateQueries({ queryKey: ["complaints-list"] });
   };
@@ -283,9 +305,8 @@ function Page() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="in_progress">In progress</SelectItem>
+                        <SelectItem value="in_review">In review</SelectItem>
                         <SelectItem value="resolved">Resolved</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
                       </SelectContent>
                     </Select>
                     {role === "teacher" && !selectedComplaint.escalated_to_admin && (

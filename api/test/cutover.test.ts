@@ -630,3 +630,75 @@ describe("Payments: offline record (methods + validation + dup guard) & parent o
     expect(assigned.body.notified).toBeGreaterThan(0);
   });
 });
+
+describe("Library: catalogue + circulation + fines (admin write)", () => {
+  it("add book, issue (decrements copies), return (restores + fine), settle; teacher blocked", async () => {
+    const book = await post("/library/books", "admin", {
+      title: `Cutover Library Book ${process.env.VITEST_WORKER_ID ?? "0"}`,
+      author: "QA",
+      copies: 2,
+    });
+    expect(book.status).toBe(201);
+    const bookId = book.body.id;
+    expect((await post("/library/books", "teacher", { title: "nope" })).status).toBe(403);
+
+    const studentId = (await get("/students?pageSize=1", "admin")).body.rows[0].id;
+    const issued = await post("/library/loans", "admin", {
+      bookId,
+      borrowerType: "student",
+      borrowerId: studentId,
+      dueAt: "2026-08-01",
+    });
+    expect(issued.status).toBe(201);
+    const loanId = issued.body.id;
+
+    // The issued loan shows up with the borrower + fine fields the page renders.
+    const loans = await get("/library/loans?pageSize=500", "admin");
+    const row = loans.body.rows.find((l: any) => l.id === loanId);
+    expect(row).toBeTruthy();
+    expect(row).toHaveProperty("fineStatus");
+    expect(row).toHaveProperty("borrowerName");
+
+    const returned = await post(`/library/loans/${loanId}/return`, "admin", { fineAmount: 20 });
+    expect(returned.status).toBe(201);
+    const settle = await post(`/library/loans/${loanId}/fine`, "admin", { status: "paid" });
+    expect(settle.status).toBe(201);
+    // Returning again is a clean 400, not a crash.
+    expect((await post(`/library/loans/${loanId}/return`, "admin", {})).status).toBe(400);
+  });
+});
+
+describe("Complaints: raise, reply, escalate, status (constraint-aligned)", () => {
+  it("raise + reply (with sender name) + escalate; status is constraint-checked", async () => {
+    const studentId = (await get("/students?pageSize=1", "admin")).body.rows[0].id;
+    const created = await post("/complaints", "admin", {
+      studentId,
+      subject: "Cutover complaint",
+      body: "A complaint raised by the cutover spec.",
+      severity: "high",
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+
+    const reply = await post(`/complaints/${id}/messages`, "admin", { body: "Admin reply" });
+    expect(reply.status).toBe(201);
+    const msgs = await get(`/complaints/${id}/messages`, "admin");
+    expect(msgs.body[0].senderName).toBeTruthy();
+
+    const esc = await post(`/complaints/${id}/escalate`, "admin", {});
+    expect(esc.status).toBe(201);
+
+    // in_review/resolved are allowed; in_progress violates the DB check -> 400.
+    expect((await patch(`/complaints/${id}/status`, "admin", { status: "in_review" })).status).toBe(
+      200,
+    );
+    expect(
+      (await patch(`/complaints/${id}/status`, "admin", { status: "in_progress" })).status,
+    ).toBe(400);
+
+    const list = await get("/complaints?pageSize=200", "admin");
+    const row = list.body.rows.find((c: any) => c.id === id);
+    expect(row.escalatedToAdmin).toBe(true);
+    expect(row).toHaveProperty("admissionNo");
+  });
+});

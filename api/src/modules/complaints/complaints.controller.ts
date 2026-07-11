@@ -33,8 +33,15 @@ class CreateComplaintDto {
 }
 
 class StatusDto {
-  @IsIn(["open", "in_review", "resolved", "closed"])
+  // The complaints_status_check DB constraint allows exactly these three values.
+  @IsIn(["open", "in_review", "resolved"])
   status: string;
+}
+
+class ReplyDto {
+  @IsString()
+  @MinLength(1)
+  body: string;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -65,5 +72,15 @@ export class ComplaintsController {
   @Get(":id/messages")
   messages(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.complaints.messages(actor, id);
+  }
+
+  @Post(":id/messages")
+  reply(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Body() dto: ReplyDto) {
+    return this.complaints.addMessage(actor, id, dto.body);
+  }
+
+  @Post(":id/escalate")
+  escalate(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.complaints.escalate(actor, id);
   }
 }
