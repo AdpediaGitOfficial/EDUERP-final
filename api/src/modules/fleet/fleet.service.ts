@@ -510,9 +510,32 @@ export class FleetService {
       id: d.id,
       title: d.title,
       doc_kind: d.doc_kind,
+      file_url: d.file_path,
       issue_date: d.issue_date ? d.issue_date.toISOString().slice(0, 10) : null,
       expiry_date: d.expiry_date ? d.expiry_date.toISOString().slice(0, 10) : null,
     }));
+  }
+
+  /** Attach an uploaded document to a vehicle (fleet_manager|admin). */
+  async addVehicleDocument(
+    actor: AuthUser,
+    vehicleId: string,
+    input: { docKind: string; title: string; fileUrl: string; expiryDate?: string | null },
+  ) {
+    if (!this.canWriteFleet(actor)) throw new ForbiddenException();
+    const vehicle = await this.prisma.fleet_vehicles.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) throw new NotFoundException("Vehicle not found");
+    const row = await this.prisma.vehicle_documents.create({
+      data: {
+        vehicle_id: vehicleId,
+        doc_kind: input.docKind,
+        title: input.title,
+        file_path: input.fileUrl,
+        uploaded_by: actor.id,
+        expiry_date: input.expiryDate ? new Date(input.expiryDate) : null,
+      },
+    });
+    return { id: row.id, title: row.title, doc_kind: row.doc_kind, file_url: row.file_path };
   }
 
   // ---- Driver detail (fleet_admin_di; reception read) ----------------------

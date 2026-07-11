@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow, EmptyState } from "@/components/empty-state";
-import { apiFetch, apiGet } from "@/lib/api/client";
+import { apiFetch, apiGet, apiUpload } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -526,7 +526,8 @@ function RecordPaymentDialog({
   const [method, setMethod] = useState("cash");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
-  const [proof, setProof] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [proof, setProof] = useState<{ name: string; url: string } | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dupWarn, setDupWarn] = useState(false);
 
@@ -547,12 +548,18 @@ function RecordPaymentDialog({
   const needsRef = method !== "cash";
   const diff = useMemo(() => amtNum - balance, [amtNum, balance]);
 
-  const onFile = (file?: File) => {
+  const onFile = async (file?: File) => {
     if (!file) return setProof(null);
-    if (file.size > 2 * 1024 * 1024) return toast.error("Proof must be under 2 MB");
-    const reader = new FileReader();
-    reader.onload = () => setProof({ name: file.name, dataUrl: String(reader.result) });
-    reader.readAsDataURL(file);
+    if (file.size > 5 * 1024 * 1024) return toast.error("Proof must be under 5 MB");
+    setUploadingProof(true);
+    try {
+      const meta = await apiUpload(file, "payment-proofs");
+      setProof({ name: meta.name, url: meta.url });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Proof upload failed");
+    } finally {
+      setUploadingProof(false);
+    }
   };
 
   const record = async (force = false) => {
@@ -574,7 +581,7 @@ function RecordPaymentDialog({
           method,
           reference: reference.trim() || undefined,
           notes: notes.trim() || undefined,
-          proofUrl: proof?.dataUrl,
+          proofUrl: proof?.url,
           force,
         }),
       });
@@ -687,9 +694,10 @@ function RecordPaymentDialog({
                   type="button"
                   variant="outline"
                   size="sm"
+                  disabled={uploadingProof}
                   onClick={() => document.getElementById("proof-input")?.click()}
                 >
-                  <Upload className="size-3.5 mr-1" /> Upload
+                  <Upload className="size-3.5 mr-1" /> {uploadingProof ? "Uploading…" : "Upload"}
                 </Button>
                 <span className="text-xs text-muted-foreground truncate">
                   {proof ? proof.name : "Screenshot / scanned cheque"}

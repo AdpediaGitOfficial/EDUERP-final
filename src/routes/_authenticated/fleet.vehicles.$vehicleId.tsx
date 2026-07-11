@@ -1,12 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiFetch } from "@/lib/api/client";
+import { apiGet, apiFetch, apiPost, apiFileObjectUrl } from "@/lib/api/client";
 import { useConfirm } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FileUpload } from "@/components/file-upload";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { badgeClass, daysUntil, fmtDate, money, niceLabel } from "@/lib/module-util";
 import { ArrowLeft, Pencil, Power } from "lucide-react";
 import { useState } from "react";
@@ -22,7 +25,15 @@ function Page() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const confirm = useConfirm();
+  const { user } = useCurrentUser();
+  const canManage = !!user?.roles.some((r) => r === "admin" || r === "fleet_manager");
   const [edit, setEdit] = useState(false);
+  const [docKind, setDocKind] = useState("insurance");
+
+  const openFile = async (url: string) => {
+    const obj = await apiFileObjectUrl(url);
+    if (obj) window.open(obj, "_blank", "noopener");
+  };
 
   const { data: v, isLoading } = useQuery({
     queryKey: ["vehicle-detail", vehicleId],
@@ -300,6 +311,31 @@ function Page() {
           </Card>
         </TabsContent>
         <TabsContent value="docs">
+          {canManage && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Input
+                value={docKind}
+                onChange={(e) => setDocKind(e.target.value)}
+                placeholder="Document kind (e.g. insurance, permit)"
+                className="h-9 w-64"
+                aria-label="Document kind"
+              />
+              <FileUpload
+                category="vehicle-documents"
+                accept=".pdf,.png,.jpg,.jpeg,.webp"
+                label="Upload document"
+                disabled={!docKind.trim()}
+                onUploaded={async (meta) => {
+                  await apiPost(`/fleet/vehicles/${vehicleId}/documents`, {
+                    docKind: docKind.trim() || "document",
+                    title: meta.name,
+                    fileUrl: meta.url,
+                  });
+                  await qc.invalidateQueries({ queryKey: ["vehicle-docs", vehicleId] });
+                }}
+              />
+            </div>
+          )}
           <Card className="rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[560px]">
@@ -309,6 +345,7 @@ function Page() {
                     <th className="p-3">Kind</th>
                     <th className="p-3">Issued</th>
                     <th className="p-3">Expires</th>
+                    <th className="p-3">File</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -318,13 +355,22 @@ function Page() {
                       <td className="p-3 capitalize">{d.doc_kind}</td>
                       <td className="p-3">{fmtDate(d.issue_date)}</td>
                       <td className="p-3">{fmtDate(d.expiry_date)}</td>
+                      <td className="p-3">
+                        {d.file_url ? (
+                          <Button variant="ghost" size="sm" onClick={() => openFile(d.file_url)}>
+                            View
+                          </Button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {(docs ?? []).length === 0 && (
                     <tr>
-                      <td className="p-6 text-center text-muted-foreground" colSpan={4}>
-                        No documents on file. Document upload UI is coming — the insurance and
-                        permit expiry dates on this vehicle drive the renewals alerts today.
+                      <td className="p-6 text-center text-muted-foreground" colSpan={5}>
+                        No documents on file. Upload insurance, permit, or fitness certificates
+                        above; their expiry dates also drive the renewals alerts.
                       </td>
                     </tr>
                   )}

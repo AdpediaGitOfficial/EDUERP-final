@@ -254,8 +254,14 @@ export async function apiUpload(
  */
 export async function apiFileObjectUrl(pathOrUrl: string): Promise<string | null> {
   const path = pathOrUrl.replace(/^\/api/, ""); // "/files/…"
-  const res = await apiFetch(path);
-  if (!res) return null;
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
+  try {
+    const res = await apiFetch(path);
+    if (!res) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    // Missing/stale file (404) or transient error — degrade to the fallback UI
+    // rather than throwing an unhandled rejection into the component tree.
+    return null;
+  }
 }

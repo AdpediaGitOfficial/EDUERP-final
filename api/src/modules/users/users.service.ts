@@ -124,6 +124,7 @@ export class UsersService {
       fullName: profile.full_name,
       email: profile.email,
       phone: profile.phone,
+      avatarUrl: profile.avatar_url,
       roles: roleRows.map((r) => r.role as string),
     };
   }

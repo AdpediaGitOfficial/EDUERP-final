@@ -2055,15 +2055,21 @@ describe("File storage: upload / download / attach", () => {
     expect((await request(http).get(up.body.url)).status).toBe(401);
     // A missing key 404s.
     expect(
-      (await request(http).get("/api/files/avatars/does-not-exist.png").set("Authorization", `Bearer ${tokens.admin}`))
-        .status,
+      (
+        await request(http)
+          .get("/api/files/avatars/does-not-exist.png")
+          .set("Authorization", `Bearer ${tokens.admin}`)
+      ).status,
     ).toBe(404);
   });
 
   it("rejects an unsupported mime type and an invalid category (400)", async () => {
     const badMime = await authed("admin")
       .field("category", "avatars")
-      .attach("file", Buffer.from("MZ"), { filename: "x.exe", contentType: "application/x-msdownload" });
+      .attach("file", Buffer.from("MZ"), {
+        filename: "x.exe",
+        contentType: "application/x-msdownload",
+      });
     expect(badMime.status).toBe(400);
 
     const badCat = await authed("admin")
@@ -2076,7 +2082,10 @@ describe("File storage: upload / download / attach", () => {
     const staffId = (await get("/hr/staff", "admin")).body[0].id;
     const up = await authed("admin")
       .field("category", "staff-documents")
-      .attach("file", Buffer.from("%PDF-1.4 x"), { filename: "c.pdf", contentType: "application/pdf" });
+      .attach("file", Buffer.from("%PDF-1.4 x"), {
+        filename: "c.pdf",
+        contentType: "application/pdf",
+      });
     expect(up.status).toBe(201);
 
     const before = (await get(`/hr/staff/${staffId}/documents`, "admin")).body.length;
@@ -2093,19 +2102,59 @@ describe("File storage: upload / download / attach", () => {
 
     // Non-HR cannot attach; malformed id → 400 (not 500).
     expect(
-      (await post(`/hr/staff/${staffId}/documents`, "teacher", { docType: "x", fileUrl: up.body.url }))
-        .status,
+      (
+        await post(`/hr/staff/${staffId}/documents`, "teacher", {
+          docType: "x",
+          fileUrl: up.body.url,
+        })
+      ).status,
     ).toBe(403);
     expect((await get("/hr/staff/not-a-uuid/documents", "admin")).status).toBe(400);
   });
 
-  it("sets a profile avatar via PATCH /users/me", async () => {
+  it("sets a profile avatar via PATCH /users/me and reads it back", async () => {
     const up = await authed("admin")
       .field("category", "avatars")
       .attach("file", PNG, { filename: "me.png", contentType: "image/png" });
     const r = await patch("/users/me", "admin", { avatarUrl: up.body.url });
     expect(r.status).toBe(200);
     expect(r.body.avatarUrl).toBe(up.body.url);
+    // getProfile now surfaces avatarUrl for the settings page.
+    const me = await get(`/users/${(await get("/auth/me", "admin")).body.id}`, "admin");
+    expect(me.body.avatarUrl).toBe(up.body.url);
+  });
+
+  it("attaches an uploaded document to a vehicle (fleet|admin); teacher 403", async () => {
+    const vehicleId = (await get("/fleet/vehicles", "admin")).body[0].id;
+    const up = await authed("admin")
+      .field("category", "vehicle-documents")
+      .attach("file", Buffer.from("%PDF-1.4 v"), {
+        filename: "ins.pdf",
+        contentType: "application/pdf",
+      });
+    expect(up.status).toBe(201);
+
+    const attach = await post(`/fleet/vehicles/${vehicleId}/documents`, "admin", {
+      docKind: "insurance",
+      title: "Insurance 2026",
+      fileUrl: up.body.url,
+      expiryDate: "2027-03-31",
+    });
+    expect(attach.status).toBe(201);
+    expect(attach.body.file_url).toBe(up.body.url);
+
+    const list = await get(`/fleet/vehicles/${vehicleId}/documents`, "admin");
+    expect(list.body.some((d: any) => d.file_url === up.body.url)).toBe(true);
+
+    expect(
+      (
+        await post(`/fleet/vehicles/${vehicleId}/documents`, "teacher", {
+          docKind: "x",
+          title: "x",
+          fileUrl: up.body.url,
+        })
+      ).status,
+    ).toBe(403);
   });
 });
 

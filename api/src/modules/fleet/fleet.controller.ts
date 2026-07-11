@@ -29,6 +29,24 @@ import { FleetService } from "./fleet.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 
+class VehicleDocumentDto {
+  @IsString()
+  @MinLength(1)
+  docKind: string;
+
+  @IsString()
+  @MinLength(1)
+  title: string;
+
+  @IsString()
+  @MinLength(1)
+  fileUrl: string;
+
+  @IsOptional()
+  @IsDateString()
+  expiryDate?: string;
+}
+
 class VehicleDto {
   @IsString()
   @MinLength(2)
@@ -303,6 +321,15 @@ export class FleetController {
   @Get("vehicles/:id/documents")
   vehicleDocuments(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.fleet.vehicleDocuments(actor, id);
+  }
+
+  @Post("vehicles/:id/documents")
+  addVehicleDocument(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: VehicleDocumentDto,
+  ) {
+    return this.fleet.addVehicleDocument(actor, id, dto);
   }
 
   // ---- Driver detail -------------------------------------------------------
