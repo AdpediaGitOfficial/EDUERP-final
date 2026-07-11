@@ -66,36 +66,23 @@ model users {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model admission_documents {
-  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  enquiry_id          String              @db.Uuid
-  doc_type            String
-  verified            Boolean             @default(false)
-  file_url            String?
-  created_at          DateTime            @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
-  admission_enquiries admission_enquiries @relation(fields: [enquiry_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@schema("public")
-}
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model admission_enquiries {
-  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   student_name         String
   parent_name          String?
   parent_phone         String?
   parent_email         String?
   grade_applying       String?
-  enquiry_date         DateTime              @default(dbgenerated("CURRENT_DATE")) @db.Date
-  status               String                @default("new")
+  enquiry_date         DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  status               String    @default("new")
   notes                String?
-  converted_student_id String?               @db.Uuid
+  converted_student_id String?   @db.Uuid
   admission_no         String?
-  created_at           DateTime              @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime              @default(now()) @db.Timestamptz(6)
-  admission_documents  admission_documents[]
-  students             students?             @relation(fields: [converted_student_id], references: [id], onUpdate: NoAction)
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime  @default(now()) @db.Timestamptz(6)
+  students             students? @relation(fields: [converted_student_id], references: [id], onUpdate: NoAction)
 
   @@schema("public")
 }
@@ -309,33 +296,8 @@ model broadcasts {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model bus_locations {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  bus_id      String   @db.Uuid
-  lat         Float
-  lng         Float
-  speed       Float?
-  recorded_at DateTime @default(now()) @db.Timestamptz(6)
-  buses       buses    @relation(fields: [bus_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([bus_id, recorded_at(sort: Desc)], map: "idx_bus_locations_bus")
-  @@schema("public")
-}
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model buses {
-  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  number        String
-  route_name    String?
-  driver_name   String?
-  driver_phone  String?
-  capacity      Int             @default(40)
-  created_at    DateTime        @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime        @default(now()) @db.Timestamptz(6)
-  bus_locations bus_locations[]
-
-  @@schema("public")
-}
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model candidates {
@@ -615,7 +577,6 @@ model fleet_vehicles {
   transport_routes    transport_routes[]
   vehicle_documents   vehicle_documents[]
   vehicle_maintenance vehicle_maintenance[]
-  vehicle_positions   vehicle_positions?
 
   @@schema("public")
 }
@@ -1011,17 +972,6 @@ model route_students {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model salary_structures {
-  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  designation         String   @unique
-  base_pay            Decimal  @default(0) @db.Decimal(12, 2)
-  allowances          Json     @default("{}")
-  standard_deductions Json     @default("{}")
-  created_at          DateTime @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime @default(now()) @db.Timestamptz(6)
-
-  @@schema("public")
-}
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model shifts {
@@ -1441,17 +1391,6 @@ model vehicle_maintenance {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model vehicle_positions {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  vehicle_id     String         @unique @db.Uuid
-  lat            Decimal        @db.Decimal(9, 6)
-  lng            Decimal        @db.Decimal(9, 6)
-  gps_connected  Boolean        @default(false)
-  updated_at     DateTime       @default(now()) @db.Timestamptz(6)
-  fleet_vehicles fleet_vehicles @relation(fields: [vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@schema("public")
-}
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model visitor_logs {
