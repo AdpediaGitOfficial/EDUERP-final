@@ -13,7 +13,53 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
-import { IsNumber, IsOptional, IsString, IsUUID, Min } from "class-validator";
+import {
+  IsDateString,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  MinLength,
+} from "class-validator";
+
+class CreateStructureDto {
+  @IsString()
+  @MinLength(2)
+  name: string;
+
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
+
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @IsOptional()
+  @IsString()
+  term?: string;
+
+  @IsOptional()
+  @IsString()
+  academicYear?: string;
+
+  @IsOptional()
+  @IsString()
+  frequency?: string;
+}
+
+class AssignStructureDto {
+  @IsUUID()
+  structureId: string;
+
+  @IsDateString()
+  dueDate: string;
+
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
+}
 
 class RecordPaymentDto {
   @IsUUID()
@@ -65,5 +111,23 @@ export class FeesController {
   @Roles("admin")
   record(@CurrentUser() actor: AuthUser, @Body() dto: RecordPaymentDto) {
     return this.fees.recordPayment(actor, dto);
+  }
+
+  @Get("fees/structures")
+  @Roles("admin")
+  structures(@CurrentUser() actor: AuthUser) {
+    return this.fees.listStructures(actor);
+  }
+
+  @Post("fees/structures")
+  @Roles("admin")
+  createStructure(@CurrentUser() actor: AuthUser, @Body() dto: CreateStructureDto) {
+    return this.fees.createStructure(actor, dto);
+  }
+
+  @Post("fees/assign")
+  @Roles("admin")
+  assign(@CurrentUser() actor: AuthUser, @Body() dto: AssignStructureDto) {
+    return this.fees.assignStructure(actor, dto.structureId, dto.dueDate, dto.classId);
   }
 }

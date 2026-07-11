@@ -2,7 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -121,41 +121,59 @@ function AdminFees() {
 
   const { data: classes } = useQuery({
     queryKey: ["all-classes-fees"],
-    queryFn: async () => (await supabase.from("classes").select("*")).data ?? [],
+    queryFn: () => apiGet<any[]>("/classes"),
   });
   const { data: structures } = useQuery({
     queryKey: ["fee-structures"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("fee_structures")
-          .select("*, classes(name,section)")
-          .order("created_at", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/fees/structures");
+      return rows.map((s) => ({
+        id: s.id,
+        name: s.name,
+        class_id: s.classId,
+        amount: s.amount,
+        term: s.term,
+        academic_year: s.academicYear,
+        frequency: s.frequency,
+        classes: s.className ? { name: s.className } : null,
+      }));
+    },
   });
   const { data: assignments } = useQuery({
     queryKey: ["fee-assignments"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("fee_assignments")
-          .select("*, students(admission_no, profiles(full_name))")
-          .order("due_date")
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/fees/assignments?pageSize=200");
+      return res.rows.map((r) => ({
+        id: r.id,
+        student_id: r.studentId,
+        title: r.title,
+        amount_due: r.amountDue,
+        amount_paid: r.amountPaid,
+        due_date: r.dueDate,
+        status: r.status,
+        students: { admission_no: r.admissionNo, profiles: { full_name: r.studentName } },
+      }));
+    },
   });
 
   const submitStructure = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const { error } = await supabase.from("fee_structures").insert({
-      name: String(fd.get("name")),
-      class_id: structureClassId || null,
-      amount: Number(fd.get("amount")),
-      term: String(fd.get("term") || ""),
-      academic_year: String(fd.get("year") || "2025-2026"),
-      frequency: String(fd.get("frequency") || "one_time") as any,
-    });
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch("/fees/structures", {
+        method: "POST",
+        body: JSON.stringify({
+          name: String(fd.get("name")),
+          classId: structureClassId || undefined,
+          amount: Number(fd.get("amount")),
+          term: String(fd.get("term") || ""),
+          academicYear: String(fd.get("year") || "2025-2026"),
+          frequency: String(fd.get("frequency") || "one_time"),
+        }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not create");
+    }
     toast.success("Fee structure created");
     setOpenStructure(false);
     qc.invalidateQueries({ queryKey: ["fee-structures"] });
@@ -165,26 +183,24 @@ function AdminFees() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     if (!assignStructureId) return toast.error("Pick a fee structure");
-    const { data: structure } = await supabase
-      .from("fee_structures")
-      .select("*")
-      .eq("id", assignStructureId)
-      .single();
-    if (!structure) return toast.error("Structure not found");
-    const q = supabase.from("students").select("id");
-    const { data: targets } = assignClassId ? await q.eq("class_id", assignClassId) : await q;
-    if (!targets || targets.length === 0) return toast.error("No students to assign to");
     const dueDate = String(fd.get("due"));
-    const rows = targets.map((s) => ({
-      student_id: s.id,
-      structure_id: structure.id,
-      title: structure.name,
-      amount_due: structure.amount,
-      due_date: dueDate,
-    }));
-    const { error } = await supabase.from("fee_assignments").insert(rows);
-    if (error) return toast.error(error.message);
-    toast.success(`Assigned to ${rows.length} student${rows.length === 1 ? "" : "s"}`);
+    let assigned = 0;
+    try {
+      const res = await apiFetch("/fees/assign", {
+        method: "POST",
+        body: JSON.stringify({
+          structureId: assignStructureId,
+          dueDate,
+          classId: assignClassId || undefined,
+        }),
+      });
+      const body = res ? await res.json() : { assigned: 0 };
+      assigned = body.assigned ?? 0;
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not assign");
+    }
+    if (assigned === 0) return toast.error("No students to assign to");
+    toast.success(`Assigned to ${assigned} student${assigned === 1 ? "" : "s"}`);
     setOpenAssign(false);
     qc.invalidateQueries({ queryKey: ["fee-assignments"] });
     qc.invalidateQueries({ queryKey: ["self-fees"] });
@@ -420,23 +436,34 @@ function RecordPaymentDialog({
   const { user } = useCurrentUser();
   const { data: assignment } = useQuery({
     queryKey: ["assignment", assignmentId],
-    queryFn: async () =>
-      (await supabase.from("fee_assignments").select("*").eq("id", assignmentId!).single()).data,
     enabled: !!assignmentId,
+    queryFn: async () => {
+      // Admin dialog: locate the assignment from the (admin-scoped) list.
+      const res = await apiGet<{ rows: any[] }>("/fees/assignments?pageSize=200");
+      const r = res.rows.find((x) => x.id === assignmentId);
+      return r
+        ? { id: r.id, student_id: r.studentId, amount_due: r.amountDue, amount_paid: r.amountPaid }
+        : null;
+    },
   });
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!assignment || !user) return;
     const fd = new FormData(e.currentTarget);
-    const { error } = await supabase.from("payments").insert({
-      fee_assignment_id: assignment.id,
-      student_id: assignment.student_id,
-      amount: Number(fd.get("amount")),
-      method: String(fd.get("method")),
-      reference: String(fd.get("ref") || ""),
-      recorded_by: user.id,
-    });
-    if (error) return toast.error(error.message);
+    try {
+      await apiFetch("/payments", {
+        method: "POST",
+        body: JSON.stringify({
+          feeAssignmentId: assignment.id,
+          studentId: assignment.student_id,
+          amount: Number(fd.get("amount")),
+          method: String(fd.get("method")),
+          reference: String(fd.get("ref") || ""),
+        }),
+      });
+    } catch (err) {
+      return toast.error(err instanceof Error ? err.message : "Could not record");
+    }
     toast.success("Payment recorded");
     onClose();
     qc.invalidateQueries({ queryKey: ["fee-assignments"] });
@@ -497,39 +524,38 @@ function SelfFees({ userId, isParent }: { userId: string; isParent: boolean }) {
   const { data } = useQuery({
     queryKey: ["self-fees", userId, isParent],
     queryFn: async () => {
-      let studentIds: string[] = [];
-      if (isParent) {
-        const { data: ps } = await supabase
-          .from("parent_student")
-          .select("student_id")
-          .eq("parent_id", userId);
-        studentIds = (ps ?? []).map((r) => r.student_id);
-      } else {
-        const { data: s } = await supabase
-          .from("students")
-          .select("id")
-          .eq("profile_id", userId)
-          .maybeSingle();
-        if (s) studentIds = [s.id];
-      }
-      if (studentIds.length === 0) return { children: [], assignments: [], payments: [] };
-      const [{ data: children }, { data: assignments }, { data: payments }] = await Promise.all([
-        supabase
-          .from("students")
-          .select("id, admission_no, profiles(full_name), classes(name,section)")
-          .in("id", studentIds),
-        supabase
-          .from("fee_assignments")
-          .select("*, fee_structures(name,frequency,academic_year)")
-          .in("student_id", studentIds)
-          .order("due_date"),
-        supabase
-          .from("payments")
-          .select("*, fee_assignments(title, amount_due, amount_paid, status)")
-          .in("student_id", studentIds)
-          .order("paid_at", { ascending: false }),
+      // /students, /fees/assignments and /payments are all role-scoped by the API
+      // (parent -> their children, student -> self), matching the old per-id filter.
+      const [studentsRes, assignRes, payRes] = await Promise.all([
+        apiGet<{ rows: any[] }>("/students?pageSize=50"),
+        apiGet<{ rows: any[] }>("/fees/assignments?pageSize=200"),
+        apiGet<{ rows: any[] }>("/payments?pageSize=200"),
       ]);
-      return { children: children ?? [], assignments: assignments ?? [], payments: payments ?? [] };
+      const children = studentsRes.rows.map((s) => ({
+        id: s.id,
+        admission_no: s.admissionNo,
+        profiles: { full_name: s.fullName },
+        classes: s.class ? { name: s.class.name, section: s.class.section } : null,
+      }));
+      if (children.length === 0) return { children: [], assignments: [], payments: [] };
+      const assignments = assignRes.rows.map((r) => ({
+        id: r.id,
+        student_id: r.studentId,
+        title: r.title,
+        amount_due: r.amountDue,
+        amount_paid: r.amountPaid,
+        due_date: r.dueDate,
+        status: r.status,
+      }));
+      const payments = payRes.rows.map((p) => ({
+        id: p.id,
+        student_id: p.studentId,
+        amount: p.amount,
+        method: p.method,
+        reference: p.reference,
+        paid_at: p.paidAt,
+      }));
+      return { children, assignments, payments };
     },
     refetchOnWindowFocus: true,
   });
@@ -988,17 +1014,32 @@ function PayDialog({
       dbMethod = "online";
     }
     setSaving(true);
-    const { error } = await supabase.from("payments").insert({
-      fee_assignment_id: assignment.id,
-      student_id: assignment.student_id,
-      amount: payAmount,
-      method: dbMethod,
-      reference,
-      recorded_by: userId,
-      status: outcome,
-    });
+    // Records via the API. NOTE (coexistence): under the extracted RLS the only
+    // write policy on payments is pay_admin_all, so a parent/student self-payment
+    // is rejected (403) here exactly as it was under Supabase RLS. Enabling true
+    // parent self-service payment is a product decision (a gateway webhook that
+    // records server-side, or a scoped payments-insert policy) — tracked in
+    // BACKEND_MIGRATION_LOG.md. Only the 'successful' outcome maps to a real row.
+    let failed = false;
+    if (outcome === "successful") {
+      try {
+        await apiFetch("/payments", {
+          method: "POST",
+          body: JSON.stringify({
+            feeAssignmentId: assignment.id,
+            studentId: assignment.student_id,
+            amount: payAmount,
+            method: dbMethod,
+            reference,
+          }),
+        });
+      } catch (err) {
+        failed = true;
+        toast.error(err instanceof Error ? err.message : "Payment could not be recorded");
+      }
+    }
     setSaving(false);
-    if (error) return toast.error(error.message);
+    if (failed) return;
     const msg =
       outcome === "successful"
         ? "Payment successful. Receipt available in history."

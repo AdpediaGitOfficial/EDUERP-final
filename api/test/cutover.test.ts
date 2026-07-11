@@ -262,3 +262,35 @@ describe("attendance: teacher self-mark (ta_teacher_self_mark)", () => {
     expect(studentStatus.body.teacher).toBeNull();
   });
 });
+
+describe("fees: admin structures + bulk assign", () => {
+  it("admin lists/creates a structure and bulk-assigns; non-admin rejected", async () => {
+    const list = await get("/fees/structures", "admin");
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body)).toBe(true);
+    expect((await get("/fees/structures", "teacher")).status).toBe(403);
+
+    const created = await post("/fees/structures", "admin", {
+      name: `Cutover Fee ${process.env.VITEST_WORKER_ID ?? "0"}`,
+      amount: 5000,
+      term: "Term 1",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.id).toBeTruthy();
+
+    const grade8a = "4a99fe58-59b1-4503-b833-213f4e16d92b";
+    const assigned = await post("/fees/assign", "admin", {
+      structureId: created.body.id,
+      dueDate: "2026-10-01",
+      classId: grade8a,
+    });
+    expect(assigned.status).toBe(201);
+    expect(assigned.body.assigned).toBeGreaterThan(0);
+
+    const denied = await post("/fees/assign", "teacher", {
+      structureId: created.body.id,
+      dueDate: "2026-10-01",
+    });
+    expect(denied.status).toBe(403);
+  });
+});

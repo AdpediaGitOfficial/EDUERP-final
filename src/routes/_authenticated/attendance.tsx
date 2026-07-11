@@ -15,7 +15,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
@@ -89,11 +89,10 @@ function AttendancePage() {
     enabled: !!user,
     queryKey: ["teacher-attendance-classes", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("teacher_classes")
-        .select("classes(id, name, section)")
-        .eq("teacher_id", user!.id);
-      return (data ?? []).map((r: any) => r.classes).filter(Boolean);
+      const rows = await apiGet<{ classId: string; name: string; section: string }[]>(
+        `/teachers/${user!.id}/classes`,
+      );
+      return rows.map((r) => ({ id: r.classId, name: r.name, section: r.section }));
     },
   });
 
@@ -105,12 +104,17 @@ function AttendancePage() {
     enabled: !!classId,
     queryKey: ["attendance-students", classId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("students")
-        .select("id, roll_no, admission_no, profiles(full_name)")
-        .eq("class_id", classId)
-        .order("roll_no");
-      return data ?? [];
+      const res = await apiGet<{ rows: any[] }>(`/students?classId=${classId}&pageSize=200`);
+      return res.rows
+        .map((s) => ({
+          id: s.id,
+          roll_no: s.rollNo,
+          admission_no: s.admissionNo,
+          profiles: { full_name: s.fullName },
+        }))
+        .sort((a, b) =>
+          (a.roll_no ?? "").localeCompare(b.roll_no ?? "", undefined, { numeric: true }),
+        );
     },
   });
 
@@ -118,12 +122,10 @@ function AttendancePage() {
     enabled: !!classId && !!date,
     queryKey: ["attendance-existing", classId, date],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("attendance")
-        .select("student_id,status")
-        .eq("class_id", classId)
-        .eq("date", date);
-      return data ?? [];
+      const res = await apiGet<{ rows: any[] }>(
+        `/attendance?classId=${classId}&from=${date}&to=${date}&pageSize=500`,
+      );
+      return res.rows.map((r) => ({ student_id: r.studentId, status: r.status }));
     },
   });
 
@@ -148,19 +150,18 @@ function AttendancePage() {
   const save = async () => {
     if (!classId || !user) return;
     setSaving(true);
-    const rows = Object.entries(marks).map(([student_id, status]) => ({
-      student_id,
-      class_id: classId,
-      date,
-      status,
-      marked_by: user.id,
-    }));
-    const { error } = await supabase
-      .from("attendance")
-      .upsert(rows, { onConflict: "student_id,date" });
+    const entries = Object.entries(marks).map(([studentId, status]) => ({ studentId, status }));
+    try {
+      await apiFetch("/attendance/mark", {
+        method: "POST",
+        body: JSON.stringify({ classId, date, entries }),
+      });
+    } catch (err) {
+      setSaving(false);
+      return toast.error(err instanceof Error ? err.message : "Could not save");
+    }
     setSaving(false);
-    if (error) return toast.error(error.message);
-    toast.success(`Attendance saved for ${rows.length} students`);
+    toast.success(`Attendance saved for ${entries.length} students`);
     qc.invalidateQueries({ queryKey: ["attendance-existing", classId, date] });
   };
 

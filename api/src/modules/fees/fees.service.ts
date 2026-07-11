@@ -18,6 +18,72 @@ import type { AuthUser } from "../../common/decorators/current-user.decorator";
 export class FeesService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
+  /** fee_structures are admin-managed (fs_admin_write); linked-user read (fs_linked_read). */
+  async listStructures(actor: AuthUser) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const rows = await this.prisma.fee_structures.findMany({
+      orderBy: { created_at: "desc" },
+      include: { classes: { select: { name: true, section: true } } },
+    });
+    return rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      classId: s.class_id,
+      className: s.classes ? `${s.classes.name} ${s.classes.section ?? ""}`.trim() : null,
+      amount: s.amount,
+      term: s.term,
+      academicYear: s.academic_year,
+      frequency: s.frequency,
+    }));
+  }
+
+  async createStructure(
+    actor: AuthUser,
+    data: {
+      name: string;
+      classId?: string;
+      amount: number;
+      term?: string;
+      academicYear?: string;
+      frequency?: string;
+    },
+  ) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const row = await this.prisma.fee_structures.create({
+      data: {
+        name: data.name,
+        class_id: data.classId || null,
+        amount: new Prisma.Decimal(data.amount),
+        term: data.term || null,
+        academic_year: data.academicYear || "2025-2026",
+        frequency: (data.frequency ?? "one_time") as never,
+      },
+    });
+    return { id: row.id };
+  }
+
+  /** Bulk-assign a fee structure to a class (or the whole school). Admin only. */
+  async assignStructure(actor: AuthUser, structureId: string, dueDate: string, classId?: string) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const structure = await this.prisma.fee_structures.findUnique({ where: { id: structureId } });
+    if (!structure) throw new ForbiddenException("Fee structure not found");
+    const targets = await this.prisma.students.findMany({
+      where: classId ? { class_id: classId } : {},
+      select: { id: true },
+    });
+    if (targets.length === 0) return { assigned: 0 };
+    await this.prisma.fee_assignments.createMany({
+      data: targets.map((t) => ({
+        student_id: t.id,
+        structure_id: structure.id,
+        title: structure.name,
+        amount_due: structure.amount,
+        due_date: new Date(dueDate),
+      })),
+    });
+    return { assigned: targets.length };
+  }
+
   private feeScope(actor: AuthUser): Prisma.fee_assignmentsWhereInput | null {
     if (actor.roles.includes("admin")) return {};
     if (actor.roles.includes("teacher")) {
