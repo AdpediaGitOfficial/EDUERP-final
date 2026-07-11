@@ -11,7 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AlertTriangle, MapPin, Clock } from "lucide-react";
+import { AlertTriangle, MapPin, Clock, Radio } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import {
   simulatePosition,
@@ -40,6 +41,26 @@ function Page() {
       >("/fleet/routes-full"),
     refetchOnWindowFocus: false,
   });
+
+  // Real GPS positions from vehicles with a tracking device (auto-refresh 5s).
+  const { data: livePositions } = useQuery({
+    queryKey: ["fleet-live-positions"],
+    queryFn: () =>
+      apiGet<
+        {
+          vehicleId: string;
+          registrationNo: string | null;
+          routeName: string | null;
+          lat: number;
+          lng: number;
+          speedKph: number | null;
+          status: "live" | "stale" | "offline";
+          updatedAt: string;
+        }[]
+      >("/fleet/positions"),
+    refetchInterval: 5000,
+  });
+  const liveCount = (livePositions ?? []).filter((p) => p.status === "live").length;
 
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -77,7 +98,11 @@ function Page() {
     <>
       <PageHeader
         title="Live Tracking"
-        subtitle="Simulated positions calculated from each route's schedule."
+        subtitle={
+          liveCount > 0
+            ? `${liveCount} vehicle${liveCount === 1 ? "" : "s"} reporting live GPS · others simulated from schedule.`
+            : "Simulated positions calculated from each route's schedule."
+        }
         action={
           <Select value={selectedId} onValueChange={(v) => setSelectedId(v as any)}>
             <SelectTrigger className="w-[220px]">
@@ -95,14 +120,68 @@ function Page() {
         }
       />
 
+      {(livePositions ?? []).length > 0 && (
+        <Card className="mb-4 rounded-2xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b">
+            <Radio className="size-4 text-emerald-600" />
+            <span className="font-medium text-sm">Live GPS positions</span>
+            <span className="text-xs text-muted-foreground">auto-refreshing every 5s</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead className="bg-muted/40 text-left text-muted-foreground">
+                <tr>
+                  <th className="p-3 font-medium">Vehicle</th>
+                  <th className="p-3 font-medium">Route</th>
+                  <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 font-medium">Speed</th>
+                  <th className="p-3 font-medium">Coordinates</th>
+                  <th className="p-3 font-medium">Last fix</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(livePositions ?? []).map((p) => (
+                  <tr key={p.vehicleId} className="border-t">
+                    <td className="p-3 font-medium">{p.registrationNo ?? "—"}</td>
+                    <td className="p-3 text-muted-foreground">{p.routeName ?? "—"}</td>
+                    <td className="p-3">
+                      <Badge
+                        className={
+                          p.status === "live"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : p.status === "stale"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-muted text-muted-foreground"
+                        }
+                      >
+                        {p.status === "live" ? "LIVE" : p.status === "stale" ? "STALE" : "OFFLINE"}
+                      </Badge>
+                    </td>
+                    <td className="p-3">{p.speedKph != null ? `${p.speedKph} km/h` : "—"}</td>
+                    <td className="p-3 font-mono text-xs text-muted-foreground">
+                      {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
+                    </td>
+                    <td className="p-3 text-muted-foreground">
+                      {formatDistanceToNow(new Date(p.updatedAt), { addSuffix: true })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
         <AlertTriangle className="size-4 shrink-0 mt-0.5" />
         <div>
-          <div className="font-medium">Simulated tracking — no GPS hardware installed.</div>
+          <div className="font-medium">
+            Schematic below is schedule-based; the table above is real GPS.
+          </div>
           <div className="text-xs">
-            Vehicle positions are interpolated from each route's scheduled stops (AM: 07:00–08:30,
-            PM: 15:00–16:30 local). When a school installs GPS units, this view will switch to live
-            positions automatically.
+            Vehicles with a tracking device report live positions to{" "}
+            <code>POST /fleet/vehicles/:id/position</code>; the map schematic interpolates the rest
+            from each route's scheduled stops (AM: 07:00–08:30, PM: 15:00–16:30 local).
           </div>
         </div>
       </div>

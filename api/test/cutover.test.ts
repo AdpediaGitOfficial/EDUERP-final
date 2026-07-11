@@ -2339,6 +2339,40 @@ describe("Admin writes ported off Supabase server-functions (B40)", () => {
   });
 });
 
+describe("Fleet live GPS tracking", () => {
+  it("ingests a position (fleet|admin) → vehicle shows live; teacher 403; bad coords 400", async () => {
+    const vehicleId = (await get("/fleet/vehicles", "admin")).body[0].id;
+
+    const ingest = await post(`/fleet/vehicles/${vehicleId}/position`, "admin", {
+      lat: 28.61,
+      lng: 77.21,
+      speedKph: 33.3,
+      heading: 90,
+    });
+    expect(ingest.status).toBe(201);
+    expect(ingest.body.ok).toBe(true);
+
+    const positions = await get("/fleet/positions", "admin");
+    expect(positions.status).toBe(200);
+    const mine = positions.body.find((p: any) => p.vehicleId === vehicleId);
+    expect(mine).toBeTruthy();
+    expect(mine.status).toBe("live");
+    expect(mine.speedKph).toBe(33.3);
+
+    // Read + ingest are fleet-scoped; out-of-range + malformed id rejected.
+    expect((await get("/fleet/positions", "teacher")).status).toBe(403);
+    expect(
+      (await post(`/fleet/vehicles/${vehicleId}/position`, "teacher", { lat: 1, lng: 2 })).status,
+    ).toBe(403);
+    expect(
+      (await post(`/fleet/vehicles/${vehicleId}/position`, "admin", { lat: 200, lng: 2 })).status,
+    ).toBe(400);
+    expect(
+      (await post("/fleet/vehicles/not-a-uuid/position", "admin", { lat: 1, lng: 2 })).status,
+    ).toBe(400);
+  });
+});
+
 describe("Notifications center", () => {
   it("lists the caller's notifications (read flag) + unread count", async () => {
     const list = await get("/notifications?limit=5", "parent");

@@ -13,6 +13,7 @@ import {
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -20,6 +21,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   MinLength,
   ValidateNested,
@@ -28,6 +30,33 @@ import { Type } from "class-transformer";
 import { FleetService } from "./fleet.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
+
+class PositionDto {
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  lat: number;
+
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  lng: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  speedKph?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(360)
+  heading?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  gpsConnected?: boolean;
+}
 
 class VehicleDocumentDto {
   @IsString()
@@ -321,6 +350,21 @@ export class FleetController {
   @Get("vehicles/:id/documents")
   vehicleDocuments(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.fleet.vehicleDocuments(actor, id);
+  }
+
+  // ---- Live GPS tracking ---------------------------------------------------
+  @Get("positions")
+  positions(@CurrentUser() actor: AuthUser) {
+    return this.fleet.livePositions(actor);
+  }
+
+  @Post("vehicles/:id/position")
+  ingestPosition(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: PositionDto,
+  ) {
+    return this.fleet.ingestPosition(actor, id, dto);
   }
 
   @Post("vehicles/:id/documents")

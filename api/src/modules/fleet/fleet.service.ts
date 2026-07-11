@@ -516,6 +516,78 @@ export class FleetService {
     }));
   }
 
+  /**
+   * Ingest a live GPS fix for a vehicle (fleet_manager|admin — a device/driver
+   * app would post here). Upserts the single current-position row.
+   */
+  async ingestPosition(
+    actor: AuthUser,
+    vehicleId: string,
+    input: {
+      lat: number;
+      lng: number;
+      speedKph?: number;
+      heading?: number;
+      gpsConnected?: boolean;
+    },
+  ) {
+    if (!this.canWriteFleet(actor)) throw new ForbiddenException();
+    const vehicle = await this.prisma.fleet_vehicles.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) throw new NotFoundException("Vehicle not found");
+    const data = {
+      lat: input.lat,
+      lng: input.lng,
+      speed_kph: input.speedKph ?? null,
+      heading: input.heading ?? null,
+      gps_connected: input.gpsConnected ?? true,
+      updated_at: new Date(),
+    };
+    const row = await this.prisma.vehicle_positions.upsert({
+      where: { vehicle_id: vehicleId },
+      create: { vehicle_id: vehicleId, ...data },
+      update: data,
+    });
+    return { ok: true, id: row.id };
+  }
+
+  /**
+   * Current live positions for all vehicles (fleet read). Each is classified
+   * live / stale (no fix in 2 min) / offline (device reported gps_connected=false).
+   */
+  async livePositions(actor: AuthUser) {
+    if (!this.canReadFleet(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.vehicle_positions.findMany({
+      orderBy: { updated_at: "desc" },
+      include: {
+        fleet_vehicles: {
+          select: {
+            registration_no: true,
+            vehicle_type: true,
+            transport_routes: { select: { name: true }, take: 1 },
+          },
+        },
+      },
+    });
+    const STALE_MS = 2 * 60 * 1000;
+    const now = Date.now();
+    return rows.map((r) => {
+      const ageMs = now - r.updated_at.getTime();
+      const status = !r.gps_connected ? "offline" : ageMs > STALE_MS ? "stale" : "live";
+      return {
+        vehicleId: r.vehicle_id,
+        registrationNo: r.fleet_vehicles?.registration_no ?? null,
+        vehicleType: r.fleet_vehicles?.vehicle_type ?? null,
+        routeName: r.fleet_vehicles?.transport_routes?.[0]?.name ?? null,
+        lat: Number(r.lat),
+        lng: Number(r.lng),
+        speedKph: r.speed_kph != null ? Number(r.speed_kph) : null,
+        heading: r.heading != null ? Number(r.heading) : null,
+        status,
+        updatedAt: r.updated_at,
+      };
+    });
+  }
+
   /** Attach an uploaded document to a vehicle (fleet_manager|admin). */
   async addVehicleDocument(
     actor: AuthUser,
