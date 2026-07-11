@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,34 +15,29 @@ function Page() {
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["resignations"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("resignations")
-          .select("*, staff:staff_id(full_name, employee_code, department, designation)")
-          .order("submitted_at", { ascending: false })
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/resignations"),
   });
+  const patchResignation = async (id: string, body: any) => {
+    const res = await apiFetch(`/hr/resignations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    if (!res || !res.ok) {
+      const b = res ? await res.json().catch(() => null) : null;
+      throw new Error(b?.message ?? "Update failed");
+    }
+  };
   const toggleClear = useMutation({
-    mutationFn: async (v: { r: any; key: string }) => {
+    mutationFn: (v: { r: any; key: string }) => {
       const cl = { ...(v.r.clearance ?? {}), [v.key]: !v.r.clearance?.[v.key] };
-      const { error } = await supabase
-        .from("resignations")
-        .update({ clearance: cl })
-        .eq("id", v.r.id);
-      if (error) throw error;
+      return patchResignation(v.r.id, { clearance: cl });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["resignations"] }),
     onError: (e: any) => toast.error(e.message),
   });
   const updateStatus = useMutation({
-    mutationFn: async (v: { id: string; field: string; value: string }) => {
-      const { error } = await supabase
-        .from("resignations")
-        .update({ [v.field]: v.value } as any)
-        .eq("id", v.id);
-      if (error) throw error;
-    },
+    mutationFn: (v: { id: string; field: string; value: string }) =>
+      patchResignation(v.id, { [v.field]: v.value }),
     onSuccess: () => {
       toast.success("Updated");
       qc.invalidateQueries({ queryKey: ["resignations"] });

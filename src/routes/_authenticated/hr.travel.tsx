@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,21 +14,18 @@ function Page() {
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["travel-requests"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("travel_requests")
-          .select("*, staff:staff_id(full_name, employee_code)")
-          .order("start_date", { ascending: false })
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/travel"),
   });
   const decide = useMutation({
     mutationFn: async (v: { id: string; status: string }) => {
-      const { error } = await supabase
-        .from("travel_requests")
-        .update({ status: v.status })
-        .eq("id", v.id);
-      if (error) throw error;
+      const res = await apiFetch(`/hr/travel/${v.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: v.status }),
+      });
+      if (!res || !res.ok) {
+        const b = res ? await res.json().catch(() => null) : null;
+        throw new Error(b?.message ?? "Update failed");
+      }
     },
     onSuccess: () => {
       toast.success("Updated");

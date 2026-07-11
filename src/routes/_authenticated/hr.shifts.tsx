@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,17 +31,11 @@ function Page() {
   const qc = useQueryClient();
   const { data: shifts } = useQuery({
     queryKey: ["shifts"],
-    queryFn: async () => (await supabase.from("shifts").select("*").order("start_time")).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/shifts"),
   });
   const { data: assigns } = useQuery({
     queryKey: ["staff-shifts"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("staff_shifts")
-          .select("*, staff:staff_id(full_name, employee_code, department), shift:shift_id(name)")
-          .is("effective_to", null)
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/staff-shifts"),
   });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>({
@@ -53,8 +47,11 @@ function Page() {
   });
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("shifts").insert(form);
-      if (error) throw error;
+      const res = await apiFetch("/hr/shifts", { method: "POST", body: JSON.stringify(form) });
+      if (!res || !res.ok) {
+        const b = res ? await res.json().catch(() => null) : null;
+        throw new Error(b?.message ?? "Could not create shift");
+      }
     },
     onSuccess: () => {
       toast.success("Shift created");

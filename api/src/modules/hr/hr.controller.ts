@@ -14,7 +14,15 @@ import {
 import { HrService } from "./hr.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
-import { IsDateString, IsIn, IsNumber, IsOptional, IsString, MinLength } from "class-validator";
+import {
+  IsArray,
+  IsDateString,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MinLength,
+} from "class-validator";
 
 class CreateLeaveDto {
   @IsString()
@@ -99,6 +107,25 @@ class CandidateDto {
 
 class StageDto {
   @IsIn(["applied", "screening", "interview", "offer", "joined", "rejected"]) stage: string;
+}
+
+class ShiftDto {
+  @IsString() @MinLength(1) name: string;
+  @IsString() @MinLength(1) start_time: string;
+  @IsString() @MinLength(1) end_time: string;
+  @IsOptional() @IsString() shift_type?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) weekly_off?: string[];
+}
+
+class ResignationDto {
+  @IsOptional() clearance?: Record<string, boolean>;
+  @IsOptional() @IsString() manager_status?: string;
+  @IsOptional() @IsString() hr_status?: string;
+  @IsOptional() @IsString() status?: string;
+}
+
+class WorkflowStatusDto {
+  @IsString() @MinLength(1) status: string;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -304,5 +331,66 @@ export class HrController {
   @Get("analytics")
   analytics(@CurrentUser() actor: AuthUser) {
     return this.hr.analytics(actor);
+  }
+
+  // ---- Shifts -------------------------------------------------------------
+  @Get("shifts")
+  listShifts() {
+    return this.hr.listShifts();
+  }
+
+  @Post("shifts")
+  createShift(@CurrentUser() actor: AuthUser, @Body() dto: ShiftDto) {
+    return this.hr.createShift(actor, dto);
+  }
+
+  @Get("staff-shifts")
+  listStaffShifts(@CurrentUser() actor: AuthUser) {
+    return this.hr.listStaffShifts(actor);
+  }
+
+  // ---- Resignations & exit ------------------------------------------------
+  @Get("resignations")
+  listResignations(@CurrentUser() actor: AuthUser) {
+    return this.hr.listResignations(actor);
+  }
+
+  @Patch("resignations/:id")
+  updateResignation(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: ResignationDto,
+  ) {
+    return this.hr.updateResignation(actor, id, dto);
+  }
+
+  // ---- Travel -------------------------------------------------------------
+  @Get("travel")
+  listTravel(@CurrentUser() actor: AuthUser) {
+    return this.hr.listTravel(actor);
+  }
+
+  @Patch("travel/:id/status")
+  setTravelStatus(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: WorkflowStatusDto,
+  ) {
+    return this.hr.setTravelStatus(actor, id, dto.status);
+  }
+
+  // ---- Overtime -----------------------------------------------------------
+  @Get("overtime")
+  listOvertime(@CurrentUser() actor: AuthUser) {
+    return this.hr.listOvertime(actor);
+  }
+
+  @Patch("overtime/:id/status")
+  setOvertimeStatus(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: WorkflowStatusDto,
+  ) {
+    return this.hr.setOvertimeStatus(actor, id, dto.status);
   }
 }

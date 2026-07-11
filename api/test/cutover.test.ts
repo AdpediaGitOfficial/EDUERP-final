@@ -1515,3 +1515,80 @@ describe("HR Recruitment + Analytics (job_write/cand_hr = hr|admin)", () => {
     expect(analytics.body.funnel.length).toBe(5);
   });
 });
+
+describe("HR Workforce ops: shifts, exit, travel, overtime (hr|admin)", () => {
+  it("shifts read is open; create is hr|admin; staff-shifts is hr|admin", async () => {
+    const shifts = await get("/hr/shifts", "admin");
+    expect(shifts.status).toBe(200);
+    expect(Array.isArray(shifts.body)).toBe(true);
+    if (shifts.body[0]) {
+      // times are shaped as HH:MM strings, not raw 1970 timestamps
+      expect(shifts.body[0].start_time).toMatch(/^\d{2}:\d{2}$/);
+    }
+    // staff-shifts assignment list is hr|admin
+    expect((await get("/hr/staff-shifts", "teacher")).status).toBe(403);
+    expect((await get("/hr/staff-shifts", "admin")).status).toBe(200);
+
+    // teacher cannot create a shift
+    expect(
+      (
+        await post("/hr/shifts", "teacher", {
+          name: "Nope",
+          start_time: "09:00",
+          end_time: "17:00",
+        })
+      ).status,
+    ).toBe(403);
+    const made = await post("/hr/shifts", "admin", {
+      name: `Jest Shift ${Date.now()}`,
+      start_time: "08:30",
+      end_time: "16:30",
+      shift_type: "morning",
+      weekly_off: ["Sunday"],
+    });
+    expect(made.status).toBe(201);
+  });
+
+  it("resignations/travel/overtime lists + workflow patches are hr|admin", async () => {
+    for (const ep of ["resignations", "travel", "overtime"]) {
+      expect((await get(`/hr/${ep}`, "teacher")).status).toBe(403);
+      const r = await get(`/hr/${ep}`, "admin");
+      expect(r.status).toBe(200);
+      expect(Array.isArray(r.body)).toBe(true);
+    }
+
+    // resignation clearance/status patch (guarded to hr|admin)
+    const res = (await get("/hr/resignations", "admin")).body[0];
+    if (res) {
+      const ok = await patch(`/hr/resignations/${res.id}`, "admin", {
+        clearance: { ...(res.clearance ?? {}), hr_clearance: true },
+      });
+      expect(ok.status).toBe(200);
+      expect(
+        (await patch(`/hr/resignations/${res.id}`, "teacher", { status: "completed" })).status,
+      ).toBe(403);
+    }
+
+    // travel status patch
+    const tv = (await get("/hr/travel", "admin")).body[0];
+    if (tv) {
+      expect(
+        (await patch(`/hr/travel/${tv.id}/status`, "admin", { status: "approved" })).status,
+      ).toBe(200);
+      expect(
+        (await patch(`/hr/travel/${tv.id}/status`, "teacher", { status: "rejected" })).status,
+      ).toBe(403);
+    }
+
+    // overtime status patch (records approver_id)
+    const ot = (await get("/hr/overtime", "admin")).body[0];
+    if (ot) {
+      expect(
+        (await patch(`/hr/overtime/${ot.id}/status`, "admin", { status: "approved" })).status,
+      ).toBe(200);
+      expect(
+        (await patch(`/hr/overtime/${ot.id}/status`, "teacher", { status: "rejected" })).status,
+      ).toBe(403);
+    }
+  });
+});

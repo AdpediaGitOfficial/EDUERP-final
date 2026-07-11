@@ -574,6 +574,9 @@ export class HrService {
   private dstr(d: Date | null | undefined): string | null {
     return d ? d.toISOString().slice(0, 10) : null;
   }
+  private num(v: unknown): number {
+    return v == null ? 0 : Number(v);
+  }
   private shapeTa(a: {
     id: string;
     teacher_id: string;
@@ -811,6 +814,199 @@ export class HrService {
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025")
         throw new NotFoundException("Candidate not found");
+      throw e;
+    }
+  }
+
+  // ==== Shifts (shift_read open / shift_write + sshift_hr = hr|admin) =======
+  private hhmm(d: Date | null | undefined): string | null {
+    if (!d) return null;
+    return d.toISOString().slice(11, 16); // HH:MM from the 1970 Time value
+  }
+  private parseTime(hhmm: string): Date {
+    return new Date(`1970-01-01T${hhmm.slice(0, 5)}:00.000Z`);
+  }
+
+  async listShifts() {
+    const rows = await this.prisma.shifts.findMany({ orderBy: { start_time: "asc" } });
+    return rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      shift_type: s.shift_type,
+      start_time: this.hhmm(s.start_time),
+      end_time: this.hhmm(s.end_time),
+      weekly_off: s.weekly_off ?? [],
+    }));
+  }
+
+  async createShift(
+    actor: AuthUser,
+    input: {
+      name: string;
+      start_time: string;
+      end_time: string;
+      shift_type?: string;
+      weekly_off?: string[];
+    },
+  ) {
+    this.requireHr(actor);
+    try {
+      const row = await this.prisma.shifts.create({
+        data: {
+          name: input.name,
+          start_time: this.parseTime(input.start_time),
+          end_time: this.parseTime(input.end_time),
+          shift_type: input.shift_type || "regular",
+          weekly_off: input.weekly_off ?? [],
+        },
+      });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("A shift with that name already exists.");
+      throw e;
+    }
+  }
+
+  async listStaffShifts(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.staff_shifts.findMany({
+      where: { effective_to: null },
+      include: {
+        staff: { select: { full_name: true, employee_code: true, department: true } },
+        shifts: { select: { name: true } },
+      },
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      shift_id: a.shift_id,
+      effective_from: this.dstr(a.effective_from),
+      staff: a.staff ?? null,
+      shift: a.shifts ? { name: a.shifts.name } : null,
+    }));
+  }
+
+  // ==== Resignations & exit (res_hr = hr|admin) ============================
+  async listResignations(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.resignations.findMany({
+      orderBy: { submitted_at: "desc" },
+      include: {
+        staff: {
+          select: {
+            full_name: true,
+            employee_code: true,
+            department: true,
+            designation: true,
+          },
+        },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      manager_status: r.manager_status,
+      hr_status: r.hr_status,
+      reason: r.reason,
+      clearance: r.clearance ?? {},
+      submitted_at: this.dstr(r.submitted_at),
+      last_working_day: this.dstr(r.last_working_day),
+      staff: r.staff ?? null,
+    }));
+  }
+
+  async updateResignation(
+    actor: AuthUser,
+    id: string,
+    input: {
+      clearance?: Record<string, boolean>;
+      manager_status?: string;
+      hr_status?: string;
+      status?: string;
+    },
+  ) {
+    this.requireHr(actor);
+    const data: Prisma.resignationsUpdateInput = {};
+    if (input.clearance !== undefined) data.clearance = input.clearance;
+    if (input.manager_status !== undefined) data.manager_status = input.manager_status;
+    if (input.hr_status !== undefined) data.hr_status = input.hr_status;
+    if (input.status !== undefined) data.status = input.status;
+    if (Object.keys(data).length === 0) throw new BadRequestException("Nothing to update.");
+    try {
+      await this.prisma.resignations.update({ where: { id }, data });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025")
+        throw new NotFoundException("Resignation not found");
+      throw e;
+    }
+  }
+
+  // ==== Travel requests (tv_hr = hr|admin) ================================
+  async listTravel(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.travel_requests.findMany({
+      orderBy: { start_date: "desc" },
+      include: { staff: { select: { full_name: true, employee_code: true } } },
+    });
+    return rows.map((t) => ({
+      id: t.id,
+      destination: t.destination,
+      start_date: this.dstr(t.start_date),
+      end_date: this.dstr(t.end_date),
+      purpose: t.purpose,
+      advance_amount: this.num(t.advance_amount),
+      settlement_amount: t.settlement_amount == null ? null : this.num(t.settlement_amount),
+      status: t.status,
+      staff: t.staff ?? null,
+    }));
+  }
+
+  async setTravelStatus(actor: AuthUser, id: string, status: string) {
+    this.requireHr(actor);
+    try {
+      await this.prisma.travel_requests.update({ where: { id }, data: { status } });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025")
+        throw new NotFoundException("Travel request not found");
+      throw e;
+    }
+  }
+
+  // ==== Overtime (ot_hr = hr|admin) =======================================
+  async listOvertime(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.overtime_requests.findMany({
+      orderBy: { work_date: "desc" },
+      include: {
+        staff_overtime_requests_staff_idTostaff: {
+          select: { full_name: true, employee_code: true },
+        },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      work_date: this.dstr(r.work_date),
+      hours: this.num(r.hours),
+      rate_multiplier: this.num(r.rate_multiplier),
+      status: r.status,
+      staff: r.staff_overtime_requests_staff_idTostaff ?? null,
+    }));
+  }
+
+  async setOvertimeStatus(actor: AuthUser, id: string, status: string) {
+    this.requireHr(actor);
+    const approverStaffId = await this.ownStaffId(actor);
+    try {
+      await this.prisma.overtime_requests.update({
+        where: { id },
+        data: { status, approver_id: approverStaffId },
+      });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025")
+        throw new NotFoundException("Overtime request not found");
       throw e;
     }
   }
