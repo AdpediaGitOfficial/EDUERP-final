@@ -1196,7 +1196,15 @@ describe("ESS: self-service, scoped to the caller's own staff record", () => {
     expect(Array.isArray(leave.body.requests)).toBe(true);
     expect(Array.isArray(leave.body.balances)).toBe(true);
 
-    for (const ep of ["payslips", "documents", "assets", "training", "performance", "expenses", "grievances"]) {
+    for (const ep of [
+      "payslips",
+      "documents",
+      "assets",
+      "training",
+      "performance",
+      "expenses",
+      "grievances",
+    ]) {
       const r = await get(`/ess/${ep}`, "teacher");
       expect(r.status).toBe(200);
       expect(Array.isArray(r.body)).toBe(true);
@@ -1213,14 +1221,27 @@ describe("ESS: self-service, scoped to the caller's own staff record", () => {
     expect(leave.status).toBe(201);
     // end before start -> clean 400
     expect(
-      (await post("/ess/leave", "teacher", { leave_type: "casual", start_date: "2027-01-05", end_date: "2027-01-01" })).status,
+      (
+        await post("/ess/leave", "teacher", {
+          leave_type: "casual",
+          start_date: "2027-01-05",
+          end_date: "2027-01-01",
+        })
+      ).status,
     ).toBe(400);
 
     expect(
-      (await post("/ess/expenses", "teacher", { category: "travel", amount: 250, notes: "cutover test" })).status,
+      (
+        await post("/ess/expenses", "teacher", {
+          category: "travel",
+          amount: 250,
+          notes: "cutover test",
+        })
+      ).status,
     ).toBe(201);
     expect(
-      (await post("/ess/grievances", "teacher", { subject: "cutover test", message: "test body" })).status,
+      (await post("/ess/grievances", "teacher", { subject: "cutover test", message: "test body" }))
+        .status,
     ).toBe(201);
   });
 
@@ -1234,7 +1255,134 @@ describe("ESS: self-service, scoped to the caller's own staff record", () => {
     expect(summary.body.staff).toBeNull();
     expect((await get("/ess/payslips", "admin")).body).toEqual([]);
     expect(
-      (await post("/ess/leave", "admin", { leave_type: "casual", start_date: "2027-02-01", end_date: "2027-02-02" })).status,
+      (
+        await post("/ess/leave", "admin", {
+          leave_type: "casual",
+          start_date: "2027-02-01",
+          end_date: "2027-02-02",
+        })
+      ).status,
     ).toBe(400);
+  });
+});
+
+describe("HR People: staff directory, detail, departments, designations", () => {
+  const del = (p: string, r: keyof typeof ACCOUNTS) =>
+    request(http).delete(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`);
+
+  it("staff directory is hr|admin only; teacher 403", async () => {
+    const list = await get("/hr/staff", "admin");
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body)).toBe(true);
+    expect(list.body.length).toBeGreaterThan(0);
+    expect(list.body[0]).toHaveProperty("employee_code");
+    expect((await get("/hr/staff", "teacher")).status).toBe(403);
+  });
+
+  it("admin creates a staff row (dup code 409) and writes history on edit; teacher 403", async () => {
+    const code = `EMP-JEST-${Date.now()}`;
+    const created = await post("/hr/staff", "admin", {
+      employee_code: code,
+      full_name: "Jest Person",
+      department: "Administration",
+      designation: "Administrator",
+      join_date: "2024-01-01",
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+
+    // duplicate employee_code -> clean 409
+    expect(
+      (
+        await post("/hr/staff", "admin", {
+          employee_code: code,
+          full_name: "Dupe",
+          department: "Administration",
+          designation: "Administrator",
+        })
+      ).status,
+    ).toBe(409);
+
+    // teacher cannot create
+    expect(
+      (
+        await post("/hr/staff", "teacher", {
+          employee_code: `${code}-x`,
+          full_name: "Nope",
+          department: "Administration",
+          designation: "Administrator",
+        })
+      ).status,
+    ).toBe(403);
+
+    // edit records an employment-history row
+    const upd = await patch(`/hr/staff/${id}`, "admin", {
+      employee_code: code,
+      full_name: "Jest Person (edited)",
+      department: "Administration",
+      designation: "Administrator",
+    });
+    expect(upd.status).toBe(200);
+
+    // status toggle records a deactivated event
+    const st = await patch(`/hr/staff/${id}/status`, "admin", { status: "inactive" });
+    expect(st.status).toBe(200);
+
+    const detail = await get(`/hr/staff/${id}`, "admin");
+    expect(detail.status).toBe(200);
+    expect(detail.body.staff.status).toBe("inactive");
+    expect(Array.isArray(detail.body.history)).toBe(true);
+    expect(detail.body.history.some((h: any) => h.event_type === "revised")).toBe(true);
+    expect(detail.body.history.some((h: any) => h.event_type === "deactivated")).toBe(true);
+    expect(detail.body).toHaveProperty("payroll");
+    expect(detail.body).toHaveProperty("leaves");
+    expect(detail.body).toHaveProperty("assets");
+    // Note: staff rows are deactivated, never hard-deleted (the UI has no delete),
+    // so this leaves an inactive EMP-JEST-* row in a persistent local DB; CI is fresh.
+  });
+
+  it("staff detail is visible to the employee themselves but not to other staff", async () => {
+    const list = await get("/hr/staff", "admin");
+    const teacherStaff = list.body.find(
+      (s: any) => (s.email || "").toLowerCase() === ACCOUNTS.teacher,
+    );
+    // ESS seed links teacher@greenwood.test to a staff record.
+    if (teacherStaff) {
+      const own = await get(`/hr/staff/${teacherStaff.id}`, "teacher");
+      expect(own.status).toBe(200);
+      expect(own.body.staff.id).toBe(teacherStaff.id);
+    }
+    const other = list.body.find((s: any) => (s.email || "").toLowerCase() !== ACCOUNTS.teacher);
+    if (other) {
+      expect((await get(`/hr/staff/${other.id}`, "teacher")).status).toBe(403);
+    }
+  });
+
+  it("departments/designations: read is open, write is hr|admin", async () => {
+    const depts = await get("/hr/departments", "teacher");
+    expect(depts.status).toBe(200);
+    expect(Array.isArray(depts.body)).toBe(true);
+
+    const desigs = await get("/hr/designations", "admin");
+    expect(desigs.status).toBe(200);
+    expect(Array.isArray(desigs.body)).toBe(true);
+
+    // teacher cannot write
+    expect((await post("/hr/departments", "teacher", { name: "X", code: "X" })).status).toBe(403);
+
+    // admin create + delete round-trip (keeps the table clean)
+    const code = `JD${Date.now() % 100000}`;
+    const made = await post("/hr/departments", "admin", {
+      name: `Jest Dept ${code}`,
+      code,
+      budget: 1000,
+    });
+    expect(made.status).toBe(201);
+    expect((await del(`/hr/departments/${made.body.id}`, "admin")).status).toBe(200);
+
+    const dTitle = `Jest Grade ${Date.now() % 100000}`;
+    const desig = await post("/hr/designations", "admin", { title: dTitle, level: 2 });
+    expect(desig.status).toBe(201);
+    expect((await del(`/hr/designations/${desig.body.id}`, "admin")).status).toBe(200);
   });
 });

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Card } from "@/components/ui/card";
@@ -26,18 +26,15 @@ function Page() {
   const confirm = useConfirm();
   const { data: depts } = useQuery({
     queryKey: ["depts"],
-    queryFn: async () => (await supabase.from("departments").select("*").order("name")).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/departments"),
   });
   const { data: staff } = useQuery({
     queryKey: ["staff-by-dept"],
-    queryFn: async () =>
-      (await supabase.from("staff").select("id, department, designation")).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/staff"),
   });
   const { data: desigs } = useQuery({
     queryKey: ["desigs"],
-    queryFn: async () =>
-      (await supabase.from("designations").select("*").order("level", { ascending: false })).data ??
-      [],
+    queryFn: () => apiGet<any[]>("/hr/designations"),
   });
 
   const countBy = (name: string) => (staff ?? []).filter((s: any) => s.department === name).length;
@@ -60,6 +57,17 @@ function Page() {
     max_pay: 0,
   });
 
+  const write = async (path: string, method: string, body?: any) => {
+    const res = await apiFetch(path, {
+      method,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    if (!res || !res.ok) {
+      const b = res ? await res.json().catch(() => null) : null;
+      throw new Error(b?.message ?? "Request failed");
+    }
+  };
+
   const saveDept = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -68,10 +76,9 @@ function Page() {
         budget: Number(deptForm.budget) || 0,
         description: deptForm.description,
       };
-      const { error } = deptForm.id
-        ? await supabase.from("departments").update(payload).eq("id", deptForm.id)
-        : await supabase.from("departments").insert(payload);
-      if (error) throw error;
+      await (deptForm.id
+        ? write(`/hr/departments/${deptForm.id}`, "PATCH", payload)
+        : write("/hr/departments", "POST", payload));
     },
     onSuccess: () => {
       toast.success("Saved");
@@ -81,10 +88,7 @@ function Page() {
     onError: (e: any) => toast.error(e.message),
   });
   const delDept = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("departments").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => write(`/hr/departments/${id}`, "DELETE"),
     onSuccess: () => {
       toast.success("Deleted");
       qc.invalidateQueries({ queryKey: ["depts"] });
@@ -100,10 +104,9 @@ function Page() {
         min_pay: Number(desigForm.min_pay),
         max_pay: Number(desigForm.max_pay),
       };
-      const { error } = desigForm.id
-        ? await supabase.from("designations").update(payload).eq("id", desigForm.id)
-        : await supabase.from("designations").insert(payload);
-      if (error) throw error;
+      await (desigForm.id
+        ? write(`/hr/designations/${desigForm.id}`, "PATCH", payload)
+        : write("/hr/designations", "POST", payload));
     },
     onSuccess: () => {
       toast.success("Saved");
@@ -113,10 +116,7 @@ function Page() {
     onError: (e: any) => toast.error(e.message),
   });
   const delDesig = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("designations").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => write(`/hr/designations/${id}`, "DELETE"),
     onSuccess: () => {
       toast.success("Deleted");
       qc.invalidateQueries({ queryKey: ["desigs"] });

@@ -1,7 +1,39 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
+
+export interface StaffInput {
+  employee_code: string;
+  full_name: string;
+  email?: string | null;
+  phone?: string | null;
+  department: string;
+  designation: string;
+  employment_type?: string;
+  join_date?: string;
+  status?: string;
+  confirmation_status?: string;
+}
+export interface DepartmentInput {
+  name: string;
+  code: string;
+  budget?: number;
+  description?: string | null;
+}
+export interface DesignationInput {
+  title: string;
+  level?: number;
+  salary_grade?: string | null;
+  min_pay?: number | null;
+  max_pay?: number | null;
+}
 
 /**
  * RLS translation (api/db/rls-policies-extracted.csv):
@@ -287,5 +319,246 @@ export class HrService {
       data: { status, approver_id: approverStaffId },
     });
     return { ok: true };
+  }
+
+  // ==== Staff directory (hr_admin_all_staff) ================================
+  private requireHr(actor: AuthUser) {
+    if (!this.isHr(actor)) throw new ForbiddenException();
+  }
+
+  /** Full directory — hr|admin only (hr_admin_all_staff / staff_read_own is per-row). */
+  async listStaff(actor: AuthUser) {
+    this.requireHr(actor);
+    return this.prisma.staff.findMany({ orderBy: { employee_code: "asc" } });
+  }
+
+  private mapStaffInput(input: StaffInput) {
+    return {
+      employee_code: input.employee_code,
+      full_name: input.full_name,
+      email: input.email || null,
+      phone: input.phone || null,
+      department: input.department,
+      designation: input.designation,
+      employment_type: input.employment_type || "full_time",
+      join_date: input.join_date ? new Date(input.join_date) : new Date(),
+      status: input.status || "active",
+      confirmation_status: input.confirmation_status || "probation",
+    };
+  }
+
+  async createStaff(actor: AuthUser, input: StaffInput) {
+    this.requireHr(actor);
+    try {
+      const row = await this.prisma.staff.create({ data: this.mapStaffInput(input) });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("That employee code is already in use.");
+      throw e;
+    }
+  }
+
+  async updateStaff(actor: AuthUser, id: string, input: StaffInput) {
+    this.requireHr(actor);
+    const existing = await this.prisma.staff.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Employee not found");
+    try {
+      await this.prisma.$transaction([
+        this.prisma.staff.update({ where: { id }, data: this.mapStaffInput(input) }),
+        this.prisma.staff_employment_history.create({
+          data: {
+            staff_id: id,
+            event_type: "revised",
+            effective_date: new Date(),
+            notes: "Profile updated",
+          },
+        }),
+      ]);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("That employee code is already in use.");
+      throw e;
+    }
+  }
+
+  async setStaffStatus(actor: AuthUser, id: string, status: string) {
+    this.requireHr(actor);
+    const existing = await this.prisma.staff.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Employee not found");
+    if (existing.status === status) return { ok: true };
+    const eventType =
+      status === "inactive"
+        ? "deactivated"
+        : status === "active"
+          ? "reactivated"
+          : "status_changed";
+    await this.prisma.$transaction([
+      this.prisma.staff.update({ where: { id }, data: { status } }),
+      this.prisma.staff_employment_history.create({
+        data: {
+          staff_id: id,
+          event_type: eventType,
+          effective_date: new Date(),
+          from_value: existing.status,
+          to_value: status,
+        },
+      }),
+    ]);
+    return { ok: true };
+  }
+
+  /** Single-employee detail bundle — hr|admin, or the employee themselves. */
+  async staffDetail(actor: AuthUser, id: string) {
+    const staff = await this.prisma.staff.findUnique({ where: { id } });
+    if (!staff) throw new NotFoundException("Employee not found");
+    if (!this.isHr(actor) && staff.profile_id !== actor.id) throw new ForbiddenException();
+    const [payroll, leaves, documents, history, expenses] = await Promise.all([
+      this.prisma.payroll_runs.findMany({ where: { staff_id: id }, orderBy: { month: "desc" } }),
+      this.prisma.leave_requests.findMany({
+        where: { staff_id: id },
+        orderBy: { start_date: "desc" },
+      }),
+      this.prisma.staff_documents.findMany({
+        where: { staff_id: id },
+        orderBy: { uploaded_at: "desc" },
+      }),
+      this.prisma.staff_employment_history.findMany({
+        where: { staff_id: id },
+        orderBy: { effective_date: "desc" },
+      }),
+      this.prisma.expense_claims.findMany({
+        where: { staff_id: id },
+        orderBy: { claim_date: "desc" },
+      }),
+    ]);
+    const assets = staff.profile_id
+      ? await this.prisma.assets.findMany({
+          where: { assigned_to_profile_id: staff.profile_id },
+          select: { id: true, asset_code: true, name: true, status: true, condition: true },
+          orderBy: { name: "asc" },
+        })
+      : [];
+    return { staff, payroll, leaves, documents, history, assets, expenses };
+  }
+
+  // ==== Departments (dept_read true / dept_write hr|admin) ==================
+  listDepartments() {
+    return this.prisma.departments.findMany({ orderBy: { name: "asc" } });
+  }
+
+  async createDepartment(actor: AuthUser, input: DepartmentInput) {
+    this.requireHr(actor);
+    try {
+      const row = await this.prisma.departments.create({
+        data: {
+          name: input.name,
+          code: input.code,
+          budget: input.budget ?? 0,
+          description: input.description || null,
+        },
+      });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("A department with that name or code already exists.");
+      throw e;
+    }
+  }
+
+  async updateDepartment(actor: AuthUser, id: string, input: DepartmentInput) {
+    this.requireHr(actor);
+    try {
+      await this.prisma.departments.update({
+        where: { id },
+        data: {
+          name: input.name,
+          code: input.code,
+          budget: input.budget ?? 0,
+          description: input.description || null,
+        },
+      });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === "P2025") throw new NotFoundException("Department not found");
+        if (e.code === "P2002")
+          throw new ConflictException("A department with that name or code already exists.");
+      }
+      throw e;
+    }
+  }
+
+  async deleteDepartment(actor: AuthUser, id: string) {
+    this.requireHr(actor);
+    try {
+      await this.prisma.departments.delete({ where: { id } });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === "P2025") throw new NotFoundException("Department not found");
+        if (e.code === "P2003")
+          throw new ConflictException("Remove or reassign linked designations first.");
+      }
+      throw e;
+    }
+  }
+
+  // ==== Designations (desig_read true / desig_write hr|admin) ===============
+  listDesignations() {
+    return this.prisma.designations.findMany({ orderBy: [{ level: "desc" }, { title: "asc" }] });
+  }
+
+  private mapDesignationInput(input: DesignationInput) {
+    return {
+      title: input.title,
+      level: input.level ?? 1,
+      salary_grade: input.salary_grade || null,
+      min_pay: input.min_pay ?? null,
+      max_pay: input.max_pay ?? null,
+    };
+  }
+
+  async createDesignation(actor: AuthUser, input: DesignationInput) {
+    this.requireHr(actor);
+    try {
+      const row = await this.prisma.designations.create({ data: this.mapDesignationInput(input) });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("A designation with that title already exists.");
+      throw e;
+    }
+  }
+
+  async updateDesignation(actor: AuthUser, id: string, input: DesignationInput) {
+    this.requireHr(actor);
+    try {
+      await this.prisma.designations.update({
+        where: { id },
+        data: this.mapDesignationInput(input),
+      });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === "P2025") throw new NotFoundException("Designation not found");
+        if (e.code === "P2002")
+          throw new ConflictException("A designation with that title already exists.");
+      }
+      throw e;
+    }
+  }
+
+  async deleteDesignation(actor: AuthUser, id: string) {
+    this.requireHr(actor);
+    try {
+      await this.prisma.designations.delete({ where: { id } });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025")
+        throw new NotFoundException("Designation not found");
+      throw e;
+    }
   }
 }

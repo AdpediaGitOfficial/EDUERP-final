@@ -58,7 +58,6 @@ import { Route as AuthenticatedReceptionTransportRouteImport } from './routes/_a
 import { Route as AuthenticatedReceptionAdmissionsRouteImport } from './routes/_authenticated/reception.admissions'
 import { Route as AuthenticatedHrTravelRouteImport } from './routes/_authenticated/hr.travel'
 import { Route as AuthenticatedHrTrainingRouteImport } from './routes/_authenticated/hr.training'
-import { Route as AuthenticatedHrStaffRouteImport } from './routes/_authenticated/hr.staff'
 import { Route as AuthenticatedHrShiftsRouteImport } from './routes/_authenticated/hr.shifts'
 import { Route as AuthenticatedHrSettingsRouteImport } from './routes/_authenticated/hr.settings'
 import { Route as AuthenticatedHrReportsRouteImport } from './routes/_authenticated/hr.reports'
@@ -97,6 +96,7 @@ import { Route as AuthenticatedAssetsRegistryRouteImport } from './routes/_authe
 import { Route as AuthenticatedAssetsMaintenanceRouteImport } from './routes/_authenticated/assets.maintenance'
 import { Route as AuthenticatedAssetsCategoriesRouteImport } from './routes/_authenticated/assets.categories'
 import { Route as AuthenticatedAssetsAllocationRouteImport } from './routes/_authenticated/assets.allocation'
+import { Route as AuthenticatedHrStaffIndexRouteImport } from './routes/_authenticated/hr.staff.index'
 import { Route as AuthenticatedFleetVehiclesIndexRouteImport } from './routes/_authenticated/fleet.vehicles.index'
 import { Route as AuthenticatedFleetRoutesIndexRouteImport } from './routes/_authenticated/fleet.routes.index'
 import { Route as AuthenticatedFleetDriversIndexRouteImport } from './routes/_authenticated/fleet.drivers.index'
@@ -370,11 +370,6 @@ const AuthenticatedHrTrainingRoute = AuthenticatedHrTrainingRouteImport.update({
   path: '/training',
   getParentRoute: () => AuthenticatedHrRoute,
 } as any)
-const AuthenticatedHrStaffRoute = AuthenticatedHrStaffRouteImport.update({
-  id: '/staff',
-  path: '/staff',
-  getParentRoute: () => AuthenticatedHrRoute,
-} as any)
 const AuthenticatedHrShiftsRoute = AuthenticatedHrShiftsRouteImport.update({
   id: '/shifts',
   path: '/shifts',
@@ -591,6 +586,12 @@ const AuthenticatedAssetsAllocationRoute =
     path: '/allocation',
     getParentRoute: () => AuthenticatedAssetsRoute,
   } as any)
+const AuthenticatedHrStaffIndexRoute =
+  AuthenticatedHrStaffIndexRouteImport.update({
+    id: '/staff/',
+    path: '/staff/',
+    getParentRoute: () => AuthenticatedHrRoute,
+  } as any)
 const AuthenticatedFleetVehiclesIndexRoute =
   AuthenticatedFleetVehiclesIndexRouteImport.update({
     id: '/vehicles/',
@@ -617,9 +618,9 @@ const AuthenticatedChildrenStudentIdIndexRoute =
   } as any)
 const AuthenticatedHrStaffStaffIdRoute =
   AuthenticatedHrStaffStaffIdRouteImport.update({
-    id: '/$staffId',
-    path: '/$staffId',
-    getParentRoute: () => AuthenticatedHrStaffRoute,
+    id: '/staff/$staffId',
+    path: '/staff/$staffId',
+    getParentRoute: () => AuthenticatedHrRoute,
   } as any)
 const AuthenticatedFleetVehiclesVehicleIdRoute =
   AuthenticatedFleetVehiclesVehicleIdRouteImport.update({
@@ -731,7 +732,6 @@ export interface FileRoutesByFullPath {
   '/hr/reports': typeof AuthenticatedHrReportsRoute
   '/hr/settings': typeof AuthenticatedHrSettingsRoute
   '/hr/shifts': typeof AuthenticatedHrShiftsRoute
-  '/hr/staff': typeof AuthenticatedHrStaffRouteWithChildren
   '/hr/training': typeof AuthenticatedHrTrainingRoute
   '/hr/travel': typeof AuthenticatedHrTravelRoute
   '/reception/admissions': typeof AuthenticatedReceptionAdmissionsRoute
@@ -757,6 +757,7 @@ export interface FileRoutesByFullPath {
   '/fleet/drivers/': typeof AuthenticatedFleetDriversIndexRoute
   '/fleet/routes/': typeof AuthenticatedFleetRoutesIndexRoute
   '/fleet/vehicles/': typeof AuthenticatedFleetVehiclesIndexRoute
+  '/hr/staff/': typeof AuthenticatedHrStaffIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -822,7 +823,6 @@ export interface FileRoutesByTo {
   '/hr/reports': typeof AuthenticatedHrReportsRoute
   '/hr/settings': typeof AuthenticatedHrSettingsRoute
   '/hr/shifts': typeof AuthenticatedHrShiftsRoute
-  '/hr/staff': typeof AuthenticatedHrStaffRouteWithChildren
   '/hr/training': typeof AuthenticatedHrTrainingRoute
   '/hr/travel': typeof AuthenticatedHrTravelRoute
   '/reception/admissions': typeof AuthenticatedReceptionAdmissionsRoute
@@ -848,6 +848,7 @@ export interface FileRoutesByTo {
   '/fleet/drivers': typeof AuthenticatedFleetDriversIndexRoute
   '/fleet/routes': typeof AuthenticatedFleetRoutesIndexRoute
   '/fleet/vehicles': typeof AuthenticatedFleetVehiclesIndexRoute
+  '/hr/staff': typeof AuthenticatedHrStaffIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -924,7 +925,6 @@ export interface FileRoutesById {
   '/_authenticated/hr/reports': typeof AuthenticatedHrReportsRoute
   '/_authenticated/hr/settings': typeof AuthenticatedHrSettingsRoute
   '/_authenticated/hr/shifts': typeof AuthenticatedHrShiftsRoute
-  '/_authenticated/hr/staff': typeof AuthenticatedHrStaffRouteWithChildren
   '/_authenticated/hr/training': typeof AuthenticatedHrTrainingRoute
   '/_authenticated/hr/travel': typeof AuthenticatedHrTravelRoute
   '/_authenticated/reception/admissions': typeof AuthenticatedReceptionAdmissionsRoute
@@ -950,6 +950,7 @@ export interface FileRoutesById {
   '/_authenticated/fleet/drivers/': typeof AuthenticatedFleetDriversIndexRoute
   '/_authenticated/fleet/routes/': typeof AuthenticatedFleetRoutesIndexRoute
   '/_authenticated/fleet/vehicles/': typeof AuthenticatedFleetVehiclesIndexRoute
+  '/_authenticated/hr/staff/': typeof AuthenticatedHrStaffIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1026,7 +1027,6 @@ export interface FileRouteTypes {
     | '/hr/reports'
     | '/hr/settings'
     | '/hr/shifts'
-    | '/hr/staff'
     | '/hr/training'
     | '/hr/travel'
     | '/reception/admissions'
@@ -1052,6 +1052,7 @@ export interface FileRouteTypes {
     | '/fleet/drivers/'
     | '/fleet/routes/'
     | '/fleet/vehicles/'
+    | '/hr/staff/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1117,7 +1118,6 @@ export interface FileRouteTypes {
     | '/hr/reports'
     | '/hr/settings'
     | '/hr/shifts'
-    | '/hr/staff'
     | '/hr/training'
     | '/hr/travel'
     | '/reception/admissions'
@@ -1143,6 +1143,7 @@ export interface FileRouteTypes {
     | '/fleet/drivers'
     | '/fleet/routes'
     | '/fleet/vehicles'
+    | '/hr/staff'
   id:
     | '__root__'
     | '/'
@@ -1218,7 +1219,6 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/reports'
     | '/_authenticated/hr/settings'
     | '/_authenticated/hr/shifts'
-    | '/_authenticated/hr/staff'
     | '/_authenticated/hr/training'
     | '/_authenticated/hr/travel'
     | '/_authenticated/reception/admissions'
@@ -1244,6 +1244,7 @@ export interface FileRouteTypes {
     | '/_authenticated/fleet/drivers/'
     | '/_authenticated/fleet/routes/'
     | '/_authenticated/fleet/vehicles/'
+    | '/_authenticated/hr/staff/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1598,13 +1599,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrTrainingRouteImport
       parentRoute: typeof AuthenticatedHrRoute
     }
-    '/_authenticated/hr/staff': {
-      id: '/_authenticated/hr/staff'
-      path: '/staff'
-      fullPath: '/hr/staff'
-      preLoaderRoute: typeof AuthenticatedHrStaffRouteImport
-      parentRoute: typeof AuthenticatedHrRoute
-    }
     '/_authenticated/hr/shifts': {
       id: '/_authenticated/hr/shifts'
       path: '/shifts'
@@ -1871,6 +1865,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAssetsAllocationRouteImport
       parentRoute: typeof AuthenticatedAssetsRoute
     }
+    '/_authenticated/hr/staff/': {
+      id: '/_authenticated/hr/staff/'
+      path: '/staff'
+      fullPath: '/hr/staff/'
+      preLoaderRoute: typeof AuthenticatedHrStaffIndexRouteImport
+      parentRoute: typeof AuthenticatedHrRoute
+    }
     '/_authenticated/fleet/vehicles/': {
       id: '/_authenticated/fleet/vehicles/'
       path: '/vehicles'
@@ -1901,10 +1902,10 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/hr/staff/$staffId': {
       id: '/_authenticated/hr/staff/$staffId'
-      path: '/$staffId'
+      path: '/staff/$staffId'
       fullPath: '/hr/staff/$staffId'
       preLoaderRoute: typeof AuthenticatedHrStaffStaffIdRouteImport
-      parentRoute: typeof AuthenticatedHrStaffRoute
+      parentRoute: typeof AuthenticatedHrRoute
     }
     '/_authenticated/fleet/vehicles/$vehicleId': {
       id: '/_authenticated/fleet/vehicles/$vehicleId'
@@ -2104,17 +2105,6 @@ const AuthenticatedFleetRouteChildren: AuthenticatedFleetRouteChildren = {
 const AuthenticatedFleetRouteWithChildren =
   AuthenticatedFleetRoute._addFileChildren(AuthenticatedFleetRouteChildren)
 
-interface AuthenticatedHrStaffRouteChildren {
-  AuthenticatedHrStaffStaffIdRoute: typeof AuthenticatedHrStaffStaffIdRoute
-}
-
-const AuthenticatedHrStaffRouteChildren: AuthenticatedHrStaffRouteChildren = {
-  AuthenticatedHrStaffStaffIdRoute: AuthenticatedHrStaffStaffIdRoute,
-}
-
-const AuthenticatedHrStaffRouteWithChildren =
-  AuthenticatedHrStaffRoute._addFileChildren(AuthenticatedHrStaffRouteChildren)
-
 interface AuthenticatedHrRouteChildren {
   AuthenticatedHrAnalyticsRoute: typeof AuthenticatedHrAnalyticsRoute
   AuthenticatedHrAttendanceRoute: typeof AuthenticatedHrAttendanceRoute
@@ -2130,10 +2120,11 @@ interface AuthenticatedHrRouteChildren {
   AuthenticatedHrReportsRoute: typeof AuthenticatedHrReportsRoute
   AuthenticatedHrSettingsRoute: typeof AuthenticatedHrSettingsRoute
   AuthenticatedHrShiftsRoute: typeof AuthenticatedHrShiftsRoute
-  AuthenticatedHrStaffRoute: typeof AuthenticatedHrStaffRouteWithChildren
   AuthenticatedHrTrainingRoute: typeof AuthenticatedHrTrainingRoute
   AuthenticatedHrTravelRoute: typeof AuthenticatedHrTravelRoute
   AuthenticatedHrIndexRoute: typeof AuthenticatedHrIndexRoute
+  AuthenticatedHrStaffStaffIdRoute: typeof AuthenticatedHrStaffStaffIdRoute
+  AuthenticatedHrStaffIndexRoute: typeof AuthenticatedHrStaffIndexRoute
 }
 
 const AuthenticatedHrRouteChildren: AuthenticatedHrRouteChildren = {
@@ -2151,10 +2142,11 @@ const AuthenticatedHrRouteChildren: AuthenticatedHrRouteChildren = {
   AuthenticatedHrReportsRoute: AuthenticatedHrReportsRoute,
   AuthenticatedHrSettingsRoute: AuthenticatedHrSettingsRoute,
   AuthenticatedHrShiftsRoute: AuthenticatedHrShiftsRoute,
-  AuthenticatedHrStaffRoute: AuthenticatedHrStaffRouteWithChildren,
   AuthenticatedHrTrainingRoute: AuthenticatedHrTrainingRoute,
   AuthenticatedHrTravelRoute: AuthenticatedHrTravelRoute,
   AuthenticatedHrIndexRoute: AuthenticatedHrIndexRoute,
+  AuthenticatedHrStaffStaffIdRoute: AuthenticatedHrStaffStaffIdRoute,
+  AuthenticatedHrStaffIndexRoute: AuthenticatedHrStaffIndexRoute,
 }
 
 const AuthenticatedHrRouteWithChildren = AuthenticatedHrRoute._addFileChildren(

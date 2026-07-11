@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { badgeClass, downloadCsv, fmtDate, niceLabel } from "@/lib/module-util";
 
-export const Route = createFileRoute("/_authenticated/hr/staff")({ component: Page });
+export const Route = createFileRoute("/_authenticated/hr/staff/")({ component: Page });
 
 type StaffRow = any;
 
@@ -56,18 +56,15 @@ function Page() {
 
   const { data } = useQuery({
     queryKey: ["hr-staff-list"],
-    queryFn: async () =>
-      (await supabase.from("staff").select("*").order("employee_code")).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/staff"),
   });
   const { data: depts } = useQuery({
     queryKey: ["depts-simple"],
-    queryFn: async () =>
-      (await supabase.from("departments").select("name").order("name")).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/departments"),
   });
   const { data: desigs } = useQuery({
     queryKey: ["desigs-simple"],
-    queryFn: async () =>
-      (await supabase.from("designations").select("title").order("title")).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/designations"),
   });
 
   const filtered = (data ?? []).filter((s: any) => {
@@ -85,18 +82,15 @@ function Page() {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (editing) {
-        const { error } = await supabase.from("staff").update(form).eq("id", editing.id);
-        if (error) throw error;
-        await supabase.from("staff_employment_history").insert({
-          staff_id: editing.id,
-          event_type: "revised",
-          effective_date: new Date().toISOString().slice(0, 10),
-          notes: `Profile updated`,
-        });
-      } else {
-        const { error } = await supabase.from("staff").insert(form);
-        if (error) throw error;
+      const res = editing
+        ? await apiFetch(`/hr/staff/${editing.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(form),
+          })
+        : await apiFetch("/hr/staff", { method: "POST", body: JSON.stringify(form) });
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Could not save employee");
       }
     },
     onSuccess: () => {
@@ -112,15 +106,14 @@ function Page() {
   const toggleStatus = useMutation({
     mutationFn: async (s: StaffRow) => {
       const next = s.status === "active" ? "inactive" : "active";
-      const { error } = await supabase.from("staff").update({ status: next }).eq("id", s.id);
-      if (error) throw error;
-      await supabase.from("staff_employment_history").insert({
-        staff_id: s.id,
-        event_type: next === "inactive" ? "deactivated" : "reactivated",
-        effective_date: new Date().toISOString().slice(0, 10),
-        from_value: s.status,
-        to_value: next,
+      const res = await apiFetch(`/hr/staff/${s.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: next }),
       });
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Could not update status");
+      }
     },
     onSuccess: () => {
       toast.success("Status updated");

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,80 +11,26 @@ export const Route = createFileRoute("/_authenticated/hr/staff/$staffId")({ comp
 
 function Page() {
   const { staffId } = Route.useParams();
-  const { data: staff } = useQuery({
-    queryKey: ["staff", staffId],
-    queryFn: async () =>
-      (await supabase.from("staff").select("*").eq("id", staffId).maybeSingle()).data,
+  const { data } = useQuery({
+    queryKey: ["staff-detail", staffId],
+    queryFn: () =>
+      apiGet<{
+        staff: any;
+        payroll: any[];
+        leaves: any[];
+        documents: any[];
+        history: any[];
+        assets: any[];
+        expenses: any[];
+      }>(`/hr/staff/${staffId}`),
   });
-  const { data: payroll } = useQuery({
-    queryKey: ["staff-payroll", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("payroll_runs")
-          .select("*")
-          .eq("staff_id", staffId)
-          .order("month", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: leaves } = useQuery({
-    queryKey: ["staff-leaves", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("leave_requests")
-          .select("*")
-          .eq("staff_id", staffId)
-          .order("start_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: docs } = useQuery({
-    queryKey: ["staff-docs", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("staff_documents")
-          .select("*")
-          .eq("staff_id", staffId)
-          .order("uploaded_at", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: history } = useQuery({
-    queryKey: ["staff-history", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("staff_employment_history")
-          .select("*")
-          .eq("staff_id", staffId)
-          .order("effective_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: assets } = useQuery({
-    queryKey: ["staff-assets", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("assets")
-          .select("id, asset_code, name, status, condition")
-          .eq(
-            "assigned_to_profile_id",
-            (await supabase.from("staff").select("profile_id").eq("id", staffId).maybeSingle()).data
-              ?.profile_id ?? "00000000-0000-0000-0000-000000000000",
-          )
-      ).data ?? [],
-  });
-  const { data: expenses } = useQuery({
-    queryKey: ["staff-exp", staffId],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("expense_claims")
-          .select("*")
-          .eq("staff_id", staffId)
-          .order("claim_date", { ascending: false })
-      ).data ?? [],
-  });
+  const staff = data?.staff;
+  const payroll = data?.payroll;
+  const leaves = data?.leaves;
+  const docs = data?.documents;
+  const history = data?.history;
+  const assets = data?.assets;
+  const expenses = data?.expenses;
 
   if (!staff) return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
   return (
