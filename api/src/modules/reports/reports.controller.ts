@@ -42,6 +42,11 @@ export class ReportsController {
     return this.reports.analytics(actor);
   }
 
+  @Get("fees-report")
+  feesReport(@CurrentUser() actor: AuthUser) {
+    return this.reports.feesReport(actor);
+  }
+
   @Get("generator")
   generator(
     @CurrentUser() actor: AuthUser,

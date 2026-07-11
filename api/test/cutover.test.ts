@@ -1704,6 +1704,32 @@ describe("Reports: admin analytics + generator (admin only)", () => {
     expect(a.body.revenueSeries[0]).toHaveProperty("amount");
   });
 
+  it("fees-report returns the six raw datasets the page aggregates; teacher 403", async () => {
+    expect((await get("/reports/fees-report", "teacher")).status).toBe(403);
+    const r = await get("/reports/fees-report", "admin");
+    expect(r.status).toBe(200);
+    for (const k of ["classes", "students", "profiles", "structures", "fees", "payments"]) {
+      expect(Array.isArray(r.body[k])).toBe(true);
+    }
+    // shapes the report page destructures
+    if (r.body.classes[0]) {
+      for (const k of ["id", "name", "section"]) expect(r.body.classes[0]).toHaveProperty(k);
+    }
+    if (r.body.students[0]) {
+      for (const k of ["id", "class_id", "profile_id", "admission_date"])
+        expect(r.body.students[0]).toHaveProperty(k);
+    }
+    if (r.body.fees[0]) {
+      for (const k of ["student_id", "amount_due", "amount_paid", "status", "due_date"])
+        expect(r.body.fees[0]).toHaveProperty(k);
+      // Decimals coerced to numbers for the frontend math
+      expect(typeof r.body.fees[0].amount_due).toBe("number");
+    }
+    if (r.body.structures[0]) {
+      expect(typeof r.body.structures[0].amount).toBe("number");
+    }
+  });
+
   it("generator returns flat rows for each report type; teacher 403; unknown type rejected", async () => {
     const from = "2000-01-01";
     const to = "2100-01-01";

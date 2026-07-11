@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import {
   BarChart,
@@ -95,26 +95,15 @@ const gradeOrder = (g: string) => {
 function ReportsPage() {
   const { data } = useQuery({
     queryKey: ["reports-full"],
-    queryFn: async () => {
-      const [classesR, studentsR, profilesR, structuresR, feesR, paymentsR] = await Promise.all([
-        supabase.from("classes").select("id,name,section"),
-        supabase.from("students").select("id,class_id,profile_id,admission_date"),
-        supabase.from("profiles").select("id,full_name"),
-        supabase.from("fee_structures").select("id,class_id,amount,frequency"),
-        supabase
-          .from("fee_assignments")
-          .select("student_id,amount_due,amount_paid,status,due_date"),
-        supabase.from("payments").select("amount,paid_at"),
-      ]);
-      return {
-        classes: classesR.data ?? [],
-        students: studentsR.data ?? [],
-        profiles: profilesR.data ?? [],
-        structures: structuresR.data ?? [],
-        fees: feesR.data ?? [],
-        payments: paymentsR.data ?? [],
-      };
-    },
+    queryFn: () =>
+      apiGet<{
+        classes: any[];
+        students: any[];
+        profiles: any[];
+        structures: any[];
+        fees: any[];
+        payments: any[];
+      }>("/reports/fees-report"),
   });
 
   const metrics = useMemo(() => {
@@ -172,7 +161,7 @@ function ReportsPage() {
       const cls = classById.get(s.class_id ?? "");
       if (!cls) return;
       const grade = cls.name;
-      const g = gradeMap.get(grade) ?? {
+      const g: GradeAgg = gradeMap.get(grade) ?? {
         grade,
         order: gradeOrder(grade),
         students: 0,

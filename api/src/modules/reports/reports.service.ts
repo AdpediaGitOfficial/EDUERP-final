@@ -744,6 +744,64 @@ export class ReportsService {
     return `${c.name ?? ""}${c.section ? " " + c.section : ""}`;
   }
 
+  /**
+   * Raw datasets for the admin fee-collection report. The page does heavy
+   * grade-level aggregation client-side; this returns the six slim tables it
+   * needs (matching the old direct queries) so its render logic is untouched.
+   */
+  async feesReport(actor: AuthUser) {
+    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    const [classes, students, profiles, structures, fees, payments] = await Promise.all([
+      this.prisma.classes.findMany({ select: { id: true, name: true, section: true } }),
+      this.prisma.students.findMany({
+        select: { id: true, class_id: true, profile_id: true, admission_date: true },
+      }),
+      this.prisma.profiles.findMany({ select: { id: true, full_name: true } }),
+      this.prisma.fee_structures.findMany({
+        select: { id: true, class_id: true, amount: true, frequency: true },
+      }),
+      this.prisma.fee_assignments.findMany({
+        select: {
+          student_id: true,
+          amount_due: true,
+          amount_paid: true,
+          status: true,
+          due_date: true,
+        },
+      }),
+      this.prisma.payments.findMany({ select: { amount: true, paid_at: true } }),
+    ]);
+    const d = (x: Date | null | undefined) => (x ? x.toISOString().slice(0, 10) : null);
+    const n = (x: unknown) => (x == null ? 0 : Number(x));
+    return {
+      classes,
+      students: students.map((s) => ({
+        id: s.id,
+        class_id: s.class_id,
+        profile_id: s.profile_id,
+        admission_date: d(s.admission_date),
+      })),
+      profiles,
+      structures: structures.map((s) => ({
+        id: s.id,
+        class_id: s.class_id,
+        amount: n(s.amount),
+        frequency: s.frequency,
+      })),
+      fees: fees.map((f) => ({
+        student_id: f.student_id,
+        amount_due: n(f.amount_due),
+        amount_paid: n(f.amount_paid),
+        status: f.status,
+        due_date: d(f.due_date),
+      })),
+      payments: payments.map((p) => ({
+        amount: n(p.amount),
+        paid_at: p.paid_at?.toISOString() ?? null,
+      })),
+    };
+  }
+
   /** Admin analytics — 30-day revenue + attendance-mix series and role split. */
   async analytics(actor: AuthUser) {
     if (!actor.roles.includes("admin")) throw new ForbiddenException();
