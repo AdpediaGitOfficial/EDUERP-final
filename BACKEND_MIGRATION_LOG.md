@@ -230,3 +230,17 @@ npm test                         # 19 e2e tests against the DB
 | Finance ledger | `GET /finance/ledger` | Combined income (successful payments) + expenses, sorted by date, with income/expense totals + net. Added a `status = successful` filter to match the page. **finance.ledger.tsx now 0 supabase refs** |
 | Finance expenses | `GET /finance/expenses`, `POST /finance/expenses` | List + add expense (accountant\|admin). **finance.expenses.tsx now 0 supabase refs** |
 | Finance reconciliation | `GET /finance/reconciliation/payments`, `GET/POST /finance/reconciliation`, `DELETE /finance/reconciliation/:paymentId` | Match payments to bank refs; reconcile is an idempotent upsert on the unique `payment_id`, undo deletes. Payments now key off real columns (`paid_at`/`receipt_no`, not the non-existent `payment_date`/`transaction_id` the old page referenced). Verified in-browser: reconcile → 201, undo → 200. **finance.reconciliation.tsx now 0 supabase refs** |
+
+## Payments/Fees feature enhancement (offline + online + reconciliation)
+
+Schema: added `payment_source` (`offline`\|`online`, default `offline`, checked) and
+`proof_url` to `payments` (`supabase/migrations/20260711000000_*`). Online and offline
+payments are the SAME entity in the SAME table, distinguished only by `payment_source`.
+
+| Area | Endpoint(s) | Behaviour |
+| --- | --- | --- |
+| Offline record (staff) | `POST /payments` (admin\|accountant) | Methods Cash/UPI/Card/Bank/Cheque. Reference **mandatory for any non-cash method** (400 otherwise). Duplicate guard: same invoice+amount+reference within 5 min → 409, override with `force:true`. Optional `proofUrl` (data-URL screenshot/scan) + `notes`. Returns the full receipt payload so the UI shows the receipt immediately. |
+| Parent online pay | `POST /payments/online` (parent\|student) | Scoped to the caller's own child's invoice (`fa_parent_read`); a foreign invoice 404s, admin is 403. Runs the **swappable** `PaymentGatewayService` (sandbox — no real PSP), then writes a `payment_source='online'` row via the shared writer. Successful → confirmation notification + instant receipt; failed → no row. |
+| Fee-due notification | fired from `POST /fees/assign` | `NotificationsService` sends an in-app broadcast (via `broadcasts`/`broadcast_recipients`, the same inbox) + a **swappable** `EmailService` stub to the linked parents. Only real accounts (`auth.users`) receive it, so seed-only parent profiles can't roll back the broadcast. |
+| Payments list | `GET /payments?source=` | Now returns `receiptNo`/`status`/`paymentSource`/`feeTitle`/`proofUrl`; accountant sees all. Admin worklist adds a **Pending reconciliation** quick-filter (unpaid invoices) + an **in-person UPI kiosk** (static school-UPI QR). |
+| Consistency (re-verified) | — | Every path (offline cash/UPI/card/bank/cheque, online gateway) writes to `payments`; the `update_fee_on_payment` trigger recomputes invoice `amount_paid`/`status`; dashboards count `status='successful'` regardless of source. **Reconciled exactly**: DB this-month total = admin `collectedMonth` = finance `revenue` = ledger credits = ₹1,085,750.00 (7 online + 147 offline). Seed adds 6 online + 3 offline-UPI demo payments + a past parent receipt (`api/db/03-payment-demo-seed.sql`). API suite 89/89; 13 browser checks pass. |

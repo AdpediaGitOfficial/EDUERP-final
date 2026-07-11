@@ -14,7 +14,9 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import {
+  IsBoolean,
   IsDateString,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -79,6 +81,39 @@ class RecordPaymentDto {
   @IsOptional()
   @IsString()
   reference?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  proofUrl?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+}
+
+class OnlinePaymentDto {
+  @IsUUID()
+  feeAssignmentId: string;
+
+  @IsIn(["upi", "card", "netbanking", "wallet"])
+  method: "upi" | "card" | "netbanking" | "wallet";
+
+  @IsOptional()
+  @IsString()
+  instrument?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  amount?: number;
+
+  @IsOptional()
+  @IsIn(["successful", "pending", "failed"])
+  simulateOutcome?: "successful" | "pending" | "failed";
 }
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -101,16 +136,25 @@ export class FeesController {
   payments(
     @CurrentUser() actor: AuthUser,
     @Query("studentId") studentId?: string,
+    @Query("source") source?: string,
     @Query("page", new ParseIntPipe({ optional: true })) page?: number,
     @Query("pageSize", new ParseIntPipe({ optional: true })) pageSize?: number,
   ) {
-    return this.fees.listPayments(actor, { studentId, page, pageSize });
+    return this.fees.listPayments(actor, { studentId, source, page, pageSize });
   }
 
+  // Offline payment recorded by staff (cash / UPI / card / bank / cheque).
   @Post("payments")
-  @Roles("admin")
+  @Roles("admin", "accountant")
   record(@CurrentUser() actor: AuthUser, @Body() dto: RecordPaymentDto) {
     return this.fees.recordPayment(actor, dto);
+  }
+
+  // Parent-facing online payment on their own child's invoice (mock gateway).
+  @Post("payments/online")
+  @Roles("parent", "student")
+  payOnline(@CurrentUser() actor: AuthUser, @Body() dto: OnlinePaymentDto) {
+    return this.fees.payOnline(actor, dto);
   }
 
   @Get("fees/structures")

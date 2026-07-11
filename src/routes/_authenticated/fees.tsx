@@ -24,8 +24,9 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   IndianRupee,
@@ -38,6 +39,9 @@ import {
   CreditCard,
   Landmark,
   CheckCircle2,
+  Upload,
+  QrCode,
+  Filter,
 } from "lucide-react";
 import { format, differenceInCalendarDays } from "date-fns";
 import { Printer, Receipt as ReceiptIcon } from "lucide-react";
@@ -61,6 +65,35 @@ const FREQ_LABEL: Record<string, string> = {
 
 const DEMO_UPI_VPA = "greenwoodschool@upi";
 const DEMO_UPI_NAME = "Greenwood School";
+
+// Offline payment methods. Anything other than cash requires a reference number.
+const OFFLINE_METHODS: { value: string; label: string }[] = [
+  { value: "cash", label: "Cash" },
+  { value: "upi", label: "UPI" },
+  { value: "card", label: "Card" },
+  { value: "bank", label: "Bank Transfer" },
+  { value: "cheque", label: "Cheque" },
+];
+const REF_PLACEHOLDER: Record<string, string> = {
+  upi: "UPI transaction ID (e.g. 4290XXXXXX23)",
+  card: "Card auth / approval code",
+  bank: "Bank reference / UTR number",
+  cheque: "Cheque number",
+  cash: "Optional note",
+};
+
+/** Map the API's camelCase payment/receipt payload to the ReceiptDialog shape. */
+function apiReceiptToDialog(r: any) {
+  return {
+    receipt_no: r.receiptNo,
+    amount: r.amount,
+    method: r.method,
+    reference: r.reference,
+    paid_at: r.paidAt,
+    students: { admission_no: r.admissionNo, profiles: { full_name: r.studentName } },
+    fee_assignments: { title: r.feeTitle, status: r.status },
+  };
+}
 
 function statusBadge(s: string) {
   const map: Record<string, string> = {
@@ -115,6 +148,9 @@ function AdminFees() {
   const [openStructure, setOpenStructure] = useState(false);
   const [openAssign, setOpenAssign] = useState(false);
   const [openPay, setOpenPay] = useState<string | null>(null);
+  const [payReceipt, setPayReceipt] = useState<any | null>(null);
+  const [reconOnly, setReconOnly] = useState(false);
+  const [kioskOpen, setKioskOpen] = useState(false);
   const [structureClassId, setStructureClassId] = useState("");
   const [assignClassId, setAssignClassId] = useState("");
   const [assignStructureId, setAssignStructureId] = useState("");
@@ -216,7 +252,26 @@ function AdminFees() {
           <TabsTrigger value="structures">Structures</TabsTrigger>
         </TabsList>
         <TabsContent value="assignments" className="mt-4 space-y-4">
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Button
+                variant={reconOnly ? "default" : "outline"}
+                size="sm"
+                onClick={() => setReconOnly((v) => !v)}
+              >
+                <Filter className="size-3.5 mr-1" />
+                Pending reconciliation
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setKioskOpen(true)}>
+                <QrCode className="size-3.5 mr-1" />
+                In-person payment
+              </Button>
+              {reconOnly && (
+                <span className="text-xs text-muted-foreground">
+                  Showing unpaid invoices — record a counter payment once it clears.
+                </span>
+              )}
+            </div>
             <Dialog open={openAssign} onOpenChange={setOpenAssign}>
               <DialogTrigger asChild>
                 <Button>
@@ -289,30 +344,32 @@ function AdminFees() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(assignments ?? []).map((a: any) => (
-                    <tr key={a.id} className="border-t">
-                      <td className="p-3 font-medium">
-                        {a.students?.profiles?.full_name}{" "}
-                        <span className="text-xs text-muted-foreground">
-                          {a.students?.admission_no}
-                        </span>
-                      </td>
-                      <td className="p-3">{a.title}</td>
-                      <td className="p-3 text-muted-foreground">
-                        {format(new Date(a.due_date), "MMM d, yyyy")}
-                      </td>
-                      <td className="p-3">{inr(a.amount_due)}</td>
-                      <td className="p-3">{inr(a.amount_paid)}</td>
-                      <td className="p-3">{statusBadge(a.status)}</td>
-                      <td className="p-3">
-                        {a.status !== "paid" && (
-                          <Button size="sm" variant="outline" onClick={() => setOpenPay(a.id)}>
-                            <IndianRupee className="size-3.5" /> Record
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {(assignments ?? [])
+                    .filter((a: any) => (reconOnly ? a.status !== "paid" : true))
+                    .map((a: any) => (
+                      <tr key={a.id} className="border-t">
+                        <td className="p-3 font-medium">
+                          {a.students?.profiles?.full_name}{" "}
+                          <span className="text-xs text-muted-foreground">
+                            {a.students?.admission_no}
+                          </span>
+                        </td>
+                        <td className="p-3">{a.title}</td>
+                        <td className="p-3 text-muted-foreground">
+                          {format(new Date(a.due_date), "MMM d, yyyy")}
+                        </td>
+                        <td className="p-3">{inr(a.amount_due)}</td>
+                        <td className="p-3">{inr(a.amount_paid)}</td>
+                        <td className="p-3">{statusBadge(a.status)}</td>
+                        <td className="p-3">
+                          {a.status !== "paid" && (
+                            <Button size="sm" variant="outline" onClick={() => setOpenPay(a.id)}>
+                              <IndianRupee className="size-3.5" /> Record
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
                   {(assignments ?? []).length === 0 && (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-muted-foreground">
@@ -324,7 +381,13 @@ function AdminFees() {
               </table>
             </div>
           </Card>
-          <RecordPaymentDialog assignmentId={openPay} onClose={() => setOpenPay(null)} />
+          <RecordPaymentDialog
+            assignmentId={openPay}
+            onClose={() => setOpenPay(null)}
+            onRecorded={(receipt) => setPayReceipt(receipt)}
+          />
+          <ReceiptDialog payment={payReceipt} onClose={() => setPayReceipt(null)} />
+          <InPersonUpiDialog open={kioskOpen} onClose={() => setKioskOpen(false)} />
         </TabsContent>
         <TabsContent value="structures" className="mt-4 space-y-4">
           <div className="flex justify-end">
@@ -428,9 +491,11 @@ function AdminFees() {
 function RecordPaymentDialog({
   assignmentId,
   onClose,
+  onRecorded,
 }: {
   assignmentId: string | null;
   onClose: () => void;
+  onRecorded: (receipt: any) => void;
 }) {
   const qc = useQueryClient();
   const { user } = useCurrentUser();
@@ -442,77 +507,241 @@ function RecordPaymentDialog({
       const res = await apiGet<{ rows: any[] }>("/fees/assignments?pageSize=200");
       const r = res.rows.find((x) => x.id === assignmentId);
       return r
-        ? { id: r.id, student_id: r.studentId, amount_due: r.amountDue, amount_paid: r.amountPaid }
+        ? {
+            id: r.id,
+            student_id: r.studentId,
+            amount_due: r.amountDue,
+            amount_paid: r.amountPaid,
+            title: r.title,
+            studentName: r.studentName,
+            admissionNo: r.admissionNo,
+          }
         : null;
     },
   });
-  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+
+  const balance = assignment ? Number(assignment.amount_due) - Number(assignment.amount_paid) : 0;
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("cash");
+  const [reference, setReference] = useState("");
+  const [notes, setNotes] = useState("");
+  const [proof, setProof] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [dupWarn, setDupWarn] = useState(false);
+
+  // Auto-fill the amount from the invoice's outstanding balance (editable).
+  useEffect(() => {
+    if (assignment) {
+      setAmount(String(balance));
+      setMethod("cash");
+      setReference("");
+      setNotes("");
+      setProof(null);
+      setDupWarn(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentId, assignment?.id]);
+
+  const amtNum = Number(amount) || 0;
+  const needsRef = method !== "cash";
+  const diff = useMemo(() => amtNum - balance, [amtNum, balance]);
+
+  const onFile = (file?: File) => {
+    if (!file) return setProof(null);
+    if (file.size > 2 * 1024 * 1024) return toast.error("Proof must be under 2 MB");
+    const reader = new FileReader();
+    reader.onload = () => setProof({ name: file.name, dataUrl: String(reader.result) });
+    reader.readAsDataURL(file);
+  };
+
+  const record = async (force = false) => {
     if (!assignment || !user) return;
-    const fd = new FormData(e.currentTarget);
+    if (amtNum <= 0) return toast.error("Enter a valid amount");
+    if (needsRef && !reference.trim()) {
+      return toast.error(
+        `A reference number is required for ${method === "bank" ? "bank transfer" : method} payments.`,
+      );
+    }
+    setSaving(true);
     try {
-      await apiFetch("/payments", {
+      const res = await apiFetch("/payments", {
         method: "POST",
         body: JSON.stringify({
           feeAssignmentId: assignment.id,
           studentId: assignment.student_id,
-          amount: Number(fd.get("amount")),
-          method: String(fd.get("method")),
-          reference: String(fd.get("ref") || ""),
+          amount: amtNum,
+          method,
+          reference: reference.trim() || undefined,
+          notes: notes.trim() || undefined,
+          proofUrl: proof?.dataUrl,
+          force,
         }),
       });
+      const receipt = res ? await res.json() : null;
+      toast.success("Payment recorded");
+      qc.invalidateQueries({ queryKey: ["fee-assignments"] });
+      qc.invalidateQueries({ queryKey: ["self-fees"] });
+      onClose();
+      if (receipt) onRecorded(apiReceiptToDialog(receipt));
     } catch (err) {
-      return toast.error(err instanceof Error ? err.message : "Could not record");
+      const msg = err instanceof Error ? err.message : "Could not record";
+      if (/recorded moments ago/i.test(msg)) setDupWarn(true);
+      else toast.error(msg);
+    } finally {
+      setSaving(false);
     }
-    toast.success("Payment recorded");
-    onClose();
-    qc.invalidateQueries({ queryKey: ["fee-assignments"] });
-    qc.invalidateQueries({ queryKey: ["payments-list"] });
   };
+
   return (
     <Dialog open={!!assignmentId} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Record payment</DialogTitle>
+          <DialogTitle>Record offline payment</DialogTitle>
         </DialogHeader>
         {assignment && (
-          <form onSubmit={submit} className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              Balance: {inr(Number(assignment.amount_due) - Number(assignment.amount_paid))}
-            </div>
+          <div className="space-y-4">
+            <Card className="p-3 rounded-xl bg-secondary/60 text-sm">
+              <div className="font-medium">{assignment.studentName}</div>
+              <div className="text-xs text-muted-foreground">
+                {assignment.title} · Balance {inr(balance)}
+              </div>
+            </Card>
+
             <div className="space-y-1.5">
               <Label>Amount</Label>
               <Input
-                name="amount"
                 type="number"
                 step="0.01"
-                required
-                defaultValue={Number(assignment.amount_due) - Number(assignment.amount_paid)}
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setDupWarn(false);
+                }}
               />
+              {diff < 0 && (
+                <p className="text-xs text-amber-600">
+                  This will leave {inr(Math.abs(diff))} outstanding on this invoice.
+                </p>
+              )}
+              {diff > 0 && (
+                <p className="text-xs text-blue-600">
+                  This exceeds the due amount by {inr(diff)} — the extra is recorded as advance
+                  credit.
+                </p>
+              )}
             </div>
+
             <div className="space-y-1.5">
               <Label>Method</Label>
-              <Select name="method" defaultValue="cash">
+              <Select
+                value={method}
+                onValueChange={(v) => {
+                  setMethod(v);
+                  setDupWarn(false);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="bank">Bank transfer</SelectItem>
-                  <SelectItem value="card">Card</SelectItem>
-                  <SelectItem value="cheque">Cheque</SelectItem>
-                  <SelectItem value="online">Online</SelectItem>
+                  {OFFLINE_METHODS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-1.5">
-              <Label>Reference</Label>
-              <Input name="ref" placeholder="Txn ID / cheque #" />
+              <Label>
+                Reference{" "}
+                {needsRef ? (
+                  <span className="text-red-600">*</span>
+                ) : (
+                  <span className="text-muted-foreground text-xs">(optional)</span>
+                )}
+              </Label>
+              <Input
+                value={reference}
+                onChange={(e) => {
+                  setReference(e.target.value);
+                  setDupWarn(false);
+                }}
+                placeholder={REF_PLACEHOLDER[method]}
+                aria-invalid={needsRef && !reference.trim()}
+              />
+              {needsRef && (
+                <p className="text-[11px] text-muted-foreground">
+                  Required for {method === "bank" ? "bank transfer" : method} — enter the
+                  transaction ID / cheque number / bank reference.
+                </p>
+              )}
             </div>
-            <Button type="submit" className="w-full">
-              Save payment
-            </Button>
-          </form>
+
+            <div className="space-y-1.5">
+              <Label>Proof of payment (optional)</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById("proof-input")?.click()}
+                >
+                  <Upload className="size-3.5 mr-1" /> Upload
+                </Button>
+                <span className="text-xs text-muted-foreground truncate">
+                  {proof ? proof.name : "Screenshot / scanned cheque"}
+                </span>
+                <input
+                  id="proof-input"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={(e) => onFile(e.target.files?.[0])}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Any note for the record"
+              />
+            </div>
+
+            {dupWarn ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm text-amber-900">
+                  <AlertTriangle className="size-4" /> A matching payment was recorded moments ago.
+                </div>
+                <p className="text-xs text-amber-800">
+                  Same invoice, amount and reference. This may be a double-click or a re-entered
+                  transaction. Record it anyway only if it's a genuine second payment.
+                </p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setDupWarn(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={saving}
+                    onClick={() => record(true)}
+                  >
+                    Record anyway
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button className="w-full" disabled={saving} onClick={() => record(false)}>
+                {saving ? "Recording…" : `Record ${inr(amtNum)}`}
+              </Button>
+            )}
+          </div>
         )}
       </DialogContent>
     </Dialog>
@@ -550,10 +779,16 @@ function SelfFees({ userId, isParent }: { userId: string; isParent: boolean }) {
       const payments = payRes.rows.map((p) => ({
         id: p.id,
         student_id: p.studentId,
+        fee_assignment_id: p.feeAssignmentId,
         amount: p.amount,
         method: p.method,
         reference: p.reference,
+        receipt_no: p.receiptNo,
+        status: p.status,
+        payment_source: p.paymentSource,
         paid_at: p.paidAt,
+        students: { admission_no: p.admissionNo, profiles: { full_name: p.studentName } },
+        fee_assignments: { title: p.feeTitle, status: p.status },
       }));
       return { children, assignments, payments };
     },
@@ -661,10 +896,11 @@ function SelfFees({ userId, isParent }: { userId: string; isParent: boolean }) {
         assignment={payItem}
         userId={userId}
         onClose={() => setPayItem(null)}
-        onPaid={() => {
+        onPaid={(paidReceipt) => {
           qc.invalidateQueries({ queryKey: ["self-fees"] });
           qc.invalidateQueries({ queryKey: ["parent-dash"] });
           setPayItem(null);
+          if (paidReceipt) setReceipt(paidReceipt);
         }}
       />
     </AppShell>
@@ -942,7 +1178,7 @@ function PayDialog({
   assignment: any | null;
   userId: string;
   onClose: () => void;
-  onPaid: () => void;
+  onPaid: (receipt?: any) => void;
 }) {
   const [method, setMethod] = useState<"upi" | "card" | "netbanking" | "wallet">("upi");
   const [amount, setAmount] = useState("");
@@ -987,12 +1223,14 @@ function PayDialog({
   const submit = async () => {
     if (!assignment) return;
     if (payAmount <= 0) return toast.error("Enter a valid amount");
-    let reference = "";
-    let dbMethod: "cash" | "bank" | "card" | "cheque" | "online" = "online";
+    // Validate instrument details, then hand the charge to the online payment
+    // endpoint. That endpoint runs the (swappable) gateway server-side and, on a
+    // successful charge, records a payment_source='online' row in the SAME
+    // payments table — so it reconciles with offline payments and the dashboards.
+    let instrument = "";
     if (method === "upi") {
       if (!vpa.trim()) return toast.error("Enter the UPI ID you paid from");
-      reference = `UPI ${vpa.trim()} · ${txnRef}`;
-      dbMethod = "online";
+      instrument = vpa.trim();
     } else if (method === "card") {
       if (
         cardNumber.replace(/\s/g, "").length < 12 ||
@@ -1001,54 +1239,44 @@ function PayDialog({
         !cardName.trim()
       )
         return toast.error("Enter complete card details");
-      const last4 = cardNumber.replace(/\s/g, "").slice(-4);
-      reference = `Card •••• ${last4} · ${txnRef}`;
-      dbMethod = "card";
+      instrument = `•••• ${cardNumber.replace(/\s/g, "").slice(-4)}`;
     } else if (method === "netbanking") {
       if (!bank) return toast.error("Select your bank");
-      reference = `NetBanking ${bank} · ${txnRef}`;
-      dbMethod = "bank";
+      instrument = bank;
     } else if (method === "wallet") {
       if (!wallet) return toast.error("Select a wallet");
-      reference = `Wallet ${wallet} · ${txnRef}`;
-      dbMethod = "online";
+      instrument = wallet;
     }
     setSaving(true);
-    // Records via the API. NOTE (coexistence): under the extracted RLS the only
-    // write policy on payments is pay_admin_all, so a parent/student self-payment
-    // is rejected (403) here exactly as it was under Supabase RLS. Enabling true
-    // parent self-service payment is a product decision (a gateway webhook that
-    // records server-side, or a scoped payments-insert policy) — tracked in
-    // BACKEND_MIGRATION_LOG.md. Only the 'successful' outcome maps to a real row.
-    let failed = false;
-    if (outcome === "successful") {
-      try {
-        await apiFetch("/payments", {
-          method: "POST",
-          body: JSON.stringify({
-            feeAssignmentId: assignment.id,
-            studentId: assignment.student_id,
-            amount: payAmount,
-            method: dbMethod,
-            reference,
-          }),
-        });
-      } catch (err) {
-        failed = true;
-        toast.error(err instanceof Error ? err.message : "Payment could not be recorded");
-      }
+    let receipt: any = null;
+    try {
+      const res = await apiFetch("/payments/online", {
+        method: "POST",
+        body: JSON.stringify({
+          feeAssignmentId: assignment.id,
+          method,
+          instrument,
+          amount: payAmount,
+          simulateOutcome: outcome,
+        }),
+      });
+      receipt = res ? await res.json() : null;
+    } catch (err) {
+      setSaving(false);
+      return toast.error(err instanceof Error ? err.message : "Payment could not be processed");
     }
     setSaving(false);
-    if (failed) return;
+    const status = receipt?.status ?? outcome;
     const msg =
-      outcome === "successful"
-        ? "Payment successful. Receipt available in history."
-        : outcome === "pending"
+      status === "successful"
+        ? "Payment successful. Your receipt is ready."
+        : status === "pending"
           ? "Payment pending confirmation. It will update once the bank confirms."
           : "Payment failed. Please try again or use another method.";
-    (outcome === "failed" ? toast.error : toast.success)(msg);
+    (status === "failed" ? toast.error : toast.success)(msg);
     resetAll();
-    onPaid();
+    // Show the receipt immediately on success (failed charges write no row).
+    onPaid(status === "successful" && receipt ? apiReceiptToDialog(receipt) : undefined);
   };
 
   return (
@@ -1253,6 +1481,45 @@ function PayDialog({
             </p>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * In-person UPI kiosk. Shows the school's static UPI QR so a parent at the
+ * counter can scan and pay; the accountant then records it via the offline modal
+ * using the UPI reference from the parent's confirmation screen.
+ */
+function InPersonUpiDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const upiUrl = `upi://pay?pa=${encodeURIComponent(DEMO_UPI_VPA)}&pn=${encodeURIComponent(DEMO_UPI_NAME)}&cu=INR`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(upiUrl)}`;
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <QrCode className="size-4" /> In-person UPI payment
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 text-center">
+          <img
+            src={qrUrl}
+            alt="School UPI QR"
+            width={240}
+            height={240}
+            className="mx-auto rounded-xl border"
+          />
+          <div className="text-sm">
+            Pay to <span className="font-mono font-medium">{DEMO_UPI_VPA}</span>
+            <div className="text-xs text-muted-foreground">{DEMO_UPI_NAME}</div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Ask the parent to scan with any UPI app (GPay, PhonePe, Paytm, BHIM). After they pay,
+            record it via “Record” on their invoice with Method = UPI and the transaction ID from
+            their confirmation screen.
+          </p>
+        </div>
       </DialogContent>
     </Dialog>
   );

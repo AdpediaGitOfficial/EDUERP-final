@@ -499,3 +499,134 @@ describe("Finance: dashboard, ledger, expenses, reconciliation", () => {
     ).toBe(403);
   });
 });
+
+describe("Payments: offline record (methods + validation + dup guard) & parent online", () => {
+  const w = process.env.VITEST_WORKER_ID ?? "0";
+
+  it("offline non-cash requires a reference; cash does not", async () => {
+    const a = (await get("/fees/assignments?pageSize=200", "admin")).body.rows.find(
+      (r: any) => r.status !== "paid",
+    );
+    // UPI with no reference -> 400 (validation before it can hit the DB).
+    const noRef = await post("/payments", "admin", {
+      studentId: a.studentId,
+      feeAssignmentId: a.id,
+      amount: 100,
+      method: "upi",
+    });
+    expect(noRef.status).toBe(400);
+    // UPI with a reference -> 201, full receipt payload, source offline.
+    const withRef = await post("/payments", "admin", {
+      studentId: a.studentId,
+      feeAssignmentId: a.id,
+      amount: 100,
+      method: "upi",
+      reference: `OFFLINE-UPI-${w}-A`,
+    });
+    expect(withRef.status).toBe(201);
+    expect(withRef.body.receiptNo).toBeTruthy();
+    expect(withRef.body.paymentSource).toBe("offline");
+    expect(withRef.body.feeTitle).toBeTruthy();
+  });
+
+  it("duplicate (same invoice+amount+ref) is blocked unless forced", async () => {
+    const a = (await get("/fees/assignments?pageSize=200", "admin")).body.rows.find(
+      (r: any) => r.status !== "paid",
+    );
+    const ref = `OFFLINE-DUP-${w}`;
+    const first = await post("/payments", "admin", {
+      studentId: a.studentId,
+      feeAssignmentId: a.id,
+      amount: 250,
+      method: "card",
+      reference: ref,
+    });
+    expect(first.status).toBe(201);
+    const dup = await post("/payments", "admin", {
+      studentId: a.studentId,
+      feeAssignmentId: a.id,
+      amount: 250,
+      method: "card",
+      reference: ref,
+    });
+    expect(dup.status).toBe(409);
+    const forced = await post("/payments", "admin", {
+      studentId: a.studentId,
+      feeAssignmentId: a.id,
+      amount: 250,
+      method: "card",
+      reference: ref,
+      force: true,
+    });
+    expect(forced.status).toBe(201);
+  });
+
+  it("recording is admin/accountant only; parents use the online endpoint", async () => {
+    const a = (await get("/fees/assignments?pageSize=200", "admin")).body.rows.find(
+      (r: any) => r.status !== "paid",
+    );
+    expect(
+      (
+        await post("/payments", "parent", {
+          studentId: a.studentId,
+          feeAssignmentId: a.id,
+          amount: 100,
+          method: "cash",
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("parent pays their own invoice online; row is payment_source=online; foreign invoice 404s; admin blocked", async () => {
+    const mine = (await get("/fees/assignments?pageSize=50", "parent")).body.rows.find(
+      (r: any) => r.status !== "paid",
+    );
+    const paid = await post("/payments/online", "parent", {
+      feeAssignmentId: mine.id,
+      method: "upi",
+      instrument: "demo@okhdfc",
+      simulateOutcome: "successful",
+    });
+    expect(paid.status).toBe(201);
+    expect(paid.body.paymentSource).toBe("online");
+    expect(paid.body.status).toBe("successful");
+    expect(paid.body.receiptNo).toBeTruthy();
+
+    // The online payment shows up in the parent's own payments list, filterable by source.
+    const online = await get("/payments?source=online&pageSize=50", "parent");
+    expect(online.body.rows.some((p: any) => p.id === paid.body.id)).toBe(true);
+
+    // A foreign (non-child) invoice is invisible (404), and admin can't use the parent path.
+    const foreign = (await get("/fees/assignments?pageSize=200", "admin")).body.rows.find(
+      (r: any) => r.studentName !== "Anika Singh" && r.status !== "paid",
+    );
+    expect(
+      (
+        await post("/payments/online", "parent", {
+          feeAssignmentId: foreign.id,
+          method: "upi",
+          instrument: "x@upi",
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await post("/payments/online", "admin", { feeAssignmentId: mine.id, method: "upi" })).status,
+    ).toBe(403);
+  });
+
+  it("assigning a fee notifies the linked parents (in-app broadcast)", async () => {
+    // Anika's class — the demo parent is linked, so at least one recipient exists.
+    const anikaClass = (await get("/students?pageSize=50", "parent")).body.rows[0]?.class?.id;
+    const structure = await post("/fees/structures", "admin", {
+      name: `Notify Spec Fee ${w}`,
+      amount: 900,
+    });
+    const assigned = await post("/fees/assign", "admin", {
+      structureId: structure.body.id,
+      dueDate: "2026-12-01",
+      classId: anikaClass,
+    });
+    expect(assigned.status).toBe(201);
+    expect(assigned.body.notified).toBeGreaterThan(0);
+  });
+});

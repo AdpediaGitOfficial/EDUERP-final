@@ -1,7 +1,16 @@
-import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
+import { NotificationsService } from "../notifications/notifications.service";
+import { PaymentGatewayService } from "./payment-gateway.service";
 
 /**
  * RLS translation (api/db/rls-policies-extracted.csv):
@@ -16,7 +25,11 @@ import type { AuthUser } from "../../common/decorators/current-user.decorator";
  */
 @Injectable()
 export class FeesService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(PaymentGatewayService) private readonly gateway: PaymentGatewayService,
+  ) {}
 
   /** fee_structures are admin-managed (fs_admin_write); linked-user read (fs_linked_read). */
   async listStructures(actor: AuthUser) {
@@ -81,7 +94,15 @@ export class FeesService {
         due_date: new Date(dueDate),
       })),
     });
-    return { assigned: targets.length };
+    // Notify the linked parents that a new fee is due (in-app + email).
+    const notice = await this.notifications.notifyFeeDue({
+      senderId: actor.id,
+      studentIds: targets.map((t) => t.id),
+      title: structure.name,
+      amount: Number(structure.amount),
+      dueDate,
+    });
+    return { assigned: targets.length, notified: notice.recipients };
   }
 
   private feeScope(actor: AuthUser): Prisma.fee_assignmentsWhereInput | null {
@@ -154,12 +175,12 @@ export class FeesService {
 
   async listPayments(
     actor: AuthUser,
-    opts: { studentId?: string; page?: number; pageSize?: number },
+    opts: { studentId?: string; page?: number; pageSize?: number; source?: string },
   ) {
     const page = opts.page ?? 1;
     const pageSize = Math.min(opts.pageSize ?? 50, 200);
     let scope: Prisma.paymentsWhereInput | null = null;
-    if (actor.roles.includes("admin")) scope = {};
+    if (actor.roles.some((r) => r === "admin" || r === "accountant")) scope = {};
     else if (actor.roles.includes("parent")) {
       scope = { students: { parent_student: { some: { parent_id: actor.id } } } };
     } else if (actor.roles.includes("student")) {
@@ -168,7 +189,11 @@ export class FeesService {
     if (scope === null) return { total: 0, page, pageSize, rows: [] };
 
     const where: Prisma.paymentsWhereInput = {
-      AND: [scope, opts.studentId ? { student_id: opts.studentId } : {}],
+      AND: [
+        scope,
+        opts.studentId ? { student_id: opts.studentId } : {},
+        opts.source ? { payment_source: opts.source } : {},
+      ],
     };
     const [total, rows] = await Promise.all([
       this.prisma.payments.count({ where }),
@@ -179,6 +204,7 @@ export class FeesService {
         take: pageSize,
         include: {
           students: { select: { admission_no: true, profiles: { select: { full_name: true } } } },
+          fee_assignments: { select: { title: true, status: true } },
         },
       }),
     ]);
@@ -186,20 +212,109 @@ export class FeesService {
       total,
       page,
       pageSize,
-      rows: rows.map((p) => ({
-        id: p.id,
-        studentId: p.student_id,
-        studentName: p.students?.profiles?.full_name ?? null,
-        admissionNo: p.students?.admission_no ?? null,
-        amount: p.amount,
-        method: p.method,
-        reference: p.reference,
-        paidAt: p.paid_at,
-      })),
+      rows: rows.map((p) => this.paymentRow(p)),
     };
   }
 
-  /** pay_admin_all is the only write policy on payments — admin records payments. */
+  /** Shared row/receipt shape so offline and online payments render identically. */
+  private paymentRow(p: any) {
+    return {
+      id: p.id,
+      studentId: p.student_id,
+      studentName: p.students?.profiles?.full_name ?? null,
+      admissionNo: p.students?.admission_no ?? null,
+      feeAssignmentId: p.fee_assignment_id,
+      feeTitle: p.fee_assignments?.title ?? null,
+      amount: p.amount,
+      method: p.method,
+      reference: p.reference,
+      receiptNo: p.receipt_no,
+      status: p.status,
+      paymentSource: p.payment_source,
+      proofUrl: p.proof_url,
+      notes: p.notes,
+      paidAt: p.paid_at,
+    };
+  }
+
+  /** Methods that must carry a reference (UPI txn id, cheque no, bank ref, card auth). */
+  private static NON_CASH = new Set(["upi", "card", "bank", "cheque", "online", "netbanking"]);
+
+  /**
+   * Core payment writer shared by the offline (staff) and online (parent gateway)
+   * paths. Enforces the reference-required-for-non-cash rule and the
+   * duplicate-payment guard, then returns the full receipt payload so the caller
+   * can show a receipt immediately. fee_assignments.amount_paid/status recompute
+   * in the still-active update_fee_on_payment trigger — so every path
+   * (cash/UPI/card/online) keeps the invoice + dashboards reconciled.
+   */
+  private async writePayment(data: {
+    studentId: string;
+    feeAssignmentId: string;
+    amount: number;
+    method: string;
+    reference?: string | null;
+    notes?: string | null;
+    proofUrl?: string | null;
+    paymentSource: "offline" | "online";
+    status?: "successful" | "pending" | "failed";
+    recordedBy?: string | null;
+    force?: boolean;
+  }) {
+    const method = (data.method || "cash").toLowerCase();
+    const reference = data.reference?.trim() || null;
+    if (FeesService.NON_CASH.has(method) && !reference) {
+      throw new BadRequestException(
+        `A reference number is required for ${method} payments (UPI transaction ID, cheque number, or bank reference).`,
+      );
+    }
+    if (data.amount <= 0) throw new BadRequestException("Amount must be greater than zero.");
+
+    // Duplicate-payment guard: an identical (invoice + amount + reference) entry
+    // in the last 5 minutes is almost always a double-click or a re-typed UPI id.
+    if (!data.force) {
+      const dupWindow = new Date(Date.now() - 5 * 60 * 1000);
+      const dup = await this.prisma.payments.findFirst({
+        where: {
+          fee_assignment_id: data.feeAssignmentId,
+          amount: new Prisma.Decimal(data.amount),
+          reference,
+          paid_at: { gte: dupWindow },
+        },
+      });
+      if (dup) {
+        throw new ConflictException(
+          "A matching payment (same invoice, amount and reference) was recorded moments ago. Re-submit with force=true to record it anyway.",
+        );
+      }
+    }
+
+    const row = await this.prisma.payments.create({
+      data: {
+        student_id: data.studentId,
+        fee_assignment_id: data.feeAssignmentId,
+        amount: new Prisma.Decimal(data.amount),
+        method,
+        reference,
+        notes: data.notes?.trim() || null,
+        proof_url: data.proofUrl || null,
+        payment_source: data.paymentSource,
+        status: (data.status ?? "successful") as never,
+        recorded_by: data.recordedBy ?? null,
+      },
+      include: {
+        students: { select: { admission_no: true, profiles: { select: { full_name: true } } } },
+        fee_assignments: { select: { title: true, status: true } },
+      },
+    });
+    return this.paymentRow(row);
+  }
+
+  /**
+   * Offline payment recorded by staff (cash / UPI / card / bank transfer / cheque),
+   * including the in-person UPI reconciliation flow. Admin or accountant only
+   * (pay_admin_all + the accountant finance role).
+   */
   async recordPayment(
     actor: AuthUser,
     data: {
@@ -208,21 +323,103 @@ export class FeesService {
       amount: number;
       method?: string;
       reference?: string;
+      notes?: string;
+      proofUrl?: string;
+      force?: boolean;
     },
   ) {
-    if (!actor.roles.includes("admin")) throw new ForbiddenException();
-    const row = await this.prisma.payments.create({
-      data: {
-        student_id: data.studentId,
-        fee_assignment_id: data.feeAssignmentId,
-        amount: new Prisma.Decimal(data.amount),
-        method: data.method ?? "manual",
-        reference: data.reference ?? null,
-        recorded_by: actor.id,
+    if (!actor.roles.some((r) => r === "admin" || r === "accountant")) {
+      throw new ForbiddenException();
+    }
+    return this.writePayment({
+      studentId: data.studentId,
+      feeAssignmentId: data.feeAssignmentId,
+      amount: data.amount,
+      method: data.method ?? "cash",
+      reference: data.reference,
+      notes: data.notes,
+      proofUrl: data.proofUrl,
+      paymentSource: "offline",
+      recordedBy: actor.id,
+      force: data.force,
+    });
+  }
+
+  /**
+   * Parent-facing online payment. A parent (or student) pays their OWN invoice
+   * through the swappable payment gateway; the resulting row lands in the SAME
+   * payments table with payment_source='online'. Scope reuses the fee_assignments
+   * read policy, so a parent can only pay an invoice belonging to one of their
+   * children (fa_parent_read) — anything else 404s (RLS invisibility).
+   */
+  async payOnline(
+    actor: AuthUser,
+    data: {
+      feeAssignmentId: string;
+      method: "upi" | "card" | "netbanking" | "wallet";
+      instrument?: string;
+      amount?: number;
+      simulateOutcome?: "successful" | "pending" | "failed";
+    },
+  ) {
+    const scope = this.feeScope(actor);
+    if (scope === null) throw new ForbiddenException();
+    const assignment = await this.prisma.fee_assignments.findFirst({
+      where: { AND: [scope, { id: data.feeAssignmentId }] },
+      include: {
+        students: { select: { id: true, profiles: { select: { full_name: true } } } },
       },
     });
-    // fee_assignments.status/amount_paid recompute happens in the still-active
-    // update_fee_on_payment DB trigger (see class doc).
-    return { id: row.id, receiptNo: row.receipt_no };
+    if (!assignment) throw new NotFoundException("Fee not found"); // RLS invisibility
+
+    const balance = Number(assignment.amount_due) - Number(assignment.amount_paid);
+    const amount = data.amount && data.amount > 0 ? data.amount : balance;
+    if (amount <= 0) throw new BadRequestException("This invoice has no outstanding balance.");
+
+    const orderRef = `GW-${assignment.id.slice(0, 8).toUpperCase()}`;
+    const result = await this.gateway.charge({
+      amount,
+      method: data.method,
+      instrument: data.instrument,
+      orderRef,
+      simulateOutcome: data.simulateOutcome,
+    });
+    if (result.status === "failed") {
+      // No row is written for a failed charge — nothing to reconcile.
+      return { status: "failed" as const, gatewayRef: result.gatewayRef };
+    }
+
+    const dbMethod = data.method === "netbanking" ? "bank" : data.method;
+    const label =
+      data.method === "upi"
+        ? `UPI ${data.instrument ?? ""}`.trim()
+        : data.method === "card"
+          ? `Card ${data.instrument ?? ""}`.trim()
+          : data.method === "netbanking"
+            ? `NetBanking ${data.instrument ?? ""}`.trim()
+            : `Wallet ${data.instrument ?? ""}`.trim();
+
+    const receipt = await this.writePayment({
+      studentId: assignment.student_id,
+      feeAssignmentId: assignment.id,
+      amount,
+      method: dbMethod,
+      reference: `${label} · ${result.gatewayRef}`,
+      paymentSource: "online",
+      status: result.status,
+      recordedBy: actor.id,
+    });
+
+    if (result.status === "successful") {
+      await this.notifications.notifyPaymentConfirmed({
+        senderId: actor.id,
+        parentUserId: actor.id,
+        amount,
+        receiptNo: receipt.receiptNo,
+        title: assignment.title,
+      });
+    }
+    // receipt.status already carries the gateway outcome (successful | pending).
+    return { ...receipt, gatewayRef: result.gatewayRef };
   }
 }

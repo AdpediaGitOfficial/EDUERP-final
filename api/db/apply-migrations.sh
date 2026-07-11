@@ -21,4 +21,6 @@ for f in supabase/migrations/*.sql; do
     psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/01-preexisting-rows.sql
   fi
 done
+# Demo payments (online + offline UPI) once the schema + base data are in place.
+psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/03-payment-demo-seed.sql
 echo "done."
