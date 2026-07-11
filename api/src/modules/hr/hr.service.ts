@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -560,5 +561,154 @@ export class HrService {
         throw new NotFoundException("Designation not found");
       throw e;
     }
+  }
+
+  // ==== Teacher attendance management (ta_admin_hr_all / ac_admin_hr) =======
+  private hrRole(actor: AuthUser): "admin" | "hr" {
+    return actor.roles.includes("admin") ? "admin" : "hr";
+  }
+  private dateOnly(d: string) {
+    // Normalise a YYYY-MM-DD string to a UTC midnight Date for @db.Date columns.
+    return new Date(`${d.slice(0, 10)}T00:00:00.000Z`);
+  }
+  private dstr(d: Date | null | undefined): string | null {
+    return d ? d.toISOString().slice(0, 10) : null;
+  }
+  private shapeTa(a: {
+    id: string;
+    teacher_id: string;
+    date: Date;
+    status: string;
+    check_in_time: Date | null;
+    marked_by: string;
+    correction_reason: string | null;
+    notes: string | null;
+  }) {
+    return {
+      id: a.id,
+      teacher_id: a.teacher_id,
+      date: this.dstr(a.date),
+      status: a.status,
+      check_in_time: a.check_in_time ? a.check_in_time.toISOString() : null,
+      marked_by: a.marked_by,
+      correction_reason: a.correction_reason,
+      notes: a.notes,
+    };
+  }
+
+  async attnTeachers(actor: AuthUser) {
+    this.requireHr(actor);
+    return this.prisma.teachers.findMany({
+      where: { status: "active" },
+      select: { id: true, full_name: true, email: true, subject: true, status: true },
+      orderBy: { full_name: "asc" },
+    });
+  }
+
+  async attnDay(actor: AuthUser, date: string) {
+    this.requireHr(actor);
+    const day = this.dateOnly(date);
+    const next = new Date(day.getTime() + 86_400_000);
+    const rows = await this.prisma.teacher_attendance.findMany({
+      where: { date: { gte: day, lt: next } },
+    });
+    return rows.map((r) => this.shapeTa(r));
+  }
+
+  async attnMonth(actor: AuthUser, month: string) {
+    this.requireHr(actor);
+    const start = this.dateOnly(`${month.slice(0, 7)}-01`);
+    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+    const rows = await this.prisma.teacher_attendance.findMany({
+      where: { date: { gte: start, lt: end } },
+      orderBy: { date: "desc" },
+      include: { teachers: { select: { full_name: true } } },
+    });
+    return rows.map((r) => ({ ...this.shapeTa(r), teacher: r.teachers ?? null }));
+  }
+
+  async attnCorrections(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.attendance_corrections.findMany({
+      orderBy: { created_at: "desc" },
+      take: 200,
+      include: { teachers: { select: { full_name: true } } },
+    });
+    return rows.map((c) => ({
+      id: c.id,
+      date: this.dstr(c.date),
+      from_status: c.from_status,
+      to_status: c.to_status,
+      changed_by_role: c.changed_by_role,
+      reason: c.reason,
+      created_at: c.created_at ? c.created_at.toISOString() : null,
+      teacher: c.teachers ?? null,
+    }));
+  }
+
+  async attnUpsert(
+    actor: AuthUser,
+    input: {
+      teacherId: string;
+      date: string;
+      status: string;
+      reason: string;
+      checkIn?: string | null;
+    },
+  ) {
+    this.requireHr(actor);
+    if (!input.reason?.trim()) throw new BadRequestException("A reason is required.");
+    const role = this.hrRole(actor);
+    const day = this.dateOnly(input.date);
+    const next = new Date(day.getTime() + 86_400_000);
+    const checkIn = input.checkIn ? new Date(input.checkIn) : null;
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.teacher_attendance.findFirst({
+        where: { teacher_id: input.teacherId, date: { gte: day, lt: next } },
+      });
+      let attendanceId: string;
+      if (existing) {
+        const updated = await tx.teacher_attendance.update({
+          where: { id: existing.id },
+          data: {
+            status: input.status,
+            marked_by: role,
+            marked_by_user: actor.id,
+            correction_reason: input.reason,
+            check_in_time: checkIn ?? existing.check_in_time,
+          },
+        });
+        attendanceId = updated.id;
+      } else {
+        const created = await tx.teacher_attendance.create({
+          data: {
+            teacher_id: input.teacherId,
+            date: day,
+            status: input.status,
+            marked_by: role,
+            marked_by_user: actor.id,
+            correction_reason: input.reason,
+            check_in_time: checkIn,
+          },
+        });
+        attendanceId = created.id;
+      }
+      await tx.attendance_corrections.create({
+        data: {
+          attendance_id: attendanceId,
+          teacher_id: input.teacherId,
+          date: day,
+          from_status: existing?.status ?? null,
+          to_status: input.status,
+          from_check_in: existing?.check_in_time ?? null,
+          to_check_in: checkIn ?? existing?.check_in_time ?? null,
+          reason: input.reason,
+          changed_by: actor.id,
+          changed_by_role: role,
+        },
+      });
+      return { id: attendanceId };
+    });
   }
 }

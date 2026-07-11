@@ -69,6 +69,14 @@ class DesignationDto {
   @IsOptional() @IsNumber() max_pay?: number;
 }
 
+class AttnUpsertDto {
+  @IsString() @MinLength(1) teacherId: string;
+  @IsDateString() date: string;
+  @IsIn(["present", "absent", "late", "leave", "half_day", "wfh"]) status: string;
+  @IsString() @MinLength(1) reason: string;
+  @IsOptional() @IsString() checkIn?: string;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller("hr")
 export class HrController {
@@ -205,5 +213,31 @@ export class HrController {
   @Delete("designations/:id")
   deleteDesignation(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.hr.deleteDesignation(actor, id);
+  }
+
+  // ---- Teacher attendance management --------------------------------------
+  @Get("attendance/teachers")
+  attnTeachers(@CurrentUser() actor: AuthUser) {
+    return this.hr.attnTeachers(actor);
+  }
+
+  @Get("attendance/day")
+  attnDay(@CurrentUser() actor: AuthUser, @Query("date") date: string) {
+    return this.hr.attnDay(actor, date);
+  }
+
+  @Get("attendance/month")
+  attnMonth(@CurrentUser() actor: AuthUser, @Query("month") month: string) {
+    return this.hr.attnMonth(actor, month);
+  }
+
+  @Get("attendance/corrections")
+  attnCorrections(@CurrentUser() actor: AuthUser) {
+    return this.hr.attnCorrections(actor);
+  }
+
+  @Post("attendance/upsert")
+  attnUpsert(@CurrentUser() actor: AuthUser, @Body() dto: AttnUpsertDto) {
+    return this.hr.attnUpsert(actor, dto);
   }
 }

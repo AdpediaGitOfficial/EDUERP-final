@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
@@ -47,51 +47,22 @@ function Page() {
 
   const { data: teachers } = useQuery({
     queryKey: ["teachers-active"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teachers")
-          .select("id, full_name, email, subject, status")
-          .eq("status", "active")
-          .order("full_name")
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/attendance/teachers"),
   });
 
   const { data: dayRows } = useQuery({
     queryKey: ["ta-day", date],
-    queryFn: async () =>
-      (await supabase.from("teacher_attendance").select("*").eq("date", date)).data ?? [],
+    queryFn: () => apiGet<any[]>(`/hr/attendance/day?date=${date}`),
   });
 
   const { data: monthRows } = useQuery({
     queryKey: ["ta-month", date.slice(0, 7)],
-    queryFn: async () => {
-      const start = `${date.slice(0, 7)}-01`;
-      const d = new Date(start);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
-      return (
-        (
-          await supabase
-            .from("teacher_attendance")
-            .select("*, teacher:teacher_id(full_name)")
-            .gte("date", start)
-            .lte("date", end)
-            .order("date", { ascending: false })
-        ).data ?? []
-      );
-    },
+    queryFn: () => apiGet<any[]>(`/hr/attendance/month?month=${date.slice(0, 7)}`),
   });
 
   const { data: corrections } = useQuery({
     queryKey: ["attn-corrections"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("attendance_corrections")
-          .select("*, teacher:teacher_id(full_name)")
-          .order("created_at", { ascending: false })
-          .limit(200)
-      ).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/attendance/corrections"),
   });
 
   const rowByTeacher = useMemo(() => {
@@ -131,45 +102,15 @@ function Page() {
       existing: any | null;
       checkIn?: string | null;
     }) => {
-      const { teacherId, status, reason, existing, checkIn } = args;
-      const payload: any = {
-        teacher_id: teacherId,
-        date,
-        status,
-        marked_by: role,
-        marked_by_user: user!.id,
-        correction_reason: reason,
-        check_in_time: checkIn ?? existing?.check_in_time ?? null,
-      };
-      let attendanceId = existing?.id ?? null;
-      if (existing) {
-        const { error } = await supabase
-          .from("teacher_attendance")
-          .update(payload)
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { data: ins, error } = await supabase
-          .from("teacher_attendance")
-          .insert(payload)
-          .select("id")
-          .single();
-        if (error) throw error;
-        attendanceId = ins.id;
-      }
-      const { error: aerr } = await supabase.from("attendance_corrections").insert({
-        attendance_id: attendanceId,
-        teacher_id: teacherId,
-        date,
-        from_status: existing?.status ?? null,
-        to_status: status,
-        from_check_in: existing?.check_in_time ?? null,
-        to_check_in: checkIn ?? existing?.check_in_time ?? null,
-        reason,
-        changed_by: user!.id,
-        changed_by_role: role,
+      const { teacherId, status, reason, checkIn } = args;
+      const res = await apiFetch("/hr/attendance/upsert", {
+        method: "POST",
+        body: JSON.stringify({ teacherId, date, status, reason, checkIn: checkIn ?? null }),
       });
-      if (aerr) throw aerr;
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Failed to update attendance");
+      }
     },
     onSuccess: () => {
       toast.success("Attendance updated");

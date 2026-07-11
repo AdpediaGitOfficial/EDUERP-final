@@ -1386,3 +1386,71 @@ describe("HR People: staff directory, detail, departments, designations", () => 
     expect((await del(`/hr/designations/${desig.body.id}`, "admin")).status).toBe(200);
   });
 });
+
+describe("HR Attendance: teacher-attendance management (hr|admin) + correction log", () => {
+  it("teachers/day/month/corrections reads are hr|admin; teacher 403", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const month = today.slice(0, 7);
+    const teachers = await get("/hr/attendance/teachers", "admin");
+    expect(teachers.status).toBe(200);
+    expect(Array.isArray(teachers.body)).toBe(true);
+    expect(teachers.body.length).toBeGreaterThan(0);
+
+    expect((await get(`/hr/attendance/day?date=${today}`, "admin")).status).toBe(200);
+    expect((await get(`/hr/attendance/month?month=${month}`, "admin")).status).toBe(200);
+    expect((await get("/hr/attendance/corrections", "admin")).status).toBe(200);
+
+    // management surface is closed to teachers
+    expect((await get("/hr/attendance/teachers", "teacher")).status).toBe(403);
+    expect((await get("/hr/attendance/corrections", "teacher")).status).toBe(403);
+  });
+
+  it("admin upserts an attendance record + logs a correction; empty reason 400; teacher 403", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const teacher = (await get("/hr/attendance/teachers", "admin")).body[0];
+
+    // empty reason -> clean 400 (attendance_corrections.reason is NOT NULL)
+    expect(
+      (
+        await post("/hr/attendance/upsert", "admin", {
+          teacherId: teacher.id,
+          date: today,
+          status: "present",
+          reason: "",
+        })
+      ).status,
+    ).toBe(400);
+
+    // teacher cannot manage others' attendance
+    expect(
+      (
+        await post("/hr/attendance/upsert", "teacher", {
+          teacherId: teacher.id,
+          date: today,
+          status: "present",
+          reason: "nope",
+        })
+      ).status,
+    ).toBe(403);
+
+    const reason = `jest correction ${Date.now()}`;
+    const ok = await post("/hr/attendance/upsert", "admin", {
+      teacherId: teacher.id,
+      date: today,
+      status: "late",
+      reason,
+    });
+    expect(ok.status).toBe(201);
+    expect(ok.body.id).toBeTruthy();
+
+    // the day grid now reflects the marked status (admin-marked, not self)
+    const day = await get(`/hr/attendance/day?date=${today}`, "admin");
+    const row = day.body.find((r: any) => r.teacher_id === teacher.id);
+    expect(row?.status).toBe("late");
+    expect(row?.marked_by).toBe("admin");
+
+    // and the correction log carries our reason
+    const corrections = await get("/hr/attendance/corrections", "admin");
+    expect(corrections.body.some((c: any) => c.reason === reason)).toBe(true);
+  });
+});
