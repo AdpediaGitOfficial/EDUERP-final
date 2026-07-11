@@ -1454,3 +1454,64 @@ describe("HR Attendance: teacher-attendance management (hr|admin) + correction l
     expect(corrections.body.some((c: any) => c.reason === reason)).toBe(true);
   });
 });
+
+describe("HR Recruitment + Analytics (job_write/cand_hr = hr|admin)", () => {
+  it("openings/candidates CRUD + stage moves; teacher cannot write; analytics aggregates", async () => {
+    // openings list is open (job_read = true)
+    const openings = await get("/hr/recruitment/openings", "admin");
+    expect(openings.status).toBe(200);
+    expect(Array.isArray(openings.body)).toBe(true);
+
+    // candidates read is hr|admin (cand_hr)
+    expect((await get("/hr/recruitment/candidates", "teacher")).status).toBe(403);
+    const cands = await get("/hr/recruitment/candidates", "admin");
+    expect(cands.status).toBe(200);
+    expect(Array.isArray(cands.body)).toBe(true);
+
+    // teacher cannot create an opening
+    expect((await post("/hr/recruitment/openings", "teacher", { title: "Nope" })).status).toBe(403);
+
+    // admin creates an opening + a candidate, then advances + closes
+    const opening = await post("/hr/recruitment/openings", "admin", {
+      title: `Jest Opening ${Date.now()}`,
+      department: "Academics",
+      positions: 2,
+      opened_at: "2026-01-01",
+    });
+    expect(opening.status).toBe(201);
+    const openingId = opening.body.id;
+
+    const cand = await post("/hr/recruitment/candidates", "admin", {
+      job_opening_id: openingId,
+      name: `Jest Candidate ${Date.now()}`,
+      source: "referral",
+      rating: 4,
+    });
+    expect(cand.status).toBe(201);
+
+    const advanced = await patch(`/hr/recruitment/candidates/${cand.body.id}/stage`, "admin", {
+      stage: "screening",
+    });
+    expect(advanced.status).toBe(200);
+    // teacher cannot move stages
+    expect(
+      (
+        await patch(`/hr/recruitment/candidates/${cand.body.id}/stage`, "teacher", {
+          stage: "offer",
+        })
+      ).status,
+    ).toBe(403);
+
+    const closed = await patch(`/hr/recruitment/openings/${openingId}/close`, "admin", {});
+    expect(closed.status).toBe(200);
+
+    // analytics aggregation shape; teacher rejected
+    expect((await get("/hr/analytics", "teacher")).status).toBe(403);
+    const analytics = await get("/hr/analytics", "admin");
+    expect(analytics.status).toBe(200);
+    for (const k of ["byDept", "byMonth", "leaveTypes", "funnel"]) {
+      expect(Array.isArray(analytics.body[k])).toBe(true);
+    }
+    expect(analytics.body.funnel.length).toBe(5);
+  });
+});

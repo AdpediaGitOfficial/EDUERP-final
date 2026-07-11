@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Card } from "@/components/ui/card";
@@ -36,14 +36,11 @@ function Page() {
   const confirm = useConfirm();
   const { data: openings } = useQuery({
     queryKey: ["job-openings"],
-    queryFn: async () =>
-      (await supabase.from("job_openings").select("*").order("opened_at", { ascending: false }))
-        .data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/recruitment/openings"),
   });
   const { data: candidates } = useQuery({
     queryKey: ["candidates"],
-    queryFn: async () =>
-      (await supabase.from("candidates").select("*, job_opening:job_opening_id(title)")).data ?? [],
+    queryFn: () => apiGet<any[]>("/hr/recruitment/candidates"),
   });
 
   const [openingOpen, setOpeningOpen] = useState(false);
@@ -67,11 +64,19 @@ function Page() {
     rating: 3,
   });
 
+  const write = async (path: string, method: string, body?: any) => {
+    const res = await apiFetch(path, {
+      method,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    if (!res || !res.ok) {
+      const b = res ? await res.json().catch(() => null) : null;
+      throw new Error(b?.message ?? "Request failed");
+    }
+  };
+
   const saveOpening = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("job_openings").insert(openingForm);
-      if (error) throw error;
-    },
+    mutationFn: () => write("/hr/recruitment/openings", "POST", openingForm),
     onSuccess: () => {
       toast.success("Opening created");
       setOpeningOpen(false);
@@ -80,13 +85,7 @@ function Page() {
     onError: (e: any) => toast.error(e.message),
   });
   const closeOpening = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("job_openings")
-        .update({ status: "closed" })
-        .eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => write(`/hr/recruitment/openings/${id}/close`, "PATCH"),
     onSuccess: () => {
       toast.success("Opening closed");
       qc.invalidateQueries({ queryKey: ["job-openings"] });
@@ -94,10 +93,7 @@ function Page() {
     onError: (e: any) => toast.error(e.message),
   });
   const saveCand = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("candidates").insert(candForm);
-      if (error) throw error;
-    },
+    mutationFn: () => write("/hr/recruitment/candidates", "POST", candForm),
     onSuccess: () => {
       toast.success("Candidate added");
       setCandOpen(false);
@@ -106,21 +102,14 @@ function Page() {
     onError: (e: any) => toast.error(e.message),
   });
   const moveStage = useMutation({
-    mutationFn: async (v: { id: string; stage: string }) => {
-      const { error } = await supabase.from("candidates").update({ stage: v.stage }).eq("id", v.id);
-      if (error) throw error;
-    },
+    mutationFn: (v: { id: string; stage: string }) =>
+      write(`/hr/recruitment/candidates/${v.id}/stage`, "PATCH", { stage: v.stage }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["candidates"] }),
     onError: (e: any) => toast.error(e.message),
   });
   const rejectCand = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("candidates")
-        .update({ stage: "rejected" })
-        .eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) =>
+      write(`/hr/recruitment/candidates/${id}/stage`, "PATCH", { stage: "rejected" }),
     onSuccess: () => {
       toast.success("Candidate rejected");
       qc.invalidateQueries({ queryKey: ["candidates"] });

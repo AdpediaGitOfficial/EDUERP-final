@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import {
@@ -23,51 +23,20 @@ export const Route = createFileRoute("/_authenticated/hr/analytics")({ component
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
 function Page() {
-  const { data: staff } = useQuery({
-    queryKey: ["staff-all"],
-    queryFn: async () =>
-      (await supabase.from("staff").select("id, department, join_date, experience_years, status"))
-        .data ?? [],
+  const { data } = useQuery({
+    queryKey: ["hr-analytics"],
+    queryFn: () =>
+      apiGet<{
+        byDept: { name: string; count: number }[];
+        byMonth: { month: string; total: number }[];
+        leaveTypes: { name: string; value: number }[];
+        funnel: { stage: string; count: number }[];
+      }>("/hr/analytics"),
   });
-  const { data: payroll } = useQuery({
-    queryKey: ["payroll-all"],
-    queryFn: async () =>
-      (await supabase.from("payroll_runs").select("month, net_salary, status")).data ?? [],
-  });
-  const { data: leave } = useQuery({
-    queryKey: ["leave-all"],
-    queryFn: async () =>
-      (await supabase.from("leave_requests").select("start_date, status, leave_type")).data ?? [],
-  });
-  const { data: cands } = useQuery({
-    queryKey: ["cand-all"],
-    queryFn: async () => (await supabase.from("candidates").select("stage")).data ?? [],
-  });
-
-  const byDept = Object.entries(
-    (staff ?? []).reduce(
-      (a: Record<string, number>, s: any) => ({ ...a, [s.department]: (a[s.department] ?? 0) + 1 }),
-      {},
-    ),
-  ).map(([name, count]) => ({ name, count }));
-  const byMonth = Object.entries(
-    (payroll ?? []).reduce((a: Record<string, number>, p: any) => {
-      const k = String(p.month).slice(0, 7);
-      return { ...a, [k]: (a[k] ?? 0) + Number(p.net_salary || 0) };
-    }, {}),
-  )
-    .sort()
-    .map(([month, total]) => ({ month, total }));
-  const leaveTypes = Object.entries(
-    (leave ?? []).reduce(
-      (a: Record<string, number>, l: any) => ({ ...a, [l.leave_type]: (a[l.leave_type] ?? 0) + 1 }),
-      {},
-    ),
-  ).map(([name, value]) => ({ name, value }));
-  const funnel = ["applied", "screening", "interview", "offer", "joined"].map((s) => ({
-    stage: s,
-    count: (cands ?? []).filter((c: any) => c.stage === s).length,
-  }));
+  const byDept = data?.byDept ?? [];
+  const byMonth = data?.byMonth ?? [];
+  const leaveTypes = data?.leaveTypes ?? [];
+  const funnel = data?.funnel ?? [];
 
   return (
     <>

@@ -711,4 +711,146 @@ export class HrService {
       return { id: attendanceId };
     });
   }
+
+  // ==== Recruitment (job_read open / job_write + cand_hr = hr|admin) ========
+  /** job_read is open to any authenticated user. */
+  listOpenings() {
+    return this.prisma.job_openings.findMany({ orderBy: { opened_at: "desc" } });
+  }
+
+  async createOpening(
+    actor: AuthUser,
+    input: {
+      title: string;
+      department?: string;
+      positions?: number;
+      status?: string;
+      opened_at?: string;
+      closes_at?: string;
+      description?: string;
+    },
+  ) {
+    this.requireHr(actor);
+    const row = await this.prisma.job_openings.create({
+      data: {
+        title: input.title,
+        department: input.department || null,
+        positions: input.positions ?? 1,
+        status: input.status || "open",
+        opened_at: input.opened_at ? this.dateOnly(input.opened_at) : new Date(),
+        closes_at: input.closes_at ? this.dateOnly(input.closes_at) : null,
+        description: input.description || null,
+      },
+    });
+    return { id: row.id };
+  }
+
+  async closeOpening(actor: AuthUser, id: string) {
+    this.requireHr(actor);
+    try {
+      await this.prisma.job_openings.update({ where: { id }, data: { status: "closed" } });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025")
+        throw new NotFoundException("Opening not found");
+      throw e;
+    }
+  }
+
+  async listCandidates(actor: AuthUser) {
+    this.requireHr(actor);
+    const rows = await this.prisma.candidates.findMany({
+      orderBy: { created_at: "desc" },
+      include: { job_openings: { select: { title: true } } },
+    });
+    return rows.map((c) => ({
+      id: c.id,
+      job_opening_id: c.job_opening_id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      stage: c.stage,
+      source: c.source,
+      rating: c.rating,
+      job_opening: c.job_openings ? { title: c.job_openings.title } : null,
+    }));
+  }
+
+  async createCandidate(
+    actor: AuthUser,
+    input: {
+      job_opening_id: string;
+      name: string;
+      email?: string;
+      phone?: string;
+      source?: string;
+      stage?: string;
+      rating?: number;
+    },
+  ) {
+    this.requireHr(actor);
+    const row = await this.prisma.candidates.create({
+      data: {
+        job_opening_id: input.job_opening_id,
+        name: input.name,
+        email: input.email || null,
+        phone: input.phone || null,
+        source: input.source || null,
+        stage: input.stage || "applied",
+        rating: input.rating ?? null,
+      },
+    });
+    return { id: row.id };
+  }
+
+  async setCandidateStage(actor: AuthUser, id: string, stage: string) {
+    this.requireHr(actor);
+    try {
+      await this.prisma.candidates.update({ where: { id }, data: { stage } });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025")
+        throw new NotFoundException("Candidate not found");
+      throw e;
+    }
+  }
+
+  // ==== HR analytics (hr|admin) — server-side aggregation ==================
+  async analytics(actor: AuthUser) {
+    this.requireHr(actor);
+    const [staff, payroll, leave, cands] = await Promise.all([
+      this.prisma.staff.findMany({ select: { department: true } }),
+      this.prisma.payroll_runs.findMany({ select: { month: true, net_salary: true } }),
+      this.prisma.leave_requests.findMany({ select: { leave_type: true } }),
+      this.prisma.candidates.findMany({ select: { stage: true } }),
+    ]);
+
+    const deptCounts = staff.reduce<Record<string, number>>((a, s) => {
+      const k = s.department ?? "—";
+      a[k] = (a[k] ?? 0) + 1;
+      return a;
+    }, {});
+    const monthTotals = payroll.reduce<Record<string, number>>((a, p) => {
+      const k = this.dstr(p.month) ?? "";
+      const key = k.slice(0, 7);
+      if (key) a[key] = (a[key] ?? 0) + Number(p.net_salary ?? 0);
+      return a;
+    }, {});
+    const leaveCounts = leave.reduce<Record<string, number>>((a, l) => {
+      a[l.leave_type] = (a[l.leave_type] ?? 0) + 1;
+      return a;
+    }, {});
+
+    return {
+      byDept: Object.entries(deptCounts).map(([name, count]) => ({ name, count })),
+      byMonth: Object.entries(monthTotals)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, total]) => ({ month, total })),
+      leaveTypes: Object.entries(leaveCounts).map(([name, value]) => ({ name, value })),
+      funnel: ["applied", "screening", "interview", "offer", "joined"].map((stage) => ({
+        stage,
+        count: cands.filter((c) => c.stage === stage).length,
+      })),
+    };
+  }
 }

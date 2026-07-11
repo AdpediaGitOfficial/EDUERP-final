@@ -77,6 +77,30 @@ class AttnUpsertDto {
   @IsOptional() @IsString() checkIn?: string;
 }
 
+class OpeningDto {
+  @IsString() @MinLength(1) title: string;
+  @IsOptional() @IsString() department?: string;
+  @IsOptional() @IsNumber() positions?: number;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsString() opened_at?: string;
+  @IsOptional() @IsString() closes_at?: string;
+  @IsOptional() @IsString() description?: string;
+}
+
+class CandidateDto {
+  @IsString() @MinLength(1) job_opening_id: string;
+  @IsString() @MinLength(1) name: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() source?: string;
+  @IsOptional() @IsString() stage?: string;
+  @IsOptional() @IsNumber() rating?: number;
+}
+
+class StageDto {
+  @IsIn(["applied", "screening", "interview", "offer", "joined", "rejected"]) stage: string;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller("hr")
 export class HrController {
@@ -239,5 +263,46 @@ export class HrController {
   @Post("attendance/upsert")
   attnUpsert(@CurrentUser() actor: AuthUser, @Body() dto: AttnUpsertDto) {
     return this.hr.attnUpsert(actor, dto);
+  }
+
+  // ---- Recruitment --------------------------------------------------------
+  @Get("recruitment/openings")
+  listOpenings() {
+    return this.hr.listOpenings();
+  }
+
+  @Post("recruitment/openings")
+  createOpening(@CurrentUser() actor: AuthUser, @Body() dto: OpeningDto) {
+    return this.hr.createOpening(actor, dto);
+  }
+
+  @Patch("recruitment/openings/:id/close")
+  closeOpening(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.closeOpening(actor, id);
+  }
+
+  @Get("recruitment/candidates")
+  listCandidates(@CurrentUser() actor: AuthUser) {
+    return this.hr.listCandidates(actor);
+  }
+
+  @Post("recruitment/candidates")
+  createCandidate(@CurrentUser() actor: AuthUser, @Body() dto: CandidateDto) {
+    return this.hr.createCandidate(actor, dto);
+  }
+
+  @Patch("recruitment/candidates/:id/stage")
+  setCandidateStage(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: StageDto,
+  ) {
+    return this.hr.setCandidateStage(actor, id, dto.stage);
+  }
+
+  // ---- Analytics ----------------------------------------------------------
+  @Get("analytics")
+  analytics(@CurrentUser() actor: AuthUser) {
+    return this.hr.analytics(actor);
   }
 }
