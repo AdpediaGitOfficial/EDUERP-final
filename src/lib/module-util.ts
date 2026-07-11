@@ -34,27 +34,81 @@ export function daysUntil(d: string | null | undefined): number | null {
   return Math.round(ms / 86_400_000);
 }
 
+/**
+ * Single source of truth for status → colour across the whole app.
+ * Semantics are consistent: emerald = positive/done, amber = pending/attention,
+ * red = negative/overdue, blue = informational, slate = neutral/inactive.
+ * `badgeClass()` and the shared <StatusBadge> both read from this map so a given
+ * status never drifts to a different colour between modules.
+ */
+const TONE = {
+  success: "bg-emerald-100 text-emerald-800 border-0",
+  warning: "bg-amber-100 text-amber-800 border-0",
+  danger: "bg-red-100 text-red-800 border-0",
+  info: "bg-blue-100 text-blue-800 border-0",
+  neutral: "bg-slate-200 text-slate-700 border-0",
+} as const;
+
 export const STATUS_BADGE: Record<string, string> = {
-  active: "bg-emerald-100 text-emerald-800 border-0",
-  on_leave: "bg-amber-100 text-amber-800 border-0",
-  inactive: "bg-slate-200 text-slate-700 border-0",
-  paid: "bg-emerald-100 text-emerald-800 border-0",
-  pending: "bg-amber-100 text-amber-800 border-0",
-  approved: "bg-emerald-100 text-emerald-800 border-0",
-  rejected: "bg-red-100 text-red-800 border-0",
-  present: "bg-emerald-100 text-emerald-800 border-0",
-  absent: "bg-red-100 text-red-800 border-0",
-  late: "bg-amber-100 text-amber-800 border-0",
-  new: "bg-blue-100 text-blue-800 border-0",
-  follow_up: "bg-amber-100 text-amber-800 border-0",
-  converted: "bg-emerald-100 text-emerald-800 border-0",
-  lost: "bg-slate-200 text-slate-700 border-0",
-  reconciled: "bg-emerald-100 text-emerald-800 border-0",
-  unreconciled: "bg-amber-100 text-amber-800 border-0",
+  // lifecycle
+  active: TONE.success,
+  inactive: TONE.neutral,
+  on_leave: TONE.warning,
+  maintenance: TONE.warning,
+  // approvals / requests
+  approved: TONE.success,
+  pending: TONE.warning,
+  rejected: TONE.danger,
+  cancelled: TONE.neutral,
+  // fees / payments
+  paid: TONE.success,
+  successful: TONE.success,
+  partial: TONE.warning,
+  unpaid: TONE.danger,
+  overdue: TONE.danger,
+  failed: TONE.danger,
+  refunded: TONE.info,
+  waived: TONE.neutral,
+  reconciled: TONE.success,
+  unreconciled: TONE.warning,
+  // attendance
+  present: TONE.success,
+  absent: TONE.danger,
+  late: TONE.warning,
+  leave: TONE.info,
+  half_day: TONE.warning,
+  // admissions pipeline
+  new: TONE.info,
+  follow_up: TONE.warning,
+  converted: TONE.success,
+  lost: TONE.neutral,
+  // complaints / tickets
+  open: TONE.warning,
+  in_review: TONE.info,
+  in_progress: TONE.info,
+  resolved: TONE.success,
+  closed: TONE.neutral,
+  dismissed: TONE.neutral,
+  // assets / inventory
+  available: TONE.success,
+  in_use: TONE.info,
+  repair: TONE.warning,
+  retired: TONE.neutral,
+  disposed: TONE.danger,
+  // maintenance / tasks
+  scheduled: TONE.info,
+  completed: TONE.success,
+  // library
+  returned: TONE.neutral,
+  borrowed: TONE.warning,
+  // severity
+  high: TONE.danger,
+  medium: TONE.warning,
+  low: TONE.neutral,
 };
 
 export function badgeClass(status: string): string {
-  return STATUS_BADGE[status] ?? "bg-slate-100 text-slate-700 border-0";
+  return STATUS_BADGE[status?.toLowerCase?.() ?? status] ?? TONE.neutral.replace("200", "100");
 }
 
 export function niceLabel(s: string): string {

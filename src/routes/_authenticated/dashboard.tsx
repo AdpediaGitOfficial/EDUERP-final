@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { QueryError, StatCardsSkeleton } from "@/components/query-states";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
@@ -104,6 +105,15 @@ function MiniStat({
   );
 }
 
+/** Subtle group heading so a wall of stat cards reads as organized sections. */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
 function Dashboard() {
   const { user } = useCurrentUser();
   return (
@@ -133,7 +143,12 @@ function AdminDashboard({ fullName }: { fullName: string }) {
   const todayStr = now.toISOString().slice(0, 10);
   const yr = `${y}–${y + 1}`;
 
-  const { data: dash } = useQuery({
+  const {
+    data: dash,
+    isLoading: dashLoading,
+    isError: dashError,
+    refetch: dashRefetch,
+  } = useQuery({
     queryKey: ["admin-dashboard"],
     queryFn: () => apiGet<any>("/reports/admin-dashboard"),
   });
@@ -178,6 +193,38 @@ function AdminDashboard({ fullName }: { fullName: string }) {
     (data?.collectedMonth ?? 0) - (extras?.expenseMonth ?? 0) - (extras?.payrollMonth ?? 0);
   const netPositive = netPosition >= 0;
   const effDelta = (efficiency?.thisPct ?? 0) - (efficiency?.lastPct ?? 0);
+
+  if (dashError) {
+    return (
+      <>
+        <PageHeader
+          title={`Welcome ${fullName.split(" ")[0]}`}
+          subtitle="Overview of your school's operations."
+        />
+        <QueryError
+          title="Couldn't load the dashboard"
+          hint="The overview data didn't come through. Check your connection and retry."
+          onRetry={dashRefetch}
+        />
+      </>
+    );
+  }
+
+  if (dashLoading) {
+    return (
+      <>
+        <PageHeader
+          title={`Welcome ${fullName.split(" ")[0]}`}
+          subtitle="Overview of your school's operations."
+        />
+        <div className="space-y-4">
+          <StatCardsSkeleton count={3} />
+          <StatCardsSkeleton count={3} />
+          <StatCardsSkeleton count={4} />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -235,13 +282,13 @@ function AdminDashboard({ fullName }: { fullName: string }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
         <StatCard
           label="Collected this month"
-          value={`₹${(data?.collectedMonth ?? 0).toFixed(2)}`}
+          value={money(data?.collectedMonth ?? 0)}
           subtitle="revenue"
           tone="violet"
         />
         <StatCard
           label="Pending Dues"
-          value={`₹${(data?.dueTotal ?? 0).toFixed(2)}`}
+          value={money(data?.dueTotal ?? 0)}
           subtitle={`${data?.pendingCount ?? 0} outstanding`}
           tone="coral"
         />
@@ -259,15 +306,9 @@ function AdminDashboard({ fullName }: { fullName: string }) {
         <QuickAction to="/holidays" icon={CalendarPlus} label="Add Holiday" />
       </div>
 
-      {/* Extended stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
-        <MiniCard
-          icon={Users}
-          label="Total Staff"
-          value={String(data?.staffCount ?? 0)}
-          sub="all categories"
-          href="/hr/staff"
-        />
+      {/* Extended metrics, grouped by domain so the grid isn't one undifferentiated wall. */}
+      <SectionLabel>Finance</SectionLabel>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <MiniCard
           icon={Wallet}
           label="Expenses (month)"
@@ -291,12 +332,16 @@ function AdminDashboard({ fullName }: { fullName: string }) {
           href="/fees"
           tint={effDelta >= 0 ? "text-emerald-600" : "text-red-600"}
         />
+      </div>
+
+      <SectionLabel>Staff</SectionLabel>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <MiniCard
-          icon={ClipboardCheck}
-          label="Attendance today"
-          value={`${(extras?.attPct ?? 0).toFixed(1)}%`}
-          sub={`${extras?.attSampled ?? 0} marked`}
-          href="/attendance-overview"
+          icon={Users}
+          label="Total Staff"
+          value={String(data?.staffCount ?? 0)}
+          sub="all categories"
+          href="/hr/staff"
         />
         <MiniCard
           icon={CheckCircle2}
@@ -306,19 +351,30 @@ function AdminDashboard({ fullName }: { fullName: string }) {
           href="/hr/attendance"
         />
         <MiniCard
+          icon={Briefcase}
+          label="Open positions"
+          value={String(extras?.openJobs ?? 0)}
+          sub="recruitment"
+          href="/hr/recruitment"
+        />
+      </div>
+
+      <SectionLabel>Operations</SectionLabel>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <MiniCard
+          icon={ClipboardCheck}
+          label="Attendance today"
+          value={`${(extras?.attPct ?? 0).toFixed(1)}%`}
+          sub={`${extras?.attSampled ?? 0} marked`}
+          href="/attendance-overview"
+        />
+        <MiniCard
           icon={MessageSquareWarning}
           label="Open complaints"
           value={String(extras?.openComplaints ?? 0)}
           sub="awaiting response"
           href="/complaints"
           tint="text-amber-600"
-        />
-        <MiniCard
-          icon={Briefcase}
-          label="Open positions"
-          value={String(extras?.openJobs ?? 0)}
-          sub="recruitment"
-          href="/hr/recruitment"
         />
       </div>
 

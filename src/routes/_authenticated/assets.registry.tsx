@@ -2,11 +2,12 @@ import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Select,
   SelectContent,
@@ -21,10 +22,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Search } from "lucide-react";
+import { Package, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { STATUS_CLASS, STATUS_LABEL, formatMoney } from "@/lib/assets-util";
+import { STATUS_LABEL, formatMoney } from "@/lib/assets-util";
 
 type SearchParams = { category?: string; status?: string };
 
@@ -306,9 +307,7 @@ function Registry() {
                   <td className="p-3 font-medium">{a.name}</td>
                   <td className="p-3">{a.categoryName ?? "—"}</td>
                   <td className="p-3">
-                    <Badge className={`${STATUS_CLASS[a.status] ?? ""} border capitalize`}>
-                      {STATUS_LABEL[a.status] ?? a.status}
-                    </Badge>
+                    <StatusBadge status={a.status} label={STATUS_LABEL[a.status]} />
                   </td>
                   <td className="p-3">{a.assigned_to_label || a.location || "—"}</td>
                   <td className="p-3">
@@ -318,11 +317,12 @@ function Registry() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                    No assets match.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={7}
+                  icon={Package}
+                  title="No assets match"
+                  hint="Try a different search, category, or status filter."
+                />
               )}
             </tbody>
           </table>
@@ -341,9 +341,11 @@ function Registry() {
                   <div className="font-medium truncate">{a.name}</div>
                   <div className="text-xs text-muted-foreground font-mono">{a.asset_code}</div>
                 </div>
-                <Badge className={`${STATUS_CLASS[a.status] ?? ""} border shrink-0`}>
-                  {STATUS_LABEL[a.status]}
-                </Badge>
+                <StatusBadge
+                  status={a.status}
+                  label={STATUS_LABEL[a.status]}
+                  className="shrink-0"
+                />
               </div>
               <div className="mt-2 text-xs text-muted-foreground flex items-center justify-between">
                 <span>

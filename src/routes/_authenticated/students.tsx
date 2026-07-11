@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { EmptyRow } from "@/components/empty-state";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1028,11 +1029,12 @@ function AdminStudentsView() {
                 );
               })}
               {(rows ?? []).length === 0 && !isFetching && (
-                <tr>
-                  <td colSpan={9} className="p-8 text-center text-muted-foreground">
-                    No students match these filters.
-                  </td>
-                </tr>
+                <EmptyRow
+                  colSpan={9}
+                  icon={GraduationCap}
+                  title="No students match these filters"
+                  hint="Try clearing the grade or status filter, or adjust your search."
+                />
               )}
             </tbody>
           </table>
