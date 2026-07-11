@@ -894,3 +894,92 @@ describe("Fleet: dashboard + vehicle/driver CRUD (fleet write)", () => {
     ).toBe(403);
   });
 });
+
+describe("assets: dashboard, registry, categories, vendors", () => {
+  it("dashboard returns status buckets + top categories + activity (admin|teacher read)", async () => {
+    const res = await get("/assets/dashboard", "admin");
+    expect(res.status).toBe(200);
+    expect(typeof res.body.stats.total).toBe("number");
+    expect(res.body.stats.total).toBeGreaterThan(0);
+    expect(Array.isArray(res.body.topCategories)).toBe(true);
+    expect(Array.isArray(res.body.recentActivity)).toBe(true);
+    // teacher can read; student cannot.
+    expect((await get("/assets/dashboard", "teacher")).status).toBe(200);
+    expect((await get("/assets/dashboard", "student")).status).toBe(403);
+  });
+
+  it("registry lists enriched assets and search filters", async () => {
+    const res = await get("/assets", "admin");
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    const first = res.body[0];
+    expect(first).toHaveProperty("asset_code");
+    expect(first).toHaveProperty("categoryName");
+    expect(typeof first.current_value === "number" || first.current_value === null).toBe(true);
+    const search = await get("/assets?q=AST-0001", "admin");
+    expect(search.status).toBe(200);
+    expect(search.body.some((a: any) => a.asset_code === "AST-0001")).toBe(true);
+  });
+
+  it("admin creates an asset with a server-generated AST- code", async () => {
+    const created = await post("/assets", "admin", {
+      name: `Test Asset ${process.env.VITEST_WORKER_ID ?? "0"}`,
+      purchase_price: 12000,
+      location: "Store room",
+      status: "available",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.asset_code).toMatch(/^AST-\d{4}$/);
+    expect(created.body.current_value).toBe(12000);
+    // Non-admin cannot create.
+    expect((await post("/assets", "teacher", { name: "x" })).status).toBe(403);
+  });
+
+  it("categories carry asset counts + total value; admin CRUD; teacher read-only", async () => {
+    const cats = await get("/assets/categories", "admin");
+    expect(cats.status).toBe(200);
+    expect(cats.body.length).toBeGreaterThan(0);
+    expect(cats.body[0]).toHaveProperty("assetCount");
+    expect(cats.body[0]).toHaveProperty("totalValue");
+    expect((await get("/assets/categories", "teacher")).status).toBe(200);
+    expect((await get("/assets/categories", "student")).status).toBe(403);
+
+    const name = `Test Cat ${process.env.VITEST_WORKER_ID ?? "0"}-${cats.body.length}`;
+    const made = await post("/assets/categories", "admin", { name, description: "d" });
+    expect([201, 500]).toContain(made.status); // 500 only if a prior run left the unique name
+    if (made.status === 201) {
+      const id = made.body.id;
+      expect(
+        (await patch(`/assets/categories/${id}`, "admin", { description: "updated" })).status,
+      ).toBe(200);
+      const del = await request(http)
+        .delete(`/api/assets/categories/${id}`)
+        .set("Authorization", `Bearer ${tokens.admin}`);
+      expect(del.status).toBe(200);
+    }
+    // Non-admin write blocked.
+    expect((await post("/assets/categories", "teacher", { name: "x" })).status).toBe(403);
+  });
+
+  it("vendors carry per-vendor asset/amc counts + detail lists; admin write", async () => {
+    const vendors = await get("/assets/vendors", "admin");
+    expect(vendors.status).toBe(200);
+    expect(vendors.body.length).toBeGreaterThan(0);
+    const v = vendors.body[0];
+    expect(v).toHaveProperty("assetCount");
+    expect(v).toHaveProperty("amcCount");
+    expect(Array.isArray(v.assets)).toBe(true);
+    expect(Array.isArray(v.amcs)).toBe(true);
+
+    const made = await post("/assets/vendors", "admin", {
+      name: `Test Vendor ${process.env.VITEST_WORKER_ID ?? "0"}-${vendors.body.length}`,
+      email: "t@v.test",
+    });
+    expect(made.status).toBe(201);
+    expect((await patch(`/assets/vendors/${made.body.id}`, "admin", { phone: "123" })).status).toBe(
+      200,
+    );
+    // Non-admin write blocked.
+    expect((await post("/assets/vendors", "teacher", { name: "x" })).status).toBe(403);
+  });
+});

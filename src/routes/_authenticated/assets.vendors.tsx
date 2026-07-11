@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Building2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/assets-util";
 
@@ -30,48 +30,31 @@ function Vendors() {
 
   const { data: vendors } = useQuery({
     queryKey: ["assets-vendors-full"],
-    queryFn: async () =>
-      (await supabase.from("asset_vendors").select("*").order("name")).data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          name: string;
+          contact_name: string | null;
+          email: string | null;
+          phone: string | null;
+          category_hint: string | null;
+          assetCount: number;
+          amcCount: number;
+          assets: { id: string; name: string; purchase_price: number | null }[];
+          amcs: {
+            id: string;
+            assetName: string | null;
+            end_date: string | null;
+            coverage: string | null;
+          }[];
+        }[]
+      >("/assets/vendors"),
   });
-  const { data: assets } = useQuery({
-    queryKey: ["assets-for-vendors"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("assets")
-          .select("id,name,vendor_id,purchase_date,purchase_price,current_value")
-      ).data ?? [],
-  });
-  const { data: amcs } = useQuery({
-    queryKey: ["amc-for-vendors"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("asset_amc")
-          .select("id,vendor_id,end_date,coverage,asset_id,assets(name)")
-      ).data ?? [],
-  });
-
-  const perVendor = useMemo(() => {
-    const m = new Map<string, { assetCount: number; amcCount: number }>();
-    for (const a of assets ?? [])
-      if (a.vendor_id) {
-        const c = m.get(a.vendor_id) ?? { assetCount: 0, amcCount: 0 };
-        c.assetCount++;
-        m.set(a.vendor_id, c);
-      }
-    for (const c of amcs ?? [])
-      if (c.vendor_id) {
-        const x = m.get(c.vendor_id) ?? { assetCount: 0, amcCount: 0 };
-        x.amcCount++;
-        m.set(c.vendor_id, x);
-      }
-    return m;
-  }, [assets, amcs]);
 
   const selected = vendors?.find((v) => v.id === selectedId) ?? null;
-  const vendorAssets = (assets ?? []).filter((a) => a.vendor_id === selectedId);
-  const vendorAmcs = (amcs ?? []).filter((a) => a.vendor_id === selectedId);
+  const vendorAssets = selected?.assets ?? [];
+  const vendorAmcs = selected?.amcs ?? [];
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -83,10 +66,16 @@ function Vendors() {
       phone: String(fd.get("phone") || "") || null,
       category_hint: String(fd.get("category_hint") || "") || null,
     };
-    const q = editing
-      ? await supabase.from("asset_vendors").update(payload).eq("id", editing.id)
-      : await supabase.from("asset_vendors").insert(payload);
-    if (q.error) return toast.error(q.error.message);
+    const res = editing
+      ? await apiFetch(`/assets/vendors/${editing.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        })
+      : await apiFetch("/assets/vendors", { method: "POST", body: JSON.stringify(payload) });
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => null) : null;
+      return toast.error(body?.message ?? "Could not save vendor");
+    }
     toast.success(editing ? "Vendor updated" : "Vendor added");
     setOpen(false);
     setEditing(null);
@@ -152,7 +141,7 @@ function Vendors() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-3">
           {(vendors ?? []).map((v) => {
-            const s = perVendor.get(v.id) ?? { assetCount: 0, amcCount: 0 };
+            const s = { assetCount: v.assetCount, amcCount: v.amcCount };
             return (
               <Card
                 key={v.id}
@@ -230,11 +219,11 @@ function Vendors() {
                 Active AMC ({vendorAmcs.length})
               </div>
               <ul className="space-y-1 text-sm">
-                {vendorAmcs.map((a: any) => (
+                {vendorAmcs.map((a) => (
                   <li key={a.id} className="flex justify-between gap-2 border-b py-1">
-                    <span className="truncate">{a.assets?.name}</span>
+                    <span className="truncate">{a.assetName}</span>
                     <span className="text-muted-foreground shrink-0">
-                      exp {new Date(a.end_date).toLocaleDateString()}
+                      {a.end_date ? `exp ${new Date(a.end_date).toLocaleDateString()}` : "—"}
                     </span>
                   </li>
                 ))}

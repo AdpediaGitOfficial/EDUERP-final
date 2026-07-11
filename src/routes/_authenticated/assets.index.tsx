@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,47 +34,34 @@ export const Route = createFileRoute("/_authenticated/assets/")({
   component: Dashboard,
 });
 
+type DashStats = {
+  total: number;
+  in_use: number;
+  available: number;
+  repair: number;
+  retired: number;
+  disposed: number;
+};
+type DashData = {
+  stats: DashStats;
+  topCategories: { name: string; count: number }[];
+  recentActivity: { when: string; text: string; kind: string }[];
+};
+
 function Dashboard() {
-  const { data: assets } = useQuery({
+  const { data } = useQuery({
     queryKey: ["assets-dash"],
-    queryFn: async () =>
-      (await supabase.from("assets").select("id,status,category,current_value,purchase_price"))
-        .data ?? [],
-  });
-  const { data: allocs } = useQuery({
-    queryKey: ["assets-dash-allocs"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("asset_allocations")
-          .select(
-            "id,assignee_label,allocated_at,returned_at,return_condition,notes,asset_id,assets(name)",
-          )
-          .order("created_at", { ascending: false })
-          .limit(10)
-      ).data ?? [],
-  });
-  const { data: maints } = useQuery({
-    queryKey: ["assets-dash-maints"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("asset_maintenance")
-          .select("id,type,status,scheduled_for,completed_at,cost,notes,asset_id,assets(name)")
-          .order("created_at", { ascending: false })
-          .limit(10)
-      ).data ?? [],
+    queryFn: () => apiGet<DashData>("/assets/dashboard"),
   });
 
-  const stats = useMemo(() => {
-    const s = { total: 0, in_use: 0, available: 0, repair: 0, retired: 0, disposed: 0 };
-    for (const a of assets ?? []) {
-      s.total++;
-      // @ts-expect-error dynamic index
-      if (a.status in s) s[a.status]++;
-    }
-    return s;
-  }, [assets]);
+  const stats = data?.stats ?? {
+    total: 0,
+    in_use: 0,
+    available: 0,
+    repair: 0,
+    retired: 0,
+    disposed: 0,
+  };
 
   const statusData = useMemo(
     () =>
@@ -84,44 +71,8 @@ function Dashboard() {
     [stats],
   );
 
-  const categoryData = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const a of assets ?? [])
-      m.set(a.category || "Uncategorized", (m.get(a.category || "Uncategorized") ?? 0) + 1);
-    return [...m.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [assets]);
-
-  const activity = useMemo(() => {
-    const items: { when: string; text: string; kind: string }[] = [];
-    for (const a of allocs ?? []) {
-      const name = (a as any).assets?.name ?? "Asset";
-      items.push({
-        when: a.returned_at ?? a.allocated_at,
-        text: a.returned_at
-          ? `${name} returned (${a.return_condition ?? "good"})`
-          : `${name} allocated to ${a.assignee_label}`,
-        kind: a.returned_at ? "return" : "allocate",
-      });
-    }
-    for (const m of maints ?? []) {
-      const name = (m as any).assets?.name ?? "Asset";
-      items.push({
-        when: m.completed_at ?? m.scheduled_for ?? "",
-        text:
-          m.status === "completed"
-            ? `${name} — maintenance completed`
-            : `${name} — maintenance scheduled`,
-        kind: "maint",
-      });
-    }
-    return items
-      .filter((i) => i.when)
-      .sort((a, b) => (a.when < b.when ? 1 : -1))
-      .slice(0, 10);
-  }, [allocs, maints]);
+  const categoryData = data?.topCategories ?? [];
+  const activity = data?.recentActivity ?? [];
 
   return (
     <>

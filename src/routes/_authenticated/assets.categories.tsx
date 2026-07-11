@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, FolderTree } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/assets-util";
 
@@ -32,27 +32,18 @@ function Categories() {
   } | null>(null);
 
   const { data: categories } = useQuery({
-    queryKey: ["assets-cats"],
-    queryFn: async () =>
-      (await supabase.from("asset_categories").select("*").order("name")).data ?? [],
+    queryKey: ["assets-cats-full"],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          name: string;
+          description: string | null;
+          assetCount: number;
+          totalValue: number;
+        }[]
+      >("/assets/categories"),
   });
-  const { data: assets } = useQuery({
-    queryKey: ["assets-for-cats"],
-    queryFn: async () =>
-      (await supabase.from("assets").select("category_id,current_value,purchase_price")).data ?? [],
-  });
-
-  const stats = useMemo(() => {
-    const m = new Map<string, { count: number; value: number }>();
-    for (const a of assets ?? []) {
-      if (!a.category_id) continue;
-      const cur = m.get(a.category_id) ?? { count: 0, value: 0 };
-      cur.count++;
-      cur.value += Number(a.current_value ?? a.purchase_price ?? 0);
-      m.set(a.category_id, cur);
-    }
-    return m;
-  }, [assets]);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -61,22 +52,31 @@ function Categories() {
       name: String(fd.get("name") || ""),
       description: String(fd.get("description") || "") || null,
     };
-    const q = editing
-      ? await supabase.from("asset_categories").update(payload).eq("id", editing.id)
-      : await supabase.from("asset_categories").insert(payload);
-    if (q.error) return toast.error(q.error.message);
+    const res = editing
+      ? await apiFetch(`/assets/categories/${editing.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        })
+      : await apiFetch("/assets/categories", { method: "POST", body: JSON.stringify(payload) });
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => null) : null;
+      return toast.error(body?.message ?? "Could not save category");
+    }
     toast.success(editing ? "Category updated" : "Category added");
     setOpen(false);
     setEditing(null);
-    qc.invalidateQueries({ queryKey: ["assets-cats"] });
+    qc.invalidateQueries({ queryKey: ["assets-cats-full"] });
   };
 
   const del = async (id: string) => {
     if (!confirm("Delete this category? Assets will keep their name but lose the link.")) return;
-    const { error } = await supabase.from("asset_categories").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    const res = await apiFetch(`/assets/categories/${id}`, { method: "DELETE" });
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => null) : null;
+      return toast.error(body?.message ?? "Could not delete");
+    }
     toast.success("Deleted");
-    qc.invalidateQueries({ queryKey: ["assets-cats"] });
+    qc.invalidateQueries({ queryKey: ["assets-cats-full"] });
   };
 
   return (
@@ -120,8 +120,8 @@ function Categories() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(categories ?? []).map((c: any) => {
-          const s = stats.get(c.id) ?? { count: 0, value: 0 };
+        {(categories ?? []).map((c) => {
+          const s = { count: c.assetCount, value: c.totalValue };
           return (
             <Card key={c.id} className="p-5 rounded-2xl">
               <div className="flex items-start justify-between gap-3">

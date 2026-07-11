@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ import {
 import { Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { STATUS_CLASS, STATUS_LABEL, formatMoney, nextAssetCode } from "@/lib/assets-util";
+import { STATUS_CLASS, STATUS_LABEL, formatMoney } from "@/lib/assets-util";
 
 type SearchParams = { category?: string; status?: string };
 
@@ -47,19 +47,32 @@ function Registry() {
 
   const { data: assets } = useQuery({
     queryKey: ["assets-registry"],
-    queryFn: async () =>
-      (await supabase.from("assets").select("*, asset_categories(name)").order("asset_code"))
-        .data ?? [],
+    queryFn: () =>
+      apiGet<
+        {
+          id: string;
+          name: string;
+          asset_code: string | null;
+          category_id: string | null;
+          category: string | null;
+          categoryName: string | null;
+          status: string;
+          condition: string;
+          location: string | null;
+          assigned_to_label: string | null;
+          purchase_date: string | null;
+          purchase_price: number | null;
+          current_value: number | null;
+        }[]
+      >("/assets"),
   });
   const { data: categories } = useQuery({
     queryKey: ["assets-cats"],
-    queryFn: async () =>
-      (await supabase.from("asset_categories").select("id,name").order("name")).data ?? [],
+    queryFn: () => apiGet<{ id: string; name: string }[]>("/assets/categories"),
   });
   const { data: vendors } = useQuery({
     queryKey: ["assets-vendors"],
-    queryFn: async () =>
-      (await supabase.from("asset_vendors").select("id,name").order("name")).data ?? [],
+    queryFn: () => apiGet<{ id: string; name: string }[]>("/assets/vendors"),
   });
 
   const locations = useMemo(() => {
@@ -89,11 +102,9 @@ function Registry() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const price = Number(fd.get("purchase_price") || 0);
-    const code = nextAssetCode((assets ?? []).map((a: any) => a.asset_code).filter(Boolean));
     const payload = {
       name: String(fd.get("name") || ""),
       category_id: String(fd.get("category_id") || "") || null,
-      category: categories?.find((c) => c.id === fd.get("category_id"))?.name ?? null,
       vendor_id: String(fd.get("vendor_id") || "") || null,
       purchase_date: String(fd.get("purchase_date") || "") || null,
       purchase_price: price || null,
@@ -103,14 +114,15 @@ function Registry() {
       invoice_ref: String(fd.get("invoice_ref") || "") || null,
       location: String(fd.get("location") || "") || null,
       status: String(fd.get("status") || "available"),
-      condition: "good",
-      asset_code: code,
-      qr_value: code,
-      barcode_value: String(fd.get("barcode_value") || code),
+      barcode_value: String(fd.get("barcode_value") || "") || null,
     };
-    const { error } = await supabase.from("assets").insert(payload as any);
-    if (error) return toast.error(error.message);
-    toast.success(`Asset ${code} added`);
+    const res = await apiFetch("/assets", { method: "POST", body: JSON.stringify(payload) });
+    if (!res || !res.ok) {
+      const body = res ? await res.json().catch(() => null) : null;
+      return toast.error(body?.message ?? "Could not add asset");
+    }
+    const created = await res.json().catch(() => null);
+    toast.success(`Asset ${created?.asset_code ?? ""} added`.trim());
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["assets-registry"] });
   };
@@ -292,7 +304,7 @@ function Registry() {
                     </Link>
                   </td>
                   <td className="p-3 font-medium">{a.name}</td>
-                  <td className="p-3">{a.asset_categories?.name ?? a.category ?? "—"}</td>
+                  <td className="p-3">{a.categoryName ?? "—"}</td>
                   <td className="p-3">
                     <Badge className={`${STATUS_CLASS[a.status] ?? ""} border capitalize`}>
                       {STATUS_LABEL[a.status] ?? a.status}
@@ -335,8 +347,7 @@ function Registry() {
               </div>
               <div className="mt-2 text-xs text-muted-foreground flex items-center justify-between">
                 <span>
-                  {a.asset_categories?.name ?? a.category ?? "—"} ·{" "}
-                  {a.assigned_to_label || a.location || "—"}
+                  {a.categoryName ?? "—"} · {a.assigned_to_label || a.location || "—"}
                 </span>
                 <span>{formatMoney(a.current_value)}</span>
               </div>
