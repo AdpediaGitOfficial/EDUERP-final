@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { fmtDate, niceLabel } from "@/lib/module-util";
@@ -9,24 +8,9 @@ import { fmtDate, niceLabel } from "@/lib/module-util";
 export const Route = createFileRoute("/_authenticated/ess/documents")({ component: Page });
 
 function Page() {
-  const { user } = useCurrentUser();
-  const { data: staff } = useQuery({
-    queryKey: ["me-s5", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (await supabase.from("staff").select("id").eq("profile_id", user!.id).maybeSingle()).data,
-  });
   const { data } = useQuery({
-    queryKey: ["me-docs", staff?.id],
-    enabled: !!staff,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("staff_documents")
-          .select("*")
-          .eq("staff_id", staff!.id)
-          .order("uploaded_at", { ascending: false })
-      ).data ?? [],
+    queryKey: ["ess-documents"],
+    queryFn: () => apiGet<any[]>("/ess/documents"),
   });
   return (
     <>

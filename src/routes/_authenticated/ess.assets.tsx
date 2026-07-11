@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
@@ -10,12 +9,9 @@ import { niceLabel } from "@/lib/module-util";
 export const Route = createFileRoute("/_authenticated/ess/assets")({ component: Page });
 
 function Page() {
-  const { user } = useCurrentUser();
   const { data } = useQuery({
-    queryKey: ["me-assets", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (await supabase.from("assets").select("*").eq("assigned_to_profile_id", user!.id)).data ?? [],
+    queryKey: ["ess-assets"],
+    queryFn: () => apiGet<any[]>("/ess/assets"),
   });
   return (
     <>

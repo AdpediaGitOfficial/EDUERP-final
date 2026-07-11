@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { fmtDate } from "@/lib/module-util";
@@ -9,23 +8,9 @@ import { fmtDate } from "@/lib/module-util";
 export const Route = createFileRoute("/_authenticated/ess/training")({ component: Page });
 
 function Page() {
-  const { user } = useCurrentUser();
-  const { data: staff } = useQuery({
-    queryKey: ["me-s4", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (await supabase.from("staff").select("id").eq("profile_id", user!.id).maybeSingle()).data,
-  });
   const { data } = useQuery({
-    queryKey: ["me-training", staff?.id],
-    enabled: !!staff,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("training_attendance")
-          .select("*, program:program_id(title, start_date, end_date, program_type, provider)")
-          .eq("staff_id", staff!.id)
-      ).data ?? [],
+    queryKey: ["ess-training"],
+    queryFn: () => apiGet<any[]>("/ess/training"),
   });
   return (
     <>

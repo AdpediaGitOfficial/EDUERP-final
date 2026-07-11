@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,55 +14,44 @@ export const Route = createFileRoute("/_authenticated/ess/attendance")({ compone
 type SelfStatus = "present" | "half_day" | "wfh";
 
 function Page() {
-  const { user } = useCurrentUser();
   const qc = useQueryClient();
   const today = todayISO();
 
-  const { data: teacher } = useQuery({
-    queryKey: ["me-teacher", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teachers")
-          .select("id, email")
-          .ilike("email", user!.email ?? "")
-          .maybeSingle()
-      ).data,
+  const { data: att } = useQuery({
+    queryKey: ["ess-attendance"],
+    queryFn: () =>
+      apiGet<{
+        teacher: { id: string } | null;
+        rows: {
+          id: string;
+          date: string | null;
+          status: string;
+          check_in_time: string | null;
+          marked_by: string | null;
+          correction_reason: string | null;
+        }[];
+        todayMarked: boolean;
+      }>("/ess/attendance"),
   });
-
-  const { data } = useQuery({
-    queryKey: ["me-attn", teacher?.id],
-    enabled: !!teacher,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_attendance")
-          .select("*")
-          .eq("teacher_id", teacher!.id)
-          .order("date", { ascending: false })
-          .limit(60)
-      ).data ?? [],
-  });
+  const teacher = att?.teacher ?? null;
+  const data = att?.rows;
 
   const todayRow = (data ?? []).find((a: any) => a.date === today);
 
   const markMut = useMutation({
     mutationFn: async (status: SelfStatus) => {
-      const { error } = await supabase.from("teacher_attendance").insert({
-        teacher_id: teacher!.id,
-        date: today,
-        status,
-        marked_by: "self",
-        marked_by_user: user!.id,
-        check_in_time: new Date().toISOString(),
+      const res = await apiFetch("/attendance/mark-self", {
+        method: "POST",
+        body: JSON.stringify({ status }),
       });
-      if (error) throw error;
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Failed to mark");
+      }
     },
     onSuccess: () => {
       toast.success("Attendance marked");
-      qc.invalidateQueries({ queryKey: ["me-attn", teacher?.id] });
-      qc.invalidateQueries({ queryKey: ["me-attn-today", teacher?.id, today] });
+      qc.invalidateQueries({ queryKey: ["ess-attendance"] });
     },
     onError: (e: any) => toast.error(e.message ?? "Failed to mark"),
   });
@@ -108,7 +96,7 @@ function Page() {
               </div>
               {todayRow.marked_by !== "self" && (
                 <div className="text-xs text-amber-700 mt-1">
-                  Adjusted by {niceLabel(todayRow.marked_by)}
+                  Adjusted by {niceLabel(todayRow.marked_by ?? "")}
                   {todayRow.correction_reason ? ` — ${todayRow.correction_reason}` : ""}
                 </div>
               )}

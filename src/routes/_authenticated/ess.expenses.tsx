@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,44 +28,32 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/ess/expenses")({ component: Page });
 
 function Page() {
-  const { user } = useCurrentUser();
   const qc = useQueryClient();
-  const { data: staff } = useQuery({
-    queryKey: ["me-s3", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (await supabase.from("staff").select("id").eq("profile_id", user!.id).maybeSingle()).data,
-  });
   const { data } = useQuery({
-    queryKey: ["me-exp", staff?.id],
-    enabled: !!staff,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("expense_claims")
-          .select("*")
-          .eq("staff_id", staff!.id)
-          .order("claim_date", { ascending: false })
-      ).data ?? [],
+    queryKey: ["ess-expenses"],
+    queryFn: () => apiGet<any[]>("/ess/expenses"),
   });
   const [form, setForm] = useState({ category: "travel", amount: "", notes: "" });
   const [open, setOpen] = useState(false);
   const mut = useMutation({
     mutationFn: async () => {
-      if (!staff) return;
-      const { error } = await supabase.from("expense_claims").insert({
-        staff_id: staff.id,
-        category: form.category,
-        amount: Number(form.amount),
-        notes: form.notes,
-        status: "pending",
+      const res = await apiFetch("/ess/expenses", {
+        method: "POST",
+        body: JSON.stringify({
+          category: form.category,
+          amount: Number(form.amount),
+          notes: form.notes || undefined,
+        }),
       });
-      if (error) throw error;
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Could not submit");
+      }
     },
     onSuccess: () => {
       toast.success("Claim submitted");
       setOpen(false);
-      qc.invalidateQueries({ queryKey: ["me-exp"] });
+      qc.invalidateQueries({ queryKey: ["ess-expenses"] });
     },
     onError: (e: any) => toast.error(e.message),
   });

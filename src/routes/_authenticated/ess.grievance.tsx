@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,39 +15,27 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/ess/grievance")({ component: Page });
 
 function Page() {
-  const { user } = useCurrentUser();
   const qc = useQueryClient();
-  const { data: staff } = useQuery({
-    queryKey: ["me-s6", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (await supabase.from("staff").select("id").eq("profile_id", user!.id).maybeSingle()).data,
-  });
   const { data } = useQuery({
-    queryKey: ["me-gr", staff?.id],
-    enabled: !!staff,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("grievances")
-          .select("*")
-          .eq("staff_id", staff!.id)
-          .order("created_at", { ascending: false })
-      ).data ?? [],
+    queryKey: ["ess-grievances"],
+    queryFn: () => apiGet<any[]>("/ess/grievances"),
   });
   const [form, setForm] = useState({ subject: "", message: "" });
   const mut = useMutation({
     mutationFn: async () => {
-      if (!staff) return;
-      const { error } = await supabase
-        .from("grievances")
-        .insert({ staff_id: staff.id, ...form, status: "open" });
-      if (error) throw error;
+      const res = await apiFetch("/ess/grievances", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Could not submit");
+      }
     },
     onSuccess: () => {
       toast.success("Submitted");
       setForm({ subject: "", message: "" });
-      qc.invalidateQueries({ queryKey: ["me-gr"] });
+      qc.invalidateQueries({ queryKey: ["ess-grievances"] });
     },
     onError: (e: any) => toast.error(e.message),
   });

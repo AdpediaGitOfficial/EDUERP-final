@@ -16,6 +16,7 @@ import { HrModule } from "./modules/hr/hr.module";
 import { FinanceModule } from "./modules/finance/finance.module";
 import { FleetModule } from "./modules/fleet/fleet.module";
 import { AssetsModule } from "./modules/assets/assets.module";
+import { EssModule } from "./modules/ess/ess.module";
 import { ReceptionModule } from "./modules/reception/reception.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { HealthController } from "./health.controller";
@@ -37,6 +38,7 @@ import { HealthController } from "./health.controller";
     LibraryModule,
     FleetModule,
     AssetsModule,
+    EssModule,
     ComplaintsModule,
     CommunicationModule,
     ReceptionModule,

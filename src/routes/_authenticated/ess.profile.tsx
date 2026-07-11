@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { fmtDate, niceLabel } from "@/lib/module-util";
@@ -9,12 +8,9 @@ import { fmtDate, niceLabel } from "@/lib/module-util";
 export const Route = createFileRoute("/_authenticated/ess/profile")({ component: Page });
 
 function Page() {
-  const { user } = useCurrentUser();
   const { data: staff } = useQuery({
-    queryKey: ["me-profile", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (await supabase.from("staff").select("*").eq("profile_id", user!.id).maybeSingle()).data,
+    queryKey: ["ess-me"],
+    queryFn: () => apiGet<any>("/ess/me"),
   });
   if (!staff) return <div className="p-8 text-sm text-muted-foreground">No record linked.</div>;
   const ec = staff.emergency_contact as any;

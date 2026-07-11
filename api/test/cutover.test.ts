@@ -1180,3 +1180,61 @@ describe("fleet detail: vehicle / driver / route pages + roster", () => {
     ).toBe(403);
   });
 });
+
+describe("ESS: self-service, scoped to the caller's own staff record", () => {
+  // The demo seed links teacher@greenwood.test to a staff record with data.
+  it("teacher (linked staff) sees their own summary, leave, payslips, docs, assets", async () => {
+    const me = await get("/ess/me", "teacher");
+    expect(me.status).toBe(200);
+    expect(me.body?.employee_code).toBeTruthy();
+
+    const summary = await get("/ess/summary", "teacher");
+    expect(summary.body.staff).toBeTruthy();
+    expect(typeof summary.body.pendingLeaves).toBe("number");
+
+    const leave = await get("/ess/leave", "teacher");
+    expect(Array.isArray(leave.body.requests)).toBe(true);
+    expect(Array.isArray(leave.body.balances)).toBe(true);
+
+    for (const ep of ["payslips", "documents", "assets", "training", "performance", "expenses", "grievances"]) {
+      const r = await get(`/ess/${ep}`, "teacher");
+      expect(r.status).toBe(200);
+      expect(Array.isArray(r.body)).toBe(true);
+    }
+  });
+
+  it("teacher can apply for leave, submit an expense and a grievance", async () => {
+    const leave = await post("/ess/leave", "teacher", {
+      leave_type: "casual",
+      start_date: "2027-01-04",
+      end_date: "2027-01-05",
+      reason: "cutover test",
+    });
+    expect(leave.status).toBe(201);
+    // end before start -> clean 400
+    expect(
+      (await post("/ess/leave", "teacher", { leave_type: "casual", start_date: "2027-01-05", end_date: "2027-01-01" })).status,
+    ).toBe(400);
+
+    expect(
+      (await post("/ess/expenses", "teacher", { category: "travel", amount: 250, notes: "cutover test" })).status,
+    ).toBe(201);
+    expect(
+      (await post("/ess/grievances", "teacher", { subject: "cutover test", message: "test body" })).status,
+    ).toBe(201);
+  });
+
+  it("a user with no linked staff record gets null/empty, and writes 400", async () => {
+    // admin@greenwood.test has no staff link in the seed.
+    const me = await get("/ess/me", "admin");
+    expect(me.status).toBe(200);
+    // null handler result serializes to an empty body (supertest -> {}); no staff fields.
+    expect(me.body?.employee_code).toBeFalsy();
+    const summary = await get("/ess/summary", "admin");
+    expect(summary.body.staff).toBeNull();
+    expect((await get("/ess/payslips", "admin")).body).toEqual([]);
+    expect(
+      (await post("/ess/leave", "admin", { leave_type: "casual", start_date: "2027-02-01", end_date: "2027-02-02" })).status,
+    ).toBe(400);
+  });
+});

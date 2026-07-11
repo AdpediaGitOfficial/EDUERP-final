@@ -27,4 +27,7 @@ psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/03-payment-demo-seed.sql
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/04-reception-demo-seed.sql
 # Fleet demo data (vehicles/drivers, fuel + maintenance logs).
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/05-fleet-demo-seed.sql
+
+# ESS demo data (links a staff record to the teacher login + self-service data).
+psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/06-ess-demo-seed.sql
 echo "done."

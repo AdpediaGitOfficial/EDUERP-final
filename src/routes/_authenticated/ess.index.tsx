@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -8,34 +8,26 @@ import { money } from "@/lib/module-util";
 
 export const Route = createFileRoute("/_authenticated/ess/")({ component: Page });
 
+type Summary = {
+  staff: {
+    id: string;
+    employee_code: string;
+    full_name: string;
+    designation: string;
+    department: string;
+    status: string;
+  } | null;
+  pendingLeaves?: number;
+  lastNet?: number | null;
+};
+
 function Page() {
   const { user } = useCurrentUser();
-  const { data: staff } = useQuery({
-    queryKey: ["me-staff", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (await supabase.from("staff").select("*").eq("profile_id", user!.id).maybeSingle()).data,
+  const { data } = useQuery({
+    queryKey: ["ess-summary"],
+    queryFn: () => apiGet<Summary>("/ess/summary"),
   });
-  const { data: leaves } = useQuery({
-    queryKey: ["me-leaves", staff?.id],
-    enabled: !!staff,
-    queryFn: async () =>
-      (await supabase.from("leave_requests").select("id, status").eq("staff_id", staff!.id)).data ??
-      [],
-  });
-  const { data: payroll } = useQuery({
-    queryKey: ["me-payroll", staff?.id],
-    enabled: !!staff,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("payroll_runs")
-          .select("net_salary, status, month")
-          .eq("staff_id", staff!.id)
-          .order("month", { ascending: false })
-          .limit(3)
-      ).data ?? [],
-  });
+  const staff = data?.staff;
 
   if (!user) return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
   if (!staff)
@@ -47,8 +39,8 @@ function Page() {
         </Card>
       </>
     );
-  const pending = (leaves ?? []).filter((l: any) => l.status === "pending").length;
-  const lastNet = payroll?.[0]?.net_salary;
+  const pending = data?.pendingLeaves ?? 0;
+  const lastNet = data?.lastNet;
   return (
     <>
       <PageHeader

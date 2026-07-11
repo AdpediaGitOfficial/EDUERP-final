@@ -1,37 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 
 export const Route = createFileRoute("/_authenticated/ess/performance")({ component: Page });
 
 function Page() {
-  const { user } = useCurrentUser();
-  const { data: tid } = useQuery({
-    queryKey: ["me-t2", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const staff = (
-        await supabase.from("staff").select("id").eq("profile_id", user!.id).maybeSingle()
-      ).data;
-      if (!staff) return null;
-      return (await supabase.from("teachers").select("id").eq("staff_id", staff.id).maybeSingle())
-        .data;
-    },
-  });
   const { data } = useQuery({
-    queryKey: ["me-perf", tid?.id],
-    enabled: !!tid,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_performance_reviews")
-          .select("*")
-          .eq("teacher_id", tid!.id)
-          .order("period", { ascending: false })
-      ).data ?? [],
+    queryKey: ["ess-performance"],
+    queryFn: () => apiGet<any[]>("/ess/performance"),
   });
   return (
     <>

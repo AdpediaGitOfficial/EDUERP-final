@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,33 +27,28 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/ess/leave")({ component: Page });
 
+type LeaveData = {
+  requests: {
+    id: string;
+    leave_type: string;
+    start_date: string | null;
+    end_date: string | null;
+    days: number;
+    status: string;
+    reason: string | null;
+    approver_comment: string | null;
+  }[];
+  balances: { id: string; year: number; leave_type: string; allotted: number; used: number }[];
+};
+
 function Page() {
-  const { user } = useCurrentUser();
   const qc = useQueryClient();
-  const { data: staff } = useQuery({
-    queryKey: ["me-s2", user?.id],
-    enabled: !!user,
-    queryFn: async () =>
-      (await supabase.from("staff").select("id").eq("profile_id", user!.id).maybeSingle()).data,
+  const { data } = useQuery({
+    queryKey: ["ess-leave"],
+    queryFn: () => apiGet<LeaveData>("/ess/leave"),
   });
-  const { data: leaves } = useQuery({
-    queryKey: ["me-leave-list", staff?.id],
-    enabled: !!staff,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("leave_requests")
-          .select("*")
-          .eq("staff_id", staff!.id)
-          .order("start_date", { ascending: false })
-      ).data ?? [],
-  });
-  const { data: bal } = useQuery({
-    queryKey: ["me-balances", staff?.id],
-    enabled: !!staff,
-    queryFn: async () =>
-      (await supabase.from("leave_balances").select("*").eq("staff_id", staff!.id)).data ?? [],
-  });
+  const leaves = data?.requests;
+  const bal = data?.balances;
 
   const [form, setForm] = useState({
     leave_type: "casual",
@@ -65,19 +59,16 @@ function Page() {
   const [open, setOpen] = useState(false);
   const mut = useMutation({
     mutationFn: async () => {
-      if (!staff) return;
-      const start = new Date(form.start_date),
-        end = new Date(form.end_date);
-      const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
-      const { error } = await supabase
-        .from("leave_requests")
-        .insert({ staff_id: staff.id, ...form, days, status: "pending" });
-      if (error) throw error;
+      const res = await apiFetch("/ess/leave", { method: "POST", body: JSON.stringify(form) });
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => null) : null;
+        throw new Error(body?.message ?? "Could not submit");
+      }
     },
     onSuccess: () => {
       toast.success("Leave request submitted");
       setOpen(false);
-      qc.invalidateQueries({ queryKey: ["me-leave-list"] });
+      qc.invalidateQueries({ queryKey: ["ess-leave"] });
     },
     onError: (e: any) => toast.error(e.message),
   });
