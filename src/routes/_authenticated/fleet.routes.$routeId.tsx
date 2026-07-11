@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
+import { useConfirm } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,7 @@ function Page() {
   const { routeId } = Route.useParams();
   const qc = useQueryClient();
   const nav = useNavigate();
+  const confirm = useConfirm();
   const [edit, setEdit] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
 
@@ -90,6 +92,18 @@ function Page() {
       qc.invalidateQueries({ queryKey: ["route-roster", routeId] });
     },
   });
+
+  const askRemove = async (id: string, name: string | null) => {
+    if (
+      await confirm({
+        title: "Remove from route?",
+        description: `${name ?? "This student"} will be taken off this transport route. You can re-assign them anytime.`,
+        confirmText: "Remove",
+        destructive: true,
+      })
+    )
+      removeAssignment.mutate(id);
+  };
 
   if (!r) return <div className="p-6">Loading route…</div>;
   const capacity = r.vehicle?.capacity ?? 0;
@@ -197,7 +211,8 @@ function Page() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => removeAssignment.mutate(rs.id)}
+                          aria-label={`Remove ${rs.studentName ?? "student"} from route`}
+                          onClick={() => askRemove(rs.id, rs.studentName)}
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
@@ -222,7 +237,8 @@ function Page() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => removeAssignment.mutate(rs.id)}
+                        aria-label={`Remove ${rs.studentName ?? "student"} from route`}
+                        onClick={() => askRemove(rs.id, rs.studentName)}
                       >
                         <Trash2 className="size-3.5" />
                       </Button>

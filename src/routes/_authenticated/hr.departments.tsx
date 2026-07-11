@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/app-shell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/_authenticated/hr/departments")({ compone
 
 function Page() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const { data: depts } = useQuery({
     queryKey: ["depts"],
     queryFn: async () => (await supabase.from("departments").select("*").order("name")).data ?? [],
@@ -183,13 +185,26 @@ function Page() {
                     });
                     setDeptOpen(true);
                   }}
+                  aria-label={`Edit department ${d.name}`}
                 >
                   <Pencil className="size-4" />
                 </Button>
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => confirm(`Delete ${d.name}?`) && delDept.mutate(d.id)}
+                  aria-label={`Delete department ${d.name}`}
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: `Delete "${d.name}"?`,
+                        description:
+                          "The department will be removed. Staff records are not deleted but lose this department link.",
+                        confirmText: "Delete",
+                        destructive: true,
+                      })
+                    )
+                      delDept.mutate(d.id);
+                  }}
                 >
                   <Trash2 className="size-4 text-red-600" />
                 </Button>
@@ -248,13 +263,25 @@ function Page() {
                       });
                       setDesigOpen(true);
                     }}
+                    aria-label={`Edit designation ${d.title}`}
                   >
                     <Pencil className="size-4" />
                   </Button>
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => confirm(`Delete ${d.title}?`) && delDesig.mutate(d.id)}
+                    aria-label={`Delete designation ${d.title}`}
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Delete "${d.title}"?`,
+                          description: "This designation / salary grade will be removed.",
+                          confirmText: "Delete",
+                          destructive: true,
+                        })
+                      )
+                        delDesig.mutate(d.id);
+                    }}
                   >
                     <Trash2 className="size-4 text-red-600" />
                   </Button>

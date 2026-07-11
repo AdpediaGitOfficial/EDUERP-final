@@ -256,7 +256,13 @@ function Page() {
                     <Badge className={badgeClass(s.status)}>{niceLabel(s.status)}</Badge>
                   </td>
                   <td className="p-3 text-right whitespace-nowrap">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(s)} title="Edit">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => openEdit(s)}
+                      title="Edit"
+                      aria-label={`Edit ${s.full_name}`}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -264,6 +270,7 @@ function Page() {
                       variant="ghost"
                       onClick={() => toggleStatus.mutate(s)}
                       title={s.status === "active" ? "Deactivate" : "Reactivate"}
+                      aria-label={`${s.status === "active" ? "Deactivate" : "Reactivate"} ${s.full_name}`}
                     >
                       {s.status === "active" ? (
                         <UserX className="size-4 text-red-600" />

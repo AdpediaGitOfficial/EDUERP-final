@@ -2,6 +2,7 @@ import { RequireRole } from "@/components/require-role";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -735,6 +736,7 @@ function ReturnAction({ loan, onDone }: { loan: any; onDone: () => void }) {
 }
 
 function FineAction({ loan, onDone }: { loan: any; onDone: () => void }) {
+  const confirm = useConfirm();
   const settle = async (status: "paid" | "waived") => {
     try {
       await apiFetch(`/library/loans/${loan.id}/fine`, {
@@ -752,7 +754,22 @@ function FineAction({ loan, onDone }: { loan: any; onDone: () => void }) {
       <Button size="sm" variant="outline" onClick={() => settle("paid")}>
         Mark paid
       </Button>
-      <Button size="sm" variant="ghost" onClick={() => settle("waived")}>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={async () => {
+          if (
+            await confirm({
+              title: "Waive this fine?",
+              description:
+                "The outstanding fine will be cleared without payment. This can't be undone.",
+              confirmText: "Waive fine",
+              destructive: true,
+            })
+          )
+            settle("waived");
+        }}
+      >
         Waive
       </Button>
     </div>

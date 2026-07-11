@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/app-shell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ const STAGES = ["applied", "screening", "interview", "offer", "joined"] as const
 
 function Page() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const { data: openings } = useQuery({
     queryKey: ["job-openings"],
     queryFn: async () =>
@@ -182,7 +184,17 @@ function Page() {
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => confirm("Close this opening?") && closeOpening.mutate(o.id)}
+                    aria-label={`Close opening ${o.title ?? ""}`.trim()}
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: "Close this opening?",
+                          description: `"${o.title}" will be marked closed and stop accepting applicants.`,
+                          confirmText: "Close opening",
+                        })
+                      )
+                        closeOpening.mutate(o.id);
+                    }}
                     title="Close"
                   >
                     <X className="size-4" />

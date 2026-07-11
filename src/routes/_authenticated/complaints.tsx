@@ -349,7 +349,7 @@ function Page() {
               </div>
               <form onSubmit={reply} className="p-3 border-t flex gap-2">
                 <Input name="msg" placeholder="Type a reply…" autoComplete="off" />
-                <Button type="submit" size="icon">
+                <Button type="submit" size="icon" aria-label="Send reply">
                   <Send className="size-4" />
                 </Button>
               </form>

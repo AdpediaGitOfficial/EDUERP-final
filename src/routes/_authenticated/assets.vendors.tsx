@@ -158,6 +158,7 @@ function Vendors() {
                       <Button
                         size="icon"
                         variant="ghost"
+                        aria-label={`Edit vendor ${v.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           setEditing(v);

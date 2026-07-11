@@ -10,6 +10,7 @@ import {
 import type { ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
+import { ConfirmProvider } from "@/components/confirm-dialog";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -128,8 +129,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      {/* App-wide confirm() replacement so destructive actions get a styled, a11y dialog. */}
+      <ConfirmProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </ConfirmProvider>
       {/* App-wide toast host so toast.* works on every route, not just auth pages. */}
       <Toaster />
     </QueryClientProvider>

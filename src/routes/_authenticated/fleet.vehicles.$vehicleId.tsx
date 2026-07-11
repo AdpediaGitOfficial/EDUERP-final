@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
+import { useConfirm } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ function Page() {
   const { vehicleId } = Route.useParams();
   const qc = useQueryClient();
   const nav = useNavigate();
+  const confirm = useConfirm();
   const [edit, setEdit] = useState(false);
 
   const { data: v, isLoading } = useQuery({
@@ -111,7 +113,15 @@ function Page() {
       prev3.reduce((a, b) => a + b, 0) / prev3.length;
 
   const deactivate = async () => {
-    if (!confirm("Deactivate this vehicle?")) return;
+    if (
+      !(await confirm({
+        title: "Deactivate this vehicle?",
+        description: `${v.registration_no} will be marked inactive and hidden from active-fleet views. You can reactivate it later by editing the vehicle.`,
+        confirmText: "Deactivate",
+        destructive: true,
+      }))
+    )
+      return;
     const res = await apiFetch(`/fleet/vehicles/${v.id}`, {
       method: "PATCH",
       body: JSON.stringify({

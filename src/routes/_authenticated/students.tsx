@@ -383,22 +383,46 @@ function StudentsPage() {
                         <td className="p-3">{feeBadge(teacherExtras?.feeMap[s.id])}</td>
                         <td className="p-3">
                           <div className="flex items-center justify-end gap-1">
-                            <Button asChild size="icon" variant="ghost" title="View profile">
+                            <Button
+                              asChild
+                              size="icon"
+                              variant="ghost"
+                              title="View profile"
+                              aria-label={`View profile of ${s.full_name}`}
+                            >
                               <Link to="/students">
                                 <Eye className="size-4" />
                               </Link>
                             </Button>
-                            <Button asChild size="icon" variant="ghost" title="Mark attendance">
+                            <Button
+                              asChild
+                              size="icon"
+                              variant="ghost"
+                              title="Mark attendance"
+                              aria-label={`Mark attendance for ${s.full_name}`}
+                            >
                               <Link to="/attendance">
                                 <ClipboardCheck className="size-4" />
                               </Link>
                             </Button>
-                            <Button asChild size="icon" variant="ghost" title="Enter marks">
+                            <Button
+                              asChild
+                              size="icon"
+                              variant="ghost"
+                              title="Enter marks"
+                              aria-label={`Enter marks for ${s.full_name}`}
+                            >
                               <Link to="/gradebook">
                                 <BookOpenCheck className="size-4" />
                               </Link>
                             </Button>
-                            <Button asChild size="icon" variant="ghost" title="Assign homework">
+                            <Button
+                              asChild
+                              size="icon"
+                              variant="ghost"
+                              title="Assign homework"
+                              aria-label={`Assign homework to ${s.full_name}`}
+                            >
                               <Link to="/gradebook">
                                 <FileEdit className="size-4" />
                               </Link>
@@ -408,6 +432,7 @@ function StudentsPage() {
                               size="icon"
                               variant="ghost"
                               title="Message parent"
+                              aria-label={`Message parent of ${s.full_name}`}
                               disabled={!parent?.email}
                             >
                               <a href={parent?.email ? `mailto:${parent.email}` : "#"}>

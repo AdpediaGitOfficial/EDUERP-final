@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
+import { useConfirm } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/_authenticated/assets/categories")({
 
 function Categories() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<{
     id: string;
@@ -68,8 +70,17 @@ function Categories() {
     qc.invalidateQueries({ queryKey: ["assets-cats-full"] });
   };
 
-  const del = async (id: string) => {
-    if (!confirm("Delete this category? Assets will keep their name but lose the link.")) return;
+  const del = async (id: string, name: string) => {
+    if (
+      !(await confirm({
+        title: `Delete "${name}"?`,
+        description:
+          "Assets in this category keep their name but lose the category link. This can't be undone.",
+        confirmText: "Delete category",
+        destructive: true,
+      }))
+    )
+      return;
     const res = await apiFetch(`/assets/categories/${id}`, { method: "DELETE" });
     if (!res || !res.ok) {
       const body = res ? await res.json().catch(() => null) : null;
@@ -140,6 +151,7 @@ function Categories() {
                   <Button
                     size="icon"
                     variant="ghost"
+                    aria-label={`Edit category ${c.name}`}
                     onClick={() => {
                       setEditing({ id: c.id, name: c.name, description: c.description });
                       setOpen(true);
@@ -147,7 +159,12 @@ function Categories() {
                   >
                     <Pencil className="size-4" />
                   </Button>
-                  <Button size="icon" variant="ghost" onClick={() => del(c.id)}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Delete category ${c.name}`}
+                    onClick={() => del(c.id, c.name)}
+                  >
                     <Trash2 className="size-4" />
                   </Button>
                 </div>
