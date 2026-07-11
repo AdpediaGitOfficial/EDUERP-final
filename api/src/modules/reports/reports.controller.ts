@@ -13,6 +13,21 @@ export class ReportsController {
     return this.reports.adminDashboard(actor);
   }
 
+  @Get("teacher-dashboard")
+  teacherDashboard(@CurrentUser() actor: AuthUser) {
+    return this.reports.teacherDashboard(actor);
+  }
+
+  @Get("student-dashboard")
+  studentDashboard(@CurrentUser() actor: AuthUser) {
+    return this.reports.studentDashboard(actor);
+  }
+
+  @Get("parent-dashboard")
+  parentDashboard(@CurrentUser() actor: AuthUser) {
+    return this.reports.parentDashboard(actor);
+  }
+
   @Get("audit-log")
   auditLog(
     @CurrentUser() actor: AuthUser,

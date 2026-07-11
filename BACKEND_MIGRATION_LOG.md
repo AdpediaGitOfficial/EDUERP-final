@@ -195,7 +195,7 @@ Supporting API work the classes/children pass: ported the `get_class_stats` DB f
 class create + year/teacher-option helpers; added holiday create; added
 `POST /students/link-parent` (ps_admin_all — the only write policy, so parent
 self-link is rejected exactly as RLS did). module UI checks pass; API suite
-now 71/71 (`cutover.test.ts` covers the new write/aggregate endpoints).
+now 75/75 (`cutover.test.ts` covers the new write/aggregate endpoints).
 
 `grep -rn supabase` on the four flipped pages: **0 references** each.
 
@@ -216,3 +216,4 @@ npm test                         # 19 e2e tests against the DB
 ```
 
 | Admin dashboard | `GET /reports/admin-dashboard` (one endpoint porting ~13 client aggregations) | KPIs (5,212 students, ₹17.9M dues, 207 teachers, net position, fee-collection rate), 6-month revenue/expense trend, fee-by-grade, enrollment, staff mix, 30-day attendance trend, payment-mode donut, defaulters, activity feed — all real; 21 chart surfaces render, no runtime errors |
+| Teacher/Student/Parent dashboards + teacher self-attendance | `GET /reports/{teacher,student,parent}-dashboard`, `GET /attendance/my-teacher`, `POST /attendance/mark-self` | teacher: 7 classes + today's schedule; student: own attendance/tests; parent: linked child (Anika Singh, 100% attendance, 34/0 homework); teacher self-mark (once/day, 409 on repeat). **dashboard.tsx now 0 supabase refs** |

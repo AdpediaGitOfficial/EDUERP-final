@@ -215,3 +215,50 @@ describe("reports: comprehensive admin dashboard", () => {
     }
   });
 });
+
+describe("reports: role dashboards", () => {
+  it("teacher dashboard returns assigned classes + schedule shape", async () => {
+    const res = await get("/reports/teacher-dashboard", "teacher");
+    expect(res.status).toBe(200);
+    expect(res.body.classCount).toBe(7);
+    expect(res.body.classStats.length).toBe(7);
+    expect(Array.isArray(res.body.todaySchedule)).toBe(true);
+    expect(res.body.teacher.full_name).toBe("Anjali Nair");
+  });
+
+  it("student dashboard returns own metrics", async () => {
+    const res = await get("/reports/student-dashboard", "student");
+    expect(res.status).toBe(200);
+    expect(res.body.student.admission_no).toBeTruthy();
+    expect(typeof res.body.attendancePct).toBe("number");
+    expect(res.body).toHaveProperty("pendingHw");
+    expect(res.body).toHaveProperty("upcomingExams");
+  });
+
+  it("parent dashboard returns the linked child with per-child maps", async () => {
+    const res = await get("/reports/parent-dashboard", "parent");
+    expect(res.status).toBe(200);
+    expect(res.body.children.length).toBe(1);
+    expect(res.body.children[0].profiles.full_name).toBe("Anika Singh");
+    const childId = res.body.children[0].id;
+    expect(res.body.attMap[childId]).toBeDefined();
+    expect(res.body.hwMap[childId]).toBeDefined();
+  });
+});
+
+describe("attendance: teacher self-mark (ta_teacher_self_mark)", () => {
+  it("teacher reads self status and can mark once; a student has no teacher record", async () => {
+    const status = await get("/attendance/my-teacher", "teacher");
+    expect(status.status).toBe(200);
+    expect(status.body.teacher).not.toBeNull();
+
+    // Mark self: 201 first time, 409 if already marked today (idempotent-safe).
+    const mark = await post("/attendance/mark-self", "teacher", { status: "present" });
+    expect([201, 409]).toContain(mark.status);
+    const again = await post("/attendance/mark-self", "teacher", { status: "present" });
+    expect(again.status).toBe(409);
+
+    const studentStatus = await get("/attendance/my-teacher", "student");
+    expect(studentStatus.body.teacher).toBeNull();
+  });
+});

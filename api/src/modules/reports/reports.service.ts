@@ -358,6 +358,366 @@ export class ReportsService {
     };
   }
 
+  /** Teacher dashboard: assigned classes, per-class stats, today's schedule, etc. */
+  async teacherDashboard(actor: AuthUser) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayDow = new Date().getDay();
+
+    const tc = await this.prisma.teacher_classes.findMany({
+      where: { teacher_id: actor.id },
+      select: { class_id: true, classes: { select: { id: true, name: true, section: true } } },
+    });
+    const classIds = tc.map((r) => r.class_id);
+    const classes = tc.map((r) => r.classes).filter(Boolean) as {
+      id: string;
+      name: string;
+      section: string | null;
+    }[];
+
+    const teacher = await this.prisma.teachers.findFirst({
+      where: { email: { equals: actor.email, mode: "insensitive" } },
+      select: {
+        full_name: true,
+        email: true,
+        subject: true,
+        status: true,
+        phone: true,
+        qualification: true,
+      },
+    });
+    const teacherSubject = teacher?.subject ?? undefined;
+
+    const [subjects, students, timetable, announcements, hwActive, examsUpcoming, attToday] =
+      await Promise.all([
+        classIds.length
+          ? this.prisma.subjects.findMany({
+              where: { class_id: { in: classIds } },
+              select: { id: true, name: true, class_id: true },
+            })
+          : [],
+        classIds.length
+          ? this.prisma.students.findMany({
+              where: { class_id: { in: classIds } },
+              select: { id: true, class_id: true, gender: true },
+            })
+          : [],
+        classIds.length
+          ? this.prisma.timetable.findMany({
+              where: { teacher_id: actor.id },
+              orderBy: { start_time: "asc" },
+              select: {
+                id: true,
+                day_of_week: true,
+                start_time: true,
+                end_time: true,
+                room: true,
+                class_id: true,
+                subjects: { select: { name: true } },
+                classes: { select: { name: true, section: true } },
+              },
+            })
+          : [],
+        this.prisma.announcements.findMany({
+          orderBy: { created_at: "desc" },
+          take: 4,
+          select: { id: true, title: true, body: true, created_at: true },
+        }),
+        this.prisma.homework.findMany({
+          where: { teacher_id: actor.id, status: "active" },
+          select: { id: true, class_id: true },
+        }),
+        classIds.length
+          ? this.prisma.exams.findMany({
+              where: { class_id: { in: classIds }, exam_date: { gte: today } },
+              orderBy: { exam_date: "asc" },
+              select: {
+                id: true,
+                name: true,
+                exam_date: true,
+                class_id: true,
+                classes: { select: { name: true, section: true } },
+              },
+            })
+          : [],
+        classIds.length
+          ? this.prisma.attendance.findMany({
+              where: { class_id: { in: classIds }, date: today },
+              select: { class_id: true },
+              distinct: ["class_id"],
+            })
+          : [],
+      ]);
+
+    const attendedClassIds = new Set(attToday.map((r) => r.class_id));
+    const attendancePending = classIds.filter((id) => !attendedClassIds.has(id)).length;
+    const mySubjects = teacherSubject
+      ? subjects.filter((s) => (s.name ?? "").toLowerCase() === teacherSubject.toLowerCase())
+      : subjects;
+
+    const classStats = classes.map((c) => {
+      const cs = students.filter((s) => s.class_id === c.id);
+      return {
+        id: c.id,
+        name: c.name,
+        section: c.section,
+        total: cs.length,
+        boys: cs.filter((s) => s.gender === "male").length,
+        girls: cs.filter((s) => s.gender === "female").length,
+        subject: teacherSubject ?? "—",
+        attendanceMarked: attendedClassIds.has(c.id),
+        homeworkPending: hwActive.filter((h) => h.class_id === c.id).length,
+        upcomingExams: examsUpcoming.filter((e) => e.class_id === c.id).length,
+      };
+    });
+
+    return {
+      classes,
+      classStats,
+      classCount: classIds.length,
+      subjects: mySubjects,
+      subjectCount: mySubjects.length,
+      studentCount: students.length,
+      todaySchedule: timetable.filter((t) => t.day_of_week === todayDow),
+      timetable,
+      announcements,
+      homeworkPending: hwActive.length,
+      upcomingExams: examsUpcoming,
+      attendancePending,
+      teacher,
+    };
+  }
+
+  /** Student dashboard: own attendance, results, timetable, homework status. */
+  async studentDashboard(actor: AuthUser) {
+    const student = await this.prisma.students.findFirst({
+      where: { profile_id: actor.id },
+      select: {
+        id: true,
+        roll_no: true,
+        admission_no: true,
+        class_id: true,
+        classes: { select: { name: true, section: true, academic_year: true } },
+      },
+    });
+    if (!student) return null;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const termStart = new Date(now.getTime() - 120 * 86_400_000);
+
+    const [attendance, results, timetable, announcements, homework, subjects, examsUpcoming] =
+      await Promise.all([
+        this.prisma.attendance.findMany({
+          where: { student_id: student.id, date: { gte: termStart } },
+          orderBy: { date: "asc" },
+          select: { date: true, status: true },
+        }),
+        this.prisma.exam_results.findMany({
+          where: { student_id: student.id },
+          select: { marks_obtained: true, exams: { select: { max_marks: true, name: true } } },
+        }),
+        student.class_id
+          ? this.prisma.timetable.findMany({
+              where: { class_id: student.class_id },
+              orderBy: { start_time: "asc" },
+              select: {
+                id: true,
+                day_of_week: true,
+                start_time: true,
+                end_time: true,
+                room: true,
+                subjects: { select: { name: true } },
+              },
+            })
+          : [],
+        this.prisma.announcements.findMany({
+          orderBy: { created_at: "desc" },
+          take: 4,
+          select: { id: true, title: true, body: true, created_at: true },
+        }),
+        student.class_id
+          ? this.prisma.homework.findMany({
+              where: { class_id: student.class_id },
+              select: {
+                id: true,
+                title: true,
+                due_date: true,
+                subject_id: true,
+                subjects: { select: { name: true } },
+              },
+            })
+          : [],
+        student.class_id
+          ? this.prisma.subjects.findMany({
+              where: { class_id: student.class_id },
+              select: { id: true, name: true },
+            })
+          : [],
+        student.class_id
+          ? this.prisma.exams.findMany({
+              where: { class_id: student.class_id, exam_date: { gte: today } },
+              orderBy: { exam_date: "asc" },
+              take: 5,
+              select: {
+                id: true,
+                name: true,
+                exam_date: true,
+                subjects: { select: { name: true } },
+              },
+            })
+          : [],
+      ]);
+
+    const presentDays = attendance.filter(
+      (a) => a.status === "present" || a.status === "late",
+    ).length;
+    const totalDays = attendance.length;
+    const attendancePct = totalDays ? Math.round((presentDays / totalDays) * 100) : 0;
+    const avgPct = results.length
+      ? Math.round(
+          results.reduce(
+            (s, r) => s + (Number(r.marks_obtained) / Number(r.exams?.max_marks || 100)) * 100,
+            0,
+          ) / results.length,
+        )
+      : 0;
+
+    const hwIds = homework.map((h) => h.id);
+    const subs = hwIds.length
+      ? await this.prisma.homework_submissions.findMany({
+          where: { homework_id: { in: hwIds }, student_id: student.id },
+          select: { homework_id: true, status: true },
+        })
+      : [];
+    const subMap = new Map(subs.map((s) => [s.homework_id, s.status]));
+    let pendingHw = 0,
+      overdueHw = 0,
+      completedHw = 0;
+    for (const h of homework) {
+      const st = subMap.get(h.id);
+      if (st === "submitted" || st === "reviewed") completedHw += 1;
+      else if (st === "overdue" || (h.due_date && h.due_date < today)) overdueHw += 1;
+      else pendingHw += 1;
+    }
+
+    return {
+      student,
+      attendance,
+      attendancePct,
+      presentDays,
+      totalDays,
+      avgPct,
+      examCount: results.length,
+      timetable,
+      announcements,
+      subjectsCount: subjects.length,
+      pendingHw,
+      overdueHw,
+      completedHw,
+      upcomingExams: examsUpcoming,
+    };
+  }
+
+  /** Parent dashboard: per-child fee/attendance/homework/performance summary. */
+  async parentDashboard(actor: AuthUser) {
+    const links = await this.prisma.parent_student.findMany({
+      where: { parent_id: actor.id },
+      select: { student_id: true },
+    });
+    const ids = links.map((l) => l.student_id);
+    if (ids.length === 0) return { children: [], fees: [], attMap: {}, hwMap: {}, perfMap: {} };
+
+    const now = new Date();
+    const since = new Date(now.getFullYear(), now.getMonth(), 1);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const kids = await this.prisma.students.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        admission_no: true,
+        class_id: true,
+        profiles: { select: { full_name: true } },
+        classes: { select: { name: true, section: true } },
+      },
+    });
+    const classIds = kids.map((k) => k.class_id).filter((x): x is string => !!x);
+
+    const [fees, att, hw, subs, results] = await Promise.all([
+      this.prisma.fee_assignments.findMany({
+        where: { student_id: { in: ids } },
+        select: {
+          student_id: true,
+          title: true,
+          due_date: true,
+          amount_due: true,
+          amount_paid: true,
+          status: true,
+        },
+      }),
+      this.prisma.attendance.findMany({
+        where: { student_id: { in: ids }, date: { gte: since } },
+        select: { student_id: true, status: true },
+      }),
+      classIds.length
+        ? this.prisma.homework.findMany({
+            where: { class_id: { in: classIds } },
+            select: { id: true, class_id: true, due_date: true },
+          })
+        : [],
+      this.prisma.homework_submissions.findMany({
+        where: { student_id: { in: ids } },
+        select: { student_id: true, homework_id: true },
+      }),
+      this.prisma.exam_results.findMany({
+        where: { student_id: { in: ids } },
+        select: { student_id: true, marks_obtained: true, exams: { select: { max_marks: true } } },
+      }),
+    ]);
+
+    const attMap: Record<string, { total: number; present: number }> = {};
+    for (const r of att) {
+      const m = (attMap[r.student_id] ||= { total: 0, present: 0 });
+      m.total += 1;
+      if (r.status === "present" || r.status === "late") m.present += 1;
+    }
+    const subsByStudent: Record<string, Set<string>> = {};
+    for (const s of subs) (subsByStudent[s.student_id] ||= new Set()).add(s.homework_id);
+    const hwMap: Record<
+      string,
+      { total: number; submitted: number; missed: number; pending: number }
+    > = {};
+    for (const k of kids) {
+      const classHw = hw.filter((h) => h.class_id === k.class_id);
+      const submittedSet = subsByStudent[k.id] ?? new Set();
+      let submitted = 0,
+        missed = 0,
+        pending = 0;
+      for (const h of classHw) {
+        if (submittedSet.has(h.id)) submitted += 1;
+        else if (h.due_date && h.due_date < today) missed += 1;
+        else pending += 1;
+      }
+      hwMap[k.id] = { total: classHw.length, submitted, missed, pending };
+    }
+    const perfMap: Record<string, { got: number; max: number }> = {};
+    for (const r of results) {
+      const m = (perfMap[r.student_id] ||= { got: 0, max: 0 });
+      m.got += Number(r.marks_obtained) || 0;
+      m.max += Number(r.exams?.max_marks) || 0;
+    }
+
+    const children = kids.map((k) => ({
+      id: k.id,
+      admission_no: k.admission_no,
+      class_id: k.class_id,
+      profiles: { full_name: k.profiles?.full_name ?? null },
+      classes: k.classes ? { name: k.classes.name, section: k.classes.section } : null,
+    }));
+    return { children, fees, attMap, hwMap, perfMap };
+  }
+
   async auditLog(actor: AuthUser, page = 1, pageSize = 50) {
     // pa_admin_read
     if (!actor.roles.includes("admin")) throw new ForbiddenException();

@@ -2,8 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { supabase } from "@/integrations/supabase/client";
-import { apiGet } from "@/lib/api/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -664,129 +663,7 @@ function TeacherDashboardView({ fullName }: { fullName: string }) {
   const { data } = useQuery({
     enabled: !!user,
     queryKey: ["teacher-dash", user?.id],
-    queryFn: async () => {
-      const today = format(new Date(), "yyyy-MM-dd");
-      const { data: tc } = await supabase
-        .from("teacher_classes")
-        .select("class_id, classes(id, name, section)")
-        .eq("teacher_id", user!.id);
-      const classIds = (tc ?? []).map((r) => r.class_id);
-      const classes = (tc ?? []).map((r: any) => r.classes).filter(Boolean);
-
-      const [
-        subjRes,
-        studRes,
-        ttRes,
-        annRes,
-        hwRes,
-        hwByClassRes,
-        examRes,
-        attTodayRes,
-        teacherRes,
-      ] = await Promise.all([
-        classIds.length
-          ? supabase
-              .from("subjects")
-              .select("id,name,class_id,classes(name,section)")
-              .in("class_id", classIds)
-          : Promise.resolve({ data: [] as any[] }),
-        classIds.length
-          ? supabase.from("students").select("id, class_id, gender").in("class_id", classIds)
-          : Promise.resolve({ data: [] as any[] }),
-        classIds.length
-          ? supabase
-              .from("timetable")
-              .select(
-                "id, day_of_week, start_time, end_time, room, class_id, subjects(name), classes(name, section)",
-              )
-              .eq("teacher_id", user!.id)
-              .order("start_time")
-          : Promise.resolve({ data: [] as any[] }),
-        supabase
-          .from("announcements")
-          .select("id,title,body,created_at")
-          .order("created_at", { ascending: false })
-          .limit(4),
-        supabase
-          .from("homework")
-          .select("id", { count: "exact", head: true })
-          .eq("teacher_id", user!.id)
-          .eq("status", "active"),
-        classIds.length
-          ? supabase
-              .from("homework")
-              .select("class_id")
-              .eq("teacher_id", user!.id)
-              .eq("status", "active")
-          : Promise.resolve({ data: [] as any[] }),
-        classIds.length
-          ? supabase
-              .from("exams")
-              .select("id,name,exam_date,class_id,classes(name,section)")
-              .in("class_id", classIds)
-              .gte("exam_date", today)
-              .order("exam_date")
-          : Promise.resolve({ data: [] as any[] }),
-        classIds.length
-          ? supabase
-              .from("attendance")
-              .select("class_id")
-              .in("class_id", classIds)
-              .eq("date", today)
-          : Promise.resolve({ data: [] as any[] }),
-        supabase
-          .from("teachers" as never)
-          .select("full_name,email,subject,status,phone,qualification")
-          .eq("email", user!.email ?? "")
-          .maybeSingle(),
-      ]);
-
-      const todayDow = new Date().getDay();
-      const todaySchedule = (ttRes.data ?? []).filter((t: any) => t.day_of_week === todayDow);
-      const attendedClassIds = new Set(((attTodayRes.data as any[]) ?? []).map((r) => r.class_id));
-      const attendancePending = classIds.filter((id) => !attendedClassIds.has(id)).length;
-
-      const teacherSubject = (teacherRes as any).data?.subject as string | undefined;
-      const allSubjects = (subjRes.data ?? []) as any[];
-      const mySubjects = teacherSubject
-        ? allSubjects.filter((s) => (s.name ?? "").toLowerCase() === teacherSubject.toLowerCase())
-        : allSubjects;
-
-      const students = (studRes.data ?? []) as any[];
-      const hwByClass = (hwByClassRes.data ?? []) as { class_id: string }[];
-      const examsByClass = (examRes.data ?? []) as any[];
-
-      const classStats = classes.map((c: any) => {
-        const cs = students.filter((s) => s.class_id === c.id);
-        return {
-          id: c.id,
-          name: c.name,
-          section: c.section,
-          total: cs.length,
-          boys: cs.filter((s) => s.gender === "male").length,
-          girls: cs.filter((s) => s.gender === "female").length,
-          subject: teacherSubject ?? "—",
-          attendanceMarked: attendedClassIds.has(c.id),
-          homeworkPending: hwByClass.filter((h) => h.class_id === c.id).length,
-          upcomingExams: examsByClass.filter((e) => e.class_id === c.id).length,
-        };
-      });
-
-      return {
-        classes,
-        classStats,
-        classCount: classIds.length,
-        subjects: mySubjects,
-        subjectCount: mySubjects.length,
-        studentCount: students.length,
-        todaySchedule,
-        announcements: annRes.data ?? [],
-        homeworkPending: (hwRes as any).count ?? 0,
-        upcomingExams: examsByClass,
-        attendancePending,
-        teacher: (teacherRes as any).data ?? null,
-      };
-    },
+    queryFn: () => apiGet<any>("/reports/teacher-dashboard"),
   });
 
   const first = fullName.split(" ")[0];
@@ -1078,126 +955,21 @@ function StudentDashboard({ userId, fullName }: { userId: string; fullName: stri
   const { data, isLoading } = useQuery({
     queryKey: ["student-dash", userId],
     queryFn: async () => {
-      const { data: student } = await supabase
-        .from("students")
-        .select("id, roll_no, admission_no, class_id, classes(name, section, academic_year)")
-        .eq("profile_id", userId)
-        .maybeSingle();
-      if (!student) return null;
-
+      const d = await apiGet<any>("/reports/student-dashboard");
+      if (!d) return null;
+      // Derive week bars + today's classes from the returned raw arrays
+      // (same client-side computation as before).
       const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-      const weekStartStr = format(weekStart, "yyyy-MM-dd");
-      const termStart = format(addDays(new Date(), -120), "yyyy-MM-dd");
-      const today = format(new Date(), "yyyy-MM-dd");
-
-      const [attRes, resRes, ttRes, annRes, hwRes, subjRes, examRes] = await Promise.all([
-        supabase
-          .from("attendance")
-          .select("date,status")
-          .eq("student_id", student.id)
-          .gte("date", termStart)
-          .order("date"),
-        supabase
-          .from("exam_results")
-          .select("marks_obtained, exams(max_marks, name)")
-          .eq("student_id", student.id),
-        student.class_id
-          ? supabase
-              .from("timetable")
-              .select("id, day_of_week, start_time, end_time, room, subjects(name)")
-              .eq("class_id", student.class_id)
-              .order("start_time")
-          : Promise.resolve({ data: [] as any[] }),
-        supabase
-          .from("announcements")
-          .select("id,title,body,created_at")
-          .order("created_at", { ascending: false })
-          .limit(4),
-        student.class_id
-          ? supabase
-              .from("homework")
-              .select("id,title,due_date,priority,subject_id,subjects(name)")
-              .eq("class_id", student.class_id)
-          : Promise.resolve({ data: [] as any[] }),
-        student.class_id
-          ? supabase.from("subjects").select("id,name").eq("class_id", student.class_id)
-          : Promise.resolve({ data: [] as any[] }),
-        student.class_id
-          ? supabase
-              .from("exams")
-              .select("id,name,exam_date,subjects(name)")
-              .eq("class_id", student.class_id)
-              .gte("exam_date", today)
-              .order("exam_date")
-              .limit(5)
-          : Promise.resolve({ data: [] as any[] }),
-      ]);
-
-      const attendance = attRes.data ?? [];
-      const presentDays = attendance.filter(
-        (a) => a.status === "present" || a.status === "late",
-      ).length;
-      const totalDays = attendance.length;
-      const attendancePct = totalDays ? Math.round((presentDays / totalDays) * 100) : 0;
-
+      const attendance = (d.attendance ?? []) as { date: string; status: string }[];
       const weekBars = Array.from({ length: 5 }, (_, i) => {
         const day = addDays(weekStart, i);
         const rec = attendance.find((a) => isSameDay(new Date(a.date), day));
         const pct = rec ? (rec.status === "present" ? 100 : rec.status === "late" ? 60 : 0) : 0;
         return { label: format(day, "EEE"), pct, status: rec?.status ?? null };
       });
-
-      const results = resRes.data ?? [];
-      const avgPct = results.length
-        ? Math.round(
-            results.reduce(
-              (s: number, r: any) =>
-                s + (Number(r.marks_obtained) / Number(r.exams?.max_marks || 100)) * 100,
-              0,
-            ) / results.length,
-          )
-        : 0;
-
       const todayDow = new Date().getDay();
-      const todayClasses = (ttRes.data ?? []).filter((t: any) => t.day_of_week === todayDow);
-
-      // Homework aggregates
-      const homework = (hwRes.data ?? []) as any[];
-      const hwIds = homework.map((h) => h.id);
-      const { data: subs } = hwIds.length
-        ? await supabase
-            .from("homework_submissions")
-            .select("homework_id,status")
-            .in("homework_id", hwIds)
-            .eq("student_id", student.id)
-        : { data: [] as any[] };
-      const subMap = new Map((subs ?? []).map((s: any) => [s.homework_id, s.status]));
-      let pendingHw = 0,
-        overdueHw = 0,
-        completedHw = 0;
-      for (const h of homework) {
-        const st = subMap.get(h.id);
-        if (st === "submitted" || st === "reviewed") completedHw += 1;
-        else if (st === "overdue" || new Date(h.due_date) < new Date(today)) overdueHw += 1;
-        else pendingHw += 1;
-      }
-
-      return {
-        student,
-        attendancePct,
-        presentDays,
-        totalDays,
-        weekBars,
-        avgPct,
-        examCount: results.length,
-        todayClasses,
-        announcements: annRes.data ?? [],
-        subjectsCount: (subjRes.data ?? []).length,
-        pendingHw,
-        overdueHw,
-        completedHw,
-        upcomingExams: (examRes.data ?? []) as any[],
-      };
+      const todayClasses = (d.timetable ?? []).filter((t: any) => t.day_of_week === todayDow);
+      return { ...d, weekBars, todayClasses };
     },
   });
 
@@ -1489,99 +1261,24 @@ function ParentDashboard({ userId, fullName }: { userId: string; fullName: strin
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   const { data } = useQuery({
     queryKey: ["parent-dash", userId],
-    queryFn: async () => {
-      const { data: links } = await supabase
-        .from("parent_student")
-        .select("student_id")
-        .eq("parent_id", userId);
-      const ids = (links ?? []).map((l) => l.student_id);
-      if (ids.length === 0) return { children: [], fees: [], attMap: {}, hwMap: {}, perfMap: {} };
-      const since = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-        .toISOString()
-        .slice(0, 10);
-      const classIdsRes = await supabase
-        .from("students")
-        .select("id, admission_no, class_id, profiles(full_name), classes(name,section)")
-        .in("id", ids);
-      const kids = classIdsRes.data ?? [];
-      const classIds = kids.map((k: any) => k.class_id).filter(Boolean);
-      const [{ data: fees }, { data: att }, { data: hw }, { data: subs }, { data: results }] =
-        await Promise.all([
-          supabase
-            .from("fee_assignments")
-            .select("student_id, title, due_date, amount_due, amount_paid, status")
-            .in("student_id", ids),
-          supabase
-            .from("attendance")
-            .select("student_id,status,date")
-            .in("student_id", ids)
-            .gte("date", since),
-          classIds.length
-            ? supabase.from("homework").select("id,class_id,due_date")
-            : Promise.resolve({ data: [] as any[] }),
-          supabase
-            .from("homework_submissions")
-            .select("student_id,homework_id,submitted_at")
-            .in("student_id", ids),
-          supabase
-            .from("exam_results")
-            .select("student_id,marks_obtained,exams(max_marks)")
-            .in("student_id", ids),
-        ]);
-      const attMap: Record<string, { total: number; present: number }> = {};
-      for (const r of att ?? []) {
-        const m = (attMap[r.student_id] ||= { total: 0, present: 0 });
-        m.total += 1;
-        if (r.status === "present" || r.status === "late") m.present += 1;
-      }
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const hwMap: Record<
-        string,
-        { total: number; submitted: number; missed: number; pending: number }
-      > = {};
-      const subsByStudent: Record<string, Set<string>> = {};
-      const subDates: Record<string, Map<string, string>> = {};
-      for (const s of subs ?? []) {
-        (subsByStudent[s.student_id] ||= new Set()).add(s.homework_id);
-        (subDates[s.student_id] ||= new Map()).set(s.homework_id, s.submitted_at as any);
-      }
-      for (const k of kids as any[]) {
-        const classHw = (hw ?? []).filter((h: any) => h.class_id === k.class_id);
-        const submittedSet = subsByStudent[k.id] ?? new Set();
-        let submitted = 0,
-          missed = 0,
-          pending = 0;
-        for (const h of classHw) {
-          const due = h.due_date ? new Date(h.due_date) : null;
-          if (submittedSet.has(h.id)) submitted += 1;
-          else if (due && due < today) missed += 1;
-          else pending += 1;
-        }
-        hwMap[k.id] = { total: classHw.length, submitted, missed, pending };
-      }
-      const perfMap: Record<string, { got: number; max: number }> = {};
-      for (const r of (results as any[]) ?? []) {
-        const m = (perfMap[r.student_id] ||= { got: 0, max: 0 });
-        m.got += Number(r.marks_obtained) || 0;
-        m.max += Number(r.exams?.max_marks) || 0;
-      }
-      return { children: kids, fees: fees ?? [], attMap, hwMap, perfMap };
-    },
+    queryFn: () => apiGet<any>("/reports/parent-dashboard"),
   });
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const fees = data?.fees ?? [];
-  const children = data?.children ?? [];
-  const totalAnnual = fees.reduce((s, f) => s + Number(f.amount_due), 0);
-  const totalPaid = fees.reduce((s, f) => s + Number(f.amount_paid), 0);
+  const fees = (data?.fees ?? []) as any[];
+  const children = (data?.children ?? []) as any[];
+  const totalAnnual = fees.reduce((s: number, f: any) => s + Number(f.amount_due), 0);
+  const totalPaid = fees.reduce((s: number, f: any) => s + Number(f.amount_paid), 0);
   const outstanding = totalAnnual - totalPaid;
-  const openItems = fees.filter((f) => f.status !== "paid");
-  const overdue = openItems.filter((f) => new Date(f.due_date) < today);
-  const overdueAmt = overdue.reduce((s, f) => s + Number(f.amount_due) - Number(f.amount_paid), 0);
+  const openItems = fees.filter((f: any) => f.status !== "paid");
+  const overdue = openItems.filter((f: any) => new Date(f.due_date) < today);
+  const overdueAmt = overdue.reduce(
+    (s: number, f: any) => s + Number(f.amount_due) - Number(f.amount_paid),
+    0,
+  );
   const next = openItems
-    .filter((f) => new Date(f.due_date) >= today)
-    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0];
+    .filter((f: any) => new Date(f.due_date) >= today)
+    .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0];
 
   return (
     <>
@@ -1735,49 +1432,25 @@ function SelfAttendanceCard() {
   const qc = useQueryClient();
   const today = format(new Date(), "yyyy-MM-dd");
 
-  const { data: teacher } = useQuery({
+  const { data: self } = useQuery({
     queryKey: ["me-teacher-self", user?.id],
     enabled: !!user,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teachers")
-          .select("id, email")
-          .ilike("email", user!.email ?? "")
-          .maybeSingle()
-      ).data,
+    queryFn: () => apiGet<{ teacher: { id: string } | null; today: any }>("/attendance/my-teacher"),
   });
-
-  const { data: todayRow } = useQuery({
-    queryKey: ["me-attn-today", teacher?.id, today],
-    enabled: !!teacher,
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_attendance")
-          .select("*")
-          .eq("teacher_id", teacher!.id)
-          .eq("date", today)
-          .maybeSingle()
-      ).data,
-  });
+  const teacher = self?.teacher ?? null;
+  const todayRow = self?.today ?? null;
 
   const markMut = useMutation({
     mutationFn: async (status: "present" | "half_day" | "wfh") => {
-      const { error } = await supabase.from("teacher_attendance").insert({
-        teacher_id: teacher!.id,
-        date: today,
-        status,
-        marked_by: "self",
-        marked_by_user: user!.id,
-        check_in_time: new Date().toISOString(),
+      const res = await apiFetch("/attendance/mark-self", {
+        method: "POST",
+        body: JSON.stringify({ status }),
       });
-      if (error) throw error;
+      if (!res) throw new Error("Not authenticated");
     },
     onSuccess: () => {
       toast.success("Attendance marked");
-      qc.invalidateQueries({ queryKey: ["me-attn-today", teacher?.id, today] });
-      qc.invalidateQueries({ queryKey: ["me-attn", teacher?.id] });
+      qc.invalidateQueries({ queryKey: ["me-teacher-self", user?.id] });
     },
     onError: (e: any) => toast.error(e.message ?? "Failed to mark"),
   });

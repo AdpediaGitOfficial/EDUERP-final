@@ -44,6 +44,11 @@ class MarkDto {
   entries: MarkEntry[];
 }
 
+class MarkSelfDto {
+  @IsIn(["present", "half_day", "wfh", "late", "absent", "leave"])
+  status: string;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller("attendance")
 export class AttendanceController {
@@ -65,5 +70,15 @@ export class AttendanceController {
   @Post("mark")
   mark(@CurrentUser() actor: AuthUser, @Body() dto: MarkDto) {
     return this.attendance.mark(actor, dto.classId, dto.date, dto.entries);
+  }
+
+  @Get("my-teacher")
+  myTeacher(@CurrentUser() actor: AuthUser) {
+    return this.attendance.myTeacherAttendance(actor);
+  }
+
+  @Post("mark-self")
+  markSelf(@CurrentUser() actor: AuthUser, @Body() dto: MarkSelfDto) {
+    return this.attendance.markSelf(actor, dto.status);
   }
 }

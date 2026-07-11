@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import { Prisma, attendance_status } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
@@ -120,5 +120,51 @@ export class AttendanceService {
       ),
     );
     return { ok: true, marked: entries.length };
+  }
+
+  /**
+   * Teacher self-attendance (hybrid self-mark). Resolves the caller's teacher
+   * record by email (teacher rows are keyed to auth by email), returns today's
+   * status row if present. teacher_attendance policies: ta_teacher_read_own /
+   * ta_teacher_self_mark.
+   */
+  async myTeacherAttendance(actor: AuthUser) {
+    const teacher = await this.prisma.teachers.findFirst({
+      where: { email: { equals: actor.email, mode: "insensitive" } },
+      select: { id: true, email: true },
+    });
+    if (!teacher) return { teacher: null, today: null };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const row = await this.prisma.teacher_attendance.findFirst({
+      where: { teacher_id: teacher.id, date: today },
+    });
+    return { teacher: { id: teacher.id, email: teacher.email }, today: row };
+  }
+
+  /** ta_teacher_self_mark: one self-mark per teacher per day. */
+  async markSelf(actor: AuthUser, status: string) {
+    const teacher = await this.prisma.teachers.findFirst({
+      where: { email: { equals: actor.email, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (!teacher) throw new ForbiddenException("No teacher record linked to this account");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const existing = await this.prisma.teacher_attendance.findFirst({
+      where: { teacher_id: teacher.id, date: today },
+    });
+    if (existing) throw new ConflictException("Attendance already marked for today");
+    const row = await this.prisma.teacher_attendance.create({
+      data: {
+        teacher_id: teacher.id,
+        date: today,
+        status,
+        marked_by: "self",
+        marked_by_user: actor.id,
+        check_in_time: new Date(),
+      },
+    });
+    return { ok: true, id: row.id };
   }
 }
