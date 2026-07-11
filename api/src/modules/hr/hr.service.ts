@@ -449,6 +449,36 @@ export class HrService {
     return { staff, payroll, leaves, documents, history, assets, expenses };
   }
 
+  /** List an employee's documents — hr|admin, or the employee themselves. */
+  async listStaffDocuments(actor: AuthUser, staffId: string) {
+    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+    if (!staff) throw new NotFoundException("Employee not found");
+    if (!this.isHr(actor) && staff.profile_id !== actor.id) throw new ForbiddenException();
+    return this.prisma.staff_documents.findMany({
+      where: { staff_id: staffId },
+      orderBy: { uploaded_at: "desc" },
+    });
+  }
+
+  /**
+   * Attach an uploaded document to an employee (hr|admin only). `fileUrl` is the
+   * URL returned by POST /files; this just records the row that references it.
+   */
+  async addStaffDocument(
+    actor: AuthUser,
+    staffId: string,
+    docType: string,
+    fileUrl: string,
+    title?: string,
+  ) {
+    if (!this.isHr(actor)) throw new ForbiddenException();
+    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+    if (!staff) throw new NotFoundException("Employee not found");
+    return this.prisma.staff_documents.create({
+      data: { staff_id: staffId, doc_type: docType, title: title?.trim() || docType, file_url: fileUrl },
+    });
+  }
+
   // ==== Departments (dept_read true / dept_write hr|admin) ==================
   listDepartments() {
     return this.prisma.departments.findMany({ orderBy: { name: "asc" } });

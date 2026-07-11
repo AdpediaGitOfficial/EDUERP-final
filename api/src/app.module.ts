@@ -21,6 +21,7 @@ import { AccessModule } from "./modules/access/access.module";
 import { ProgressModule } from "./modules/progress/progress.module";
 import { ReceptionModule } from "./modules/reception/reception.module";
 import { ReportsModule } from "./modules/reports/reports.module";
+import { FilesModule } from "./modules/files/files.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -47,6 +48,7 @@ import { HealthController } from "./health.controller";
     CommunicationModule,
     ReceptionModule,
     ReportsModule,
+    FilesModule,
   ],
   controllers: [HealthController],
 })

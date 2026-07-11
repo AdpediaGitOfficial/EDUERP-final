@@ -62,6 +62,12 @@ class StatusDto {
   @IsIn(["active", "on_leave", "inactive"]) status: string;
 }
 
+class StaffDocumentDto {
+  @IsString() @MinLength(1) docType: string;
+  @IsString() @MinLength(1) fileUrl: string;
+  @IsOptional() @IsString() title?: string;
+}
+
 class DepartmentDto {
   @IsString() @MinLength(1) name: string;
   @IsString() @MinLength(1) code: string;
@@ -224,6 +230,20 @@ export class HrController {
   @Patch("staff/:id/status")
   setStaffStatus(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Body() dto: StatusDto) {
     return this.hr.setStaffStatus(actor, id, dto.status);
+  }
+
+  @Get("staff/:id/documents")
+  listStaffDocuments(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.listStaffDocuments(actor, id);
+  }
+
+  @Post("staff/:id/documents")
+  addStaffDocument(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: StaffDocumentDto,
+  ) {
+    return this.hr.addStaffDocument(actor, id, dto.docType, dto.fileUrl, dto.title);
   }
 
   // ---- Departments --------------------------------------------------------

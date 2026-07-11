@@ -2025,6 +2025,90 @@ describe("Pre-deploy: HR dashboard teacher stat reflects real data", () => {
   });
 });
 
+describe("File storage: upload / download / attach", () => {
+  const PNG = Buffer.from("89504e470d0a1a0a54455354", "hex"); // tiny fake PNG
+  const authed = (r: keyof typeof ACCOUNTS) =>
+    request(http).post("/api/files").set("Authorization", `Bearer ${tokens[r]}`);
+
+  it("uploads a valid image and streams it back byte-for-byte; rejects unauth download", async () => {
+    const up = await authed("admin")
+      .field("category", "avatars")
+      .attach("file", PNG, { filename: "a.png", contentType: "image/png" });
+    expect(up.status).toBe(201);
+    expect(up.body.url).toMatch(/^\/api\/files\/avatars\//);
+    expect(up.body.mime).toBe("image/png");
+
+    const dl = await request(http)
+      .get(up.body.url)
+      .set("Authorization", `Bearer ${tokens.admin}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(Buffer.from(c)));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(dl.status).toBe(200);
+    expect(dl.headers["content-type"]).toContain("image/png");
+    expect(Buffer.compare(dl.body as Buffer, PNG)).toBe(0);
+
+    // Download requires auth.
+    expect((await request(http).get(up.body.url)).status).toBe(401);
+    // A missing key 404s.
+    expect(
+      (await request(http).get("/api/files/avatars/does-not-exist.png").set("Authorization", `Bearer ${tokens.admin}`))
+        .status,
+    ).toBe(404);
+  });
+
+  it("rejects an unsupported mime type and an invalid category (400)", async () => {
+    const badMime = await authed("admin")
+      .field("category", "avatars")
+      .attach("file", Buffer.from("MZ"), { filename: "x.exe", contentType: "application/x-msdownload" });
+    expect(badMime.status).toBe(400);
+
+    const badCat = await authed("admin")
+      .field("category", "hacker")
+      .attach("file", PNG, { filename: "a.png", contentType: "image/png" });
+    expect(badCat.status).toBe(400);
+  });
+
+  it("attaches an uploaded doc to a staff record (hr|admin); teacher 403; non-uuid 400", async () => {
+    const staffId = (await get("/hr/staff", "admin")).body[0].id;
+    const up = await authed("admin")
+      .field("category", "staff-documents")
+      .attach("file", Buffer.from("%PDF-1.4 x"), { filename: "c.pdf", contentType: "application/pdf" });
+    expect(up.status).toBe(201);
+
+    const before = (await get(`/hr/staff/${staffId}/documents`, "admin")).body.length;
+    const attach = await post(`/hr/staff/${staffId}/documents`, "admin", {
+      docType: "contract",
+      title: "Employment Contract",
+      fileUrl: up.body.url,
+    });
+    expect(attach.status).toBe(201);
+    expect(attach.body.file_url).toBe(up.body.url);
+
+    const after = await get(`/hr/staff/${staffId}/documents`, "admin");
+    expect(after.body.length).toBe(before + 1);
+
+    // Non-HR cannot attach; malformed id → 400 (not 500).
+    expect(
+      (await post(`/hr/staff/${staffId}/documents`, "teacher", { docType: "x", fileUrl: up.body.url }))
+        .status,
+    ).toBe(403);
+    expect((await get("/hr/staff/not-a-uuid/documents", "admin")).status).toBe(400);
+  });
+
+  it("sets a profile avatar via PATCH /users/me", async () => {
+    const up = await authed("admin")
+      .field("category", "avatars")
+      .attach("file", PNG, { filename: "me.png", contentType: "image/png" });
+    const r = await patch("/users/me", "admin", { avatarUrl: up.body.url });
+    expect(r.status).toBe(200);
+    expect(r.body.avatarUrl).toBe(up.body.url);
+  });
+});
+
 describe("Auth: password reset flow (B40 final cutover)", () => {
   it("forgot-password mints a single-use token; reset changes the password then the token is spent", async () => {
     // Unknown email: still 200, no token leaked (no account enumeration).

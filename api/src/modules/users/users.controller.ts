@@ -75,7 +75,10 @@ export class UsersController {
   }
 
   @Patch("me")
-  updateMe(@CurrentUser() actor: AuthUser, @Body() body: { fullName?: string; phone?: string }) {
+  updateMe(
+    @CurrentUser() actor: AuthUser,
+    @Body() body: { fullName?: string; phone?: string; avatarUrl?: string | null },
+  ) {
     return this.users.updateOwnProfile(actor, body);
   }
 

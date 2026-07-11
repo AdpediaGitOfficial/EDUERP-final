@@ -128,13 +128,17 @@ export class UsersService {
     };
   }
 
-  async updateOwnProfile(actor: AuthUser, data: { fullName?: string; phone?: string }) {
+  async updateOwnProfile(
+    actor: AuthUser,
+    data: { fullName?: string; phone?: string; avatarUrl?: string | null },
+  ) {
     // profiles_update_own: a user may update only their own row.
     const updated = await this.prisma.profiles.update({
       where: { id: actor.id },
       data: {
         ...(data.fullName !== undefined ? { full_name: data.fullName } : {}),
         ...(data.phone !== undefined ? { phone: data.phone } : {}),
+        ...(data.avatarUrl !== undefined ? { avatar_url: data.avatarUrl } : {}),
       },
     });
     return {
@@ -142,6 +146,7 @@ export class UsersService {
       fullName: updated.full_name,
       email: updated.email,
       phone: updated.phone,
+      avatarUrl: updated.avatar_url,
     };
   }
 
