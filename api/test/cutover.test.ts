@@ -184,3 +184,34 @@ describe("students: search_students port + row-extras + duplicates", () => {
     expect((await get("/students/duplicates", "teacher")).status).toBe(403);
   });
 });
+
+describe("reports: comprehensive admin dashboard", () => {
+  it("returns every KPI + chart series the admin dashboard renders", async () => {
+    const res = await get("/reports/admin-dashboard", "admin");
+    expect(res.status).toBe(200);
+    const d = res.body;
+    // KPIs
+    expect(d.studentCount).toBeGreaterThan(5000);
+    expect(d.classCount).toBeGreaterThanOrEqual(100);
+    expect(d.dueTotal).toBeGreaterThan(0);
+    expect(typeof d.collectedMonth).toBe("number");
+    expect(typeof d.openJobs).toBe("number");
+    // Chart series present and shaped
+    expect(d.trend.length).toBe(6);
+    expect(d.trend[0]).toHaveProperty("revenue");
+    expect(Array.isArray(d.byGrade)).toBe(true);
+    expect(Array.isArray(d.enrollByGrade)).toBe(true);
+    expect(d.staffMix.teaching.length).toBe(2);
+    expect(d.attTrend.length).toBe(30);
+    expect(Array.isArray(d.paymentMix)).toBe(true);
+    expect(Array.isArray(d.defaulters)).toBe(true);
+    expect(Array.isArray(d.activity)).toBe(true);
+    expect(d.efficiency).toHaveProperty("thisPct");
+  });
+
+  it("is admin-only", async () => {
+    for (const role of ["teacher", "parent", "student"] as const) {
+      expect((await get("/reports/admin-dashboard", role)).status).toBe(403);
+    }
+  });
+});

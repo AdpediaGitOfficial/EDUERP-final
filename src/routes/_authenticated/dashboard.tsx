@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -133,378 +134,46 @@ function AdminDashboard({ fullName }: { fullName: string }) {
   const todayStr = now.toISOString().slice(0, 10);
   const yr = `${y}–${y + 1}`;
 
-  const { data } = useQuery({
-    queryKey: ["admin-dashboard-core"],
-    queryFn: async () => {
-      const [students, teachers, staffAll, classes, fees, payments] = await Promise.all([
-        supabase.from("students").select("id", { count: "exact", head: true }),
-        supabase
-          .from("teachers")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "active"),
-        supabase.from("staff").select("id", { count: "exact", head: true }).eq("status", "active"),
-        supabase.from("classes").select("id", { count: "exact", head: true }),
-        supabase.from("fee_assignments").select("amount_due,amount_paid,status"),
-        supabase.from("payments").select("amount,status,paid_at,method").gte("paid_at", monthStart),
-      ]);
-      const dueTotal = (fees.data ?? []).reduce(
-        (s, f) => s + Number(f.amount_due) - Number(f.amount_paid || 0),
-        0,
-      );
-      const collectedMonth = (payments.data ?? [])
-        .filter((p: any) => p.status === "successful")
-        .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-      const pendingCount = (fees.data ?? []).filter((f) => f.status !== "paid").length;
-      return {
-        studentCount: students.count ?? 0,
-        teacherCount: teachers.count ?? 0,
-        staffCount: staffAll.count ?? 0,
-        classCount: classes.count ?? 0,
-        dueTotal,
-        collectedMonth,
-        pendingCount,
-        paymentsThisMonth: payments.data ?? [],
-      };
-    },
+  const { data: dash } = useQuery({
+    queryKey: ["admin-dashboard"],
+    queryFn: () => apiGet<any>("/reports/admin-dashboard"),
   });
 
-  const { data: extras } = useQuery({
-    queryKey: ["admin-dashboard-extras", todayStr],
-    queryFn: async () => {
-      const [expenses, payroll, complaints, jobs, attToday, staffAttToday] = await Promise.all([
-        supabase
-          .from("expenses")
-          .select("amount,expense_date")
-          .gte("expense_date", monthStart.slice(0, 10)),
-        supabase
-          .from("payroll_runs")
-          .select("net_salary,status,month")
-          .gte("month", monthStart.slice(0, 10)),
-        supabase
-          .from("complaints")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "open"),
-        supabase
-          .from("job_openings")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "open"),
-        supabase.from("attendance").select("status").eq("date", todayStr),
-        supabase.from("teacher_attendance").select("status").eq("date", todayStr),
-      ]);
-      const expenseMonth = (expenses.data ?? []).reduce(
-        (s: number, e: any) => s + Number(e.amount || 0),
-        0,
-      );
-      const payrollMonth = (payroll.data ?? [])
-        .filter((p: any) => p.status === "paid")
-        .reduce((s: number, p: any) => s + Number(p.net_salary || 0), 0);
-      const attRows = attToday.data ?? [];
-      const attPct = attRows.length
-        ? (attRows.filter((r: any) => r.status === "present" || r.status === "late").length /
-            attRows.length) *
-          100
-        : 0;
-      const stRows = staffAttToday.data ?? [];
-      const staffAttPct = stRows.length
-        ? (stRows.filter((r: any) => r.status === "present" || r.status === "late").length /
-            stRows.length) *
-          100
-        : 0;
-      return {
-        expenseMonth,
-        payrollMonth,
-        openComplaints: complaints.count ?? 0,
-        openJobs: jobs.count ?? 0,
-        attPct,
-        staffAttPct,
-        attSampled: attRows.length,
-        staffAttSampled: stRows.length,
-      };
-    },
-  });
-
-  // Fee collection efficiency (this term vs last term)
-  const { data: efficiency } = useQuery({
-    queryKey: ["admin-dashboard-efficiency"],
-    queryFn: async () => {
-      const thisTerm =
-        m < 6
-          ? { from: new Date(y, 0, 1), to: new Date(y, 5, 30, 23, 59, 59) }
-          : { from: new Date(y, 6, 1), to: new Date(y, 11, 31, 23, 59, 59) };
-      const lastTerm =
-        m < 6
-          ? { from: new Date(y - 1, 6, 1), to: new Date(y - 1, 11, 31, 23, 59, 59) }
-          : { from: new Date(y, 0, 1), to: new Date(y, 5, 30, 23, 59, 59) };
-      const [pays, fees] = await Promise.all([
-        supabase
-          .from("payments")
-          .select("amount,paid_at,status")
-          .eq("status", "successful")
-          .gte("paid_at", lastTerm.from.toISOString()),
-        supabase.from("fee_assignments").select("amount_due"),
-      ]);
-      const invoiced =
-        (fees.data ?? []).reduce((s: number, f: any) => s + Number(f.amount_due || 0), 0) || 1;
-      const inR = (d: string, r: any) => d && new Date(d) >= r.from && new Date(d) <= r.to;
-      const cThis = (pays.data ?? [])
-        .filter((p: any) => inR(p.paid_at, thisTerm))
-        .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-      const cLast = (pays.data ?? [])
-        .filter((p: any) => inR(p.paid_at, lastTerm))
-        .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-      return { thisPct: (cThis / invoiced) * 100, lastPct: (cLast / invoiced) * 100 };
-    },
-  });
-
-  // 6-month Revenue vs Expenses trend
-  const { data: trend } = useQuery({
-    queryKey: ["admin-dashboard-trend"],
-    queryFn: async () => {
-      const from = new Date(y, m - 5, 1).toISOString();
-      const [pays, exps] = await Promise.all([
-        supabase
-          .from("payments")
-          .select("amount,paid_at,status")
-          .gte("paid_at", from)
-          .eq("status", "successful"),
-        supabase
-          .from("expenses")
-          .select("amount,expense_date")
-          .gte("expense_date", from.slice(0, 10)),
-      ]);
-      const buckets: { key: string; label: string; revenue: number; expenses: number }[] = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(y, m - i, 1);
-        buckets.push({
-          key: d.toISOString().slice(0, 7),
-          label: d.toLocaleString("en-IN", { month: "short" }),
-          revenue: 0,
-          expenses: 0,
-        });
+  // Single comprehensive endpoint (ports the ~13 client-side aggregations).
+  // Derive the original variable shapes so the JSX below is unchanged.
+  const data = dash
+    ? {
+        studentCount: dash.studentCount,
+        teacherCount: dash.teacherCount,
+        staffCount: dash.staffCount,
+        classCount: dash.classCount,
+        dueTotal: dash.dueTotal,
+        collectedMonth: dash.collectedMonth,
+        pendingCount: dash.pendingCount,
       }
-      for (const p of pays.data ?? []) {
-        const b = buckets.find((x) => x.key === (p.paid_at ?? "").slice(0, 7));
-        if (b) b.revenue += Number(p.amount || 0);
+    : undefined;
+  const extras = dash
+    ? {
+        expenseMonth: dash.expenseMonth,
+        payrollMonth: dash.payrollMonth,
+        openComplaints: dash.openComplaints,
+        openJobs: dash.openJobs,
+        attPct: dash.attPct,
+        staffAttPct: dash.staffAttPct,
+        attSampled: dash.attSampled,
+        staffAttSampled: dash.staffAttSampled,
       }
-      for (const e of exps.data ?? []) {
-        const b = buckets.find((x) => x.key === (e.expense_date ?? "").slice(0, 7));
-        if (b) b.expenses += Number(e.amount || 0);
-      }
-      return buckets;
-    },
-  });
-
-  // Fee collection by grade
-  const { data: byGrade } = useQuery({
-    queryKey: ["admin-dashboard-by-grade"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("fee_assignments")
-        .select("amount_due,amount_paid,students!inner(classes(name))")
-        .limit(20000);
-      const map = new Map<string, { grade: string; collected: number; outstanding: number }>();
-      for (const r of (data ?? []) as any[]) {
-        const g = r.students?.classes?.name || "—";
-        const cur = map.get(g) ?? { grade: g, collected: 0, outstanding: 0 };
-        cur.collected += Number(r.amount_paid || 0);
-        cur.outstanding += Math.max(0, Number(r.amount_due || 0) - Number(r.amount_paid || 0));
-        map.set(g, cur);
-      }
-      return Array.from(map.values()).sort((a, b) =>
-        a.grade.localeCompare(b.grade, undefined, { numeric: true }),
-      );
-    },
-  });
-
-  // Enrollment by grade (RPC-backed to avoid 1000-row limit)
-  const { data: enrollByGrade } = useQuery({
-    queryKey: ["admin-dashboard-enroll-grade"],
-    queryFn: async () => {
-      const { data: classes } = await supabase.from("classes").select("id,name");
-      const ids = (classes ?? []).map((c: any) => c.id);
-      if (!ids.length) return [];
-      const { data: stats } = await supabase.rpc("get_class_stats", { _class_ids: ids as any });
-      const byName = new Map<string, number>();
-      for (const s of (stats ?? []) as any[]) {
-        const nm = (classes ?? []).find((c: any) => c.id === s.class_id)?.name || "—";
-        byName.set(nm, (byName.get(nm) ?? 0) + Number(s.student_count || 0));
-      }
-      return Array.from(byName.entries())
-        .map(([grade, count]) => ({ grade, count }))
-        .sort((a, b) => a.grade.localeCompare(b.grade, undefined, { numeric: true }));
-    },
-  });
-
-  // Staff composition
-  const { data: staffMix } = useQuery({
-    queryKey: ["admin-dashboard-staffmix"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("staff")
-        .select("department,designation")
-        .eq("status", "active")
-        .limit(5000);
-      const rows = data ?? [];
-      const teachers = rows.filter(
-        (r: any) => r.designation === "Teacher" || r.designation === "Senior Teacher",
-      ).length;
-      const nonTeaching = rows.length - teachers;
-      const byDept = new Map<string, number>();
-      for (const r of rows as any[])
-        byDept.set(r.department || "—", (byDept.get(r.department || "—") ?? 0) + 1);
-      return {
-        teaching: [
-          { name: "Teaching", value: teachers },
-          { name: "Non-teaching", value: nonTeaching },
-        ],
-        byDept: Array.from(byDept.entries())
-          .map(([name, value]) => ({ name, value }))
-          .sort((a, b) => b.value - a.value),
-      };
-    },
-  });
-
-  // Attendance trend (last 30 days)
-  const { data: attTrend } = useQuery({
-    queryKey: ["admin-dashboard-att-trend"],
-    queryFn: async () => {
-      const from = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
-      const [stu, stf] = await Promise.all([
-        supabase.from("attendance").select("date,status").gte("date", from).limit(50000),
-        supabase.from("teacher_attendance").select("date,status").gte("date", from).limit(5000),
-      ]);
-      const days: { date: string; students: number; staff: number }[] = [];
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
-        days.push({ date: d.slice(5), students: 0, staff: 0 });
-      }
-      const pct = (rows: any[], d: string) => {
-        const on = rows.filter((r) => r.date === d);
-        if (!on.length) return 0;
-        return (
-          (on.filter((r) => r.status === "present" || r.status === "late").length / on.length) * 100
-        );
-      };
-      for (const b of days) {
-        const full = new Date().toISOString().slice(0, 4) + "-" + b.date;
-        b.students = Math.round(pct(stu.data ?? [], full));
-        b.staff = Math.round(pct(stf.data ?? [], full));
-      }
-      return days;
-    },
-  });
-
-  // Payment mode breakdown (this month)
-  const paymentMix = (() => {
-    const rows = data?.paymentsThisMonth ?? [];
-    const map = new Map<string, number>();
-    for (const p of rows as any[]) {
-      if (p.status !== "successful") continue;
-      const k = (p.method || "other").toString();
-      map.set(k, (map.get(k) ?? 0) + Number(p.amount || 0));
-    }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
-  })();
-
-  // Upcoming holidays
-  const { data: upcoming } = useQuery({
-    queryKey: ["admin-dashboard-holidays"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("holidays")
-          .select("id,name,start_date,end_date,type")
-          .gte("start_date", todayStr)
-          .order("start_date")
-          .limit(5)
-      ).data ?? [],
-  });
-
-  // Fee defaulters
-  const { data: defaulters } = useQuery({
-    queryKey: ["admin-dashboard-defaulters"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("fee_assignments")
-        .select("id,amount_due,amount_paid,due_date,students(admission_no,profiles(full_name))")
-        .neq("status", "paid")
-        .lt("due_date", todayStr)
-        .limit(200);
-      return (data ?? [])
-        .map((r: any) => ({
-          id: r.id,
-          name: r.students?.profiles?.full_name || r.students?.admission_no || "—",
-          amount: Math.max(0, Number(r.amount_due || 0) - Number(r.amount_paid || 0)),
-          days: Math.max(0, Math.floor((Date.now() - new Date(r.due_date).getTime()) / 86_400_000)),
-        }))
-        .filter((r: any) => r.amount > 0)
-        .sort((a: any, b: any) => b.amount - a.amount)
-        .slice(0, 5);
-    },
-  });
-
-  // Recent activity feed — hybrid across admissions, payments, complaints, staff
-  const { data: activity } = useQuery({
-    queryKey: ["admin-dashboard-activity"],
-    queryFn: async () => {
-      const [adm, pay, com, stf] = await Promise.all([
-        supabase
-          .from("students")
-          .select("id,admission_no,created_at,profile_id,profiles(full_name)")
-          .order("created_at", { ascending: false })
-          .limit(5),
-        supabase
-          .from("payments")
-          .select("id,amount,paid_at,students(profiles(full_name))")
-          .eq("status", "successful")
-          .order("paid_at", { ascending: false })
-          .limit(5),
-        supabase
-          .from("complaints")
-          .select("id,subject,created_at")
-          .order("created_at", { ascending: false })
-          .limit(5),
-        supabase
-          .from("staff")
-          .select("id,full_name,join_date,created_at")
-          .order("created_at", { ascending: false })
-          .limit(5),
-      ]);
-      const items: { at: string; kind: string; text: string; tone: string }[] = [];
-      for (const s of adm.data ?? [])
-        items.push({
-          at: (s as any).created_at,
-          kind: "admission",
-          tone: "text-emerald-600",
-          text: `New admission — ${(s as any).profiles?.full_name || (s as any).admission_no}`,
-        });
-      for (const p of pay.data ?? [])
-        items.push({
-          at: (p as any).paid_at,
-          kind: "payment",
-          tone: "text-blue-600",
-          text: `Payment ${money(Number((p as any).amount))} — ${(p as any).students?.profiles?.full_name || "student"}`,
-        });
-      for (const c of com.data ?? [])
-        items.push({
-          at: (c as any).created_at,
-          kind: "complaint",
-          tone: "text-amber-600",
-          text: `Complaint raised — ${(c as any).subject}`,
-        });
-      for (const s of stf.data ?? [])
-        items.push({
-          at: (s as any).created_at,
-          kind: "staff",
-          tone: "text-violet-600",
-          text: `Staff joined — ${(s as any).full_name}`,
-        });
-      return items
-        .filter((x) => x.at)
-        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-        .slice(0, 10);
-    },
-  });
+    : undefined;
+  const efficiency = dash?.efficiency as { thisPct: number; lastPct: number } | undefined;
+  const trend = dash?.trend as any[] | undefined;
+  const byGrade = dash?.byGrade as any[] | undefined;
+  const enrollByGrade = dash?.enrollByGrade as any[] | undefined;
+  const staffMix = dash?.staffMix as { teaching: any[]; byDept: any[] } | undefined;
+  const attTrend = dash?.attTrend as any[] | undefined;
+  const paymentMix = (dash?.paymentMix as any[] | undefined) ?? [];
+  const upcoming = dash?.upcoming as any[] | undefined;
+  const defaulters = dash?.defaulters as any[] | undefined;
+  const activity = dash?.activity as { at: string; text: string; tone: string }[] | undefined;
 
   const netPosition =
     (data?.collectedMonth ?? 0) - (extras?.expenseMonth ?? 0) - (extras?.payrollMonth ?? 0);

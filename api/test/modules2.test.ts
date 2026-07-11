@@ -224,9 +224,9 @@ describe("Reports/Audit module", () => {
   it("admin dashboard aggregates real data; other roles rejected", async () => {
     const res = await get("/reports/admin-dashboard", "admin");
     expect(res.status).toBe(200);
-    expect(res.body.students).toBeGreaterThan(5000);
-    expect(res.body.classes).toBeGreaterThanOrEqual(100);
-    expect(Number(res.body.fees.due)).toBeGreaterThan(0);
+    expect(res.body.studentCount).toBeGreaterThan(5000);
+    expect(res.body.classCount).toBeGreaterThanOrEqual(100);
+    expect(Number(res.body.dueTotal)).toBeGreaterThan(0);
     for (const role of ["teacher", "parent", "student"] as const) {
       expect((await get("/reports/admin-dashboard", role)).status).toBe(403);
     }

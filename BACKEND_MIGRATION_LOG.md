@@ -195,7 +195,7 @@ Supporting API work the classes/children pass: ported the `get_class_stats` DB f
 class create + year/teacher-option helpers; added holiday create; added
 `POST /students/link-parent` (ps_admin_all — the only write policy, so parent
 self-link is rejected exactly as RLS did). module UI checks pass; API suite
-now 69/69 (`cutover.test.ts` covers the new write/aggregate endpoints).
+now 71/71 (`cutover.test.ts` covers the new write/aggregate endpoints).
 
 `grep -rn supabase` on the four flipped pages: **0 references** each.
 
@@ -214,3 +214,5 @@ npm install && npx prisma generate
 npm run start:dev                # http://localhost:3001/api/health
 npm test                         # 19 e2e tests against the DB
 ```
+
+| Admin dashboard | `GET /reports/admin-dashboard` (one endpoint porting ~13 client aggregations) | KPIs (5,212 students, ₹17.9M dues, 207 teachers, net position, fee-collection rate), 6-month revenue/expense trend, fee-by-grade, enrollment, staff mix, 30-day attendance trend, payment-mode donut, defaulters, activity feed — all real; 21 chart surfaces render, no runtime errors |
