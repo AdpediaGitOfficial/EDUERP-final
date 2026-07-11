@@ -75,7 +75,12 @@ export class HrService {
     const total = staff.length;
     const active = staff.filter((s) => s.status === "active").length;
     const onLeave = staff.filter((s) => s.status === "on_leave").length;
-    const teachers = staff.filter((s) => s.department === "Academics").length;
+    // The seed's teaching department is "Academic"; match case-insensitively on
+    // the prefix so "Academic"/"Academics" both count (the old exact "Academics"
+    // check silently returned 0 against the real data).
+    const teachers = staff.filter((s) =>
+      (s.department ?? "").toLowerCase().startsWith("academic"),
+    ).length;
     const present = attn.filter((a) => a.status === "present").length;
     const late = attn.filter((a) => a.status === "late").length;
     const byDept = staff.reduce<Record<string, number>>((acc, s) => {

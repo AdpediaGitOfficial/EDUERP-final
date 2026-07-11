@@ -5,6 +5,7 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, type INestApplication } from "@nestjs/common";
+import { PrismaExceptionFilter } from "../src/common/filters/prisma-exception.filter";
 import cookieParser from "cookie-parser";
 import { AppModule } from "../src/app.module";
 
@@ -32,6 +33,7 @@ beforeAll(async () => {
   app.setGlobalPrefix("api");
   app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalFilters(new PrismaExceptionFilter());
   await app.init();
   http = app.getHttpServer();
   for (const [role, email] of Object.entries(ACCOUNTS)) {
@@ -1992,6 +1994,34 @@ describe("Teacher detail bundle (admin/HR teacher page, 17 tables)", () => {
     expect(d.body.teacher.id).toBe(t.id);
     expect(Array.isArray(d.body.timetable)).toBe(true);
     expect(Array.isArray(d.body.payroll)).toBe(true);
+  });
+});
+
+describe("Pre-deploy hardening: invalid input never 500s", () => {
+  it("a non-UUID :id path param → 400, not 500 (PrismaExceptionFilter)", async () => {
+    for (const p of ["/students/not-a-uuid", "/assets/xyz", "/hr/staff/nope", "/teachers/zzz"]) {
+      const r = await get(p, "admin");
+      expect(r.status).toBe(400);
+    }
+    // A well-formed but absent UUID still 404s (distinct from malformed).
+    expect((await get("/students/00000000-0000-0000-0000-000000000000", "admin")).status).toBe(404);
+  });
+
+  it("an invalid enum in a write body → 400, not 500 (DB CHECK constraint mapped)", async () => {
+    const assetId = (await get("/assets", "admin")).body[0].id;
+    const r = await patch(`/assets/${assetId}`, "admin", { status: "definitely_not_valid" });
+    expect(r.status).toBe(400);
+  });
+});
+
+describe("Pre-deploy: HR dashboard teacher stat reflects real data", () => {
+  it("counts Academic-department staff as teachers (not 0)", async () => {
+    const d = await get("/hr/dashboard", "admin");
+    expect(d.status).toBe(200);
+    // The seed has 180+ Academic-department staff; the old exact "Academics"
+    // filter returned 0. Guard against that regression.
+    expect(d.body.teachers).toBeGreaterThan(0);
+    expect(d.body.nonTeaching).toBe(d.body.total - d.body.teachers);
   });
 });
 
