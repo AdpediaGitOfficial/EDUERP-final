@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,48 +16,42 @@ function Page() {
   const [stopId, setStopId] = useState("");
   const { data: routes } = useQuery({
     queryKey: ["rec-routes"],
-    queryFn: async () => (await supabase.from("transport_routes").select("id,name")).data ?? [],
+    queryFn: async () => apiGet<{ id: string; name: string }[]>("/reception/routes"),
   });
   const { data: stops } = useQuery({
     queryKey: ["rec-stops", routeId],
     enabled: !!routeId,
     queryFn: async () =>
-      (
-        await supabase
-          .from("route_stops")
-          .select("id,name,sequence")
-          .eq("route_id", routeId)
-          .order("sequence")
-      ).data ?? [],
+      apiGet<{ id: string; name: string; sequence: number }[]>(
+        `/reception/routes/${routeId}/stops`,
+      ),
   });
   const { data: students } = useQuery({
     queryKey: ["rec-students"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("students")
-          .select("id, profiles!students_profile_id_fkey(full_name)")
-          .limit(100)
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/students?pageSize=100");
+      return res.rows.map((s) => ({ id: s.id, profiles: { full_name: s.fullName } }));
+    },
   });
   const { data: assignments } = useQuery({
     queryKey: ["rec-assignments"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("route_students")
-          .select(
-            "*, route:route_id(name), stop:stop_id(name), student:student_id(profiles!students_profile_id_fkey(full_name))",
-          )
-          .limit(50)
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/reception/route-students");
+      return rows.map((a) => ({
+        id: a.id,
+        route: { name: a.routeName },
+        stop: { name: a.stopName },
+        student: { profiles: { full_name: a.studentName } },
+      }));
+    },
   });
 
   const assign = useMutation({
     mutationFn: async () =>
-      await supabase
-        .from("route_students")
-        .insert({ route_id: routeId, stop_id: stopId, student_id: studentId }),
+      apiFetch("/reception/route-students", {
+        method: "POST",
+        body: JSON.stringify({ routeId, stopId: stopId || undefined, studentId }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["rec-assignments"] });
       setStudentId("");

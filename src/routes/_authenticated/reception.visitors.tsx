@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,12 +22,31 @@ function Page() {
   });
   const { data } = useQuery({
     queryKey: ["visitors"],
-    queryFn: async () =>
-      (await supabase.from("visitor_logs").select("*").order("check_in", { ascending: false }))
-        .data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/reception/visitors");
+      return rows.map((v) => ({
+        id: v.id,
+        name: v.name,
+        purpose: v.purpose,
+        meeting_person: v.meetingPerson,
+        department: v.department,
+        check_in: v.checkIn,
+        check_out: v.checkOut,
+      }));
+    },
   });
   const checkIn = useMutation({
-    mutationFn: async () => await supabase.from("visitor_logs").insert(form),
+    mutationFn: async () =>
+      apiFetch("/reception/visitors", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.name,
+          purpose: form.purpose,
+          meetingPerson: form.meeting_person || undefined,
+          department: form.department || undefined,
+          idReference: form.id_reference || undefined,
+        }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["visitors"] });
       setForm({ name: "", purpose: "", meeting_person: "", department: "", id_reference: "" });
@@ -35,10 +54,7 @@ function Page() {
   });
   const checkOut = useMutation({
     mutationFn: async (id: string) =>
-      await supabase
-        .from("visitor_logs")
-        .update({ check_out: new Date().toISOString() })
-        .eq("id", id),
+      apiFetch(`/reception/visitors/${id}/checkout`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["visitors"] }),
   });
   const active = (data ?? []).filter((v: any) => !v.check_out);

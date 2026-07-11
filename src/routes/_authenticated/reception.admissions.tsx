@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,17 +42,35 @@ function Page() {
   });
   const { data } = useQuery({
     queryKey: ["adm-enq"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("admission_enquiries")
-          .select("*")
-          .order("enquiry_date", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const rows = await apiGet<any[]>("/reception/admissions");
+      return rows.map((e) => ({
+        id: e.id,
+        student_name: e.studentName,
+        parent_name: e.parentName,
+        parent_phone: e.parentPhone,
+        parent_email: e.parentEmail,
+        grade_applying: e.gradeApplying,
+        enquiry_date: e.enquiryDate,
+        status: e.status,
+        notes: e.notes,
+      }));
+    },
   });
 
   const add = useMutation({
-    mutationFn: async () => await supabase.from("admission_enquiries").insert(form),
+    mutationFn: async () =>
+      apiFetch("/reception/admissions", {
+        method: "POST",
+        body: JSON.stringify({
+          studentName: form.student_name,
+          parentName: form.parent_name || undefined,
+          parentPhone: form.parent_phone || undefined,
+          parentEmail: form.parent_email || undefined,
+          gradeApplying: form.grade_applying || undefined,
+          notes: form.notes || undefined,
+        }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["adm-enq"] });
       setOpen(false);
@@ -70,7 +88,10 @@ function Page() {
   });
   const move = useMutation({
     mutationFn: async (v: { id: string; status: string }) =>
-      await supabase.from("admission_enquiries").update({ status: v.status }).eq("id", v.id),
+      apiFetch(`/reception/admissions/${v.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: v.status }),
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["adm-enq"] }),
   });
 

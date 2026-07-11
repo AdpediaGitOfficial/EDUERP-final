@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { UserPlus, PhoneCall, CheckCircle2, XCircle, Users, Clock } from "lucide-react";
@@ -8,19 +8,13 @@ import { UserPlus, PhoneCall, CheckCircle2, XCircle, Users, Clock } from "lucide
 export const Route = createFileRoute("/_authenticated/reception/")({ component: Page });
 
 function Page() {
-  const { data: enquiries } = useQuery({
-    queryKey: ["rec-enq"],
-    queryFn: async () =>
-      (await supabase.from("admission_enquiries").select("id,status")).data ?? [],
+  const { data } = useQuery({
+    queryKey: ["reception-dashboard"],
+    queryFn: async () => apiGet<any>("/reception/dashboard"),
   });
-  const { data: visitors } = useQuery({
-    queryKey: ["rec-vis"],
-    queryFn: async () =>
-      (await supabase.from("visitor_logs").select("id,check_in,check_out")).data ?? [],
-  });
-  const cnt = (s: string) => (enquiries ?? []).filter((e: any) => e.status === s).length;
-  const active = (visitors ?? []).filter((v: any) => !v.check_out).length;
-  const total = (visitors ?? []).length;
+  const cnt = (s: string) => data?.enquiries?.[s] ?? 0;
+  const active = data?.visitors?.active ?? 0;
+  const total = data?.visitors?.total ?? 0;
   return (
     <>
       <PageHeader

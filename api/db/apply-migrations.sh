@@ -23,4 +23,6 @@ for f in supabase/migrations/*.sql; do
 done
 # Demo payments (online + offline UPI) once the schema + base data are in place.
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/03-payment-demo-seed.sql
+# Reception demo data (routes/stops/assignments, visitors, admission enquiries).
+psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/04-reception-demo-seed.sql
 echo "done."

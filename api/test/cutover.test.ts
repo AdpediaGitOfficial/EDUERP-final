@@ -702,3 +702,67 @@ describe("Complaints: raise, reply, escalate, status (constraint-aligned)", () =
     expect(row).toHaveProperty("admissionNo");
   });
 });
+
+describe("Reception: dashboard, visitors, admissions, transport (desk-scoped)", () => {
+  it("dashboard aggregates enquiry + visitor counts; teacher is rejected", async () => {
+    const dash = await get("/reception/dashboard", "admin");
+    expect(dash.status).toBe(200);
+    expect(dash.body.enquiries).toHaveProperty("new");
+    expect(dash.body.visitors).toHaveProperty("active");
+    expect((await get("/reception/dashboard", "teacher")).status).toBe(403);
+  });
+
+  it("visitor check-in then check-out", async () => {
+    const v = await post("/reception/visitors", "admin", {
+      name: "Spec Visitor",
+      purpose: "Cutover check",
+      meetingPerson: "Front Office",
+    });
+    expect(v.status).toBe(201);
+    const out = await post(`/reception/visitors/${v.body.id}/checkout`, "admin", {});
+    expect(out.status).toBe(201);
+    const list = await get("/reception/visitors", "admin");
+    const row = list.body.find((x: any) => x.id === v.body.id);
+    expect(row.checkOut).not.toBeNull();
+  });
+
+  it("admission enquiry create + pipeline move; invalid status rejected", async () => {
+    const e = await post("/reception/admissions", "admin", {
+      studentName: "Spec Applicant",
+      gradeApplying: "Grade 4",
+    });
+    expect(e.status).toBe(201);
+    expect(
+      (
+        await patch(`/reception/admissions/${e.body.id}/status`, "admin", {
+          status: "converted",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await patch(`/reception/admissions/${e.body.id}/status`, "admin", {
+          status: "bogus",
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it("transport: routes list, stops for a route, and student assignment", async () => {
+    const routes = await get("/reception/routes", "admin");
+    expect(routes.status).toBe(200);
+    if (!routes.body.length) return; // seed present in CI
+    const routeId = routes.body[0].id;
+    const stops = await get(`/reception/routes/${routeId}/stops`, "admin");
+    expect(stops.status).toBe(200);
+    const studentId = (await get("/students?pageSize=1", "admin")).body.rows[0].id;
+    const assigned = await post("/reception/route-students", "admin", {
+      routeId,
+      stopId: stops.body[0]?.id,
+      studentId,
+    });
+    expect(assigned.status).toBe(201);
+    const list = await get("/reception/route-students", "admin");
+    expect(list.body.some((a: any) => a.id === assigned.body.id)).toBe(true);
+  });
+});
