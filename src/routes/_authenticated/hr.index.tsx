@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import {
@@ -34,73 +34,26 @@ import {
 export const Route = createFileRoute("/_authenticated/hr/")({ component: Page });
 
 function Page() {
-  const { data: staff } = useQuery({
-    queryKey: ["hr-staff"],
-    queryFn: async () =>
-      (await supabase.from("staff").select("id,status,designation,department")).data ?? [],
-  });
-  const { data: leaves } = useQuery({
-    queryKey: ["hr-leave-pending"],
-    queryFn: async () =>
-      (await supabase.from("leave_requests").select("id,status,start_date,end_date,days")).data ??
-      [],
-  });
-  const { data: payroll } = useQuery({
-    queryKey: ["hr-payroll-summary"],
-    queryFn: async () =>
-      (await supabase.from("payroll_runs").select("id,status,net_salary,month")).data ?? [],
-  });
-  const { data: jobs } = useQuery({
-    queryKey: ["hr-jobs"],
-    queryFn: async () =>
-      (await supabase.from("job_openings").select("id, status, positions")).data ?? [],
-  });
-  const { data: reviews } = useQuery({
-    queryKey: ["hr-reviews"],
-    queryFn: async () =>
-      (await supabase.from("teacher_performance_reviews").select("rating")).data ?? [],
-  });
-  const { data: attn } = useQuery({
-    queryKey: ["hr-attn"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("teacher_attendance")
-          .select("status, date")
-          .gte("date", new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10))
-      ).data ?? [],
+  const { data } = useQuery({
+    queryKey: ["hr-dashboard"],
+    queryFn: async () => apiGet<any>("/hr/dashboard"),
   });
 
-  const total = staff?.length ?? 0;
-  const active = (staff ?? []).filter((s) => s.status === "active").length;
-  const onLeave = (staff ?? []).filter((s) => s.status === "on_leave").length;
-  const teachers = (staff ?? []).filter((s) => s.department === "Academics").length;
-  const nonTeaching = total - teachers;
-  const newJoiners = (staff ?? []).length; // placeholder — join_date not selected
-  const pendingLeaves = (leaves ?? []).filter((l) => l.status === "pending").length;
-  const pendingPayroll = (payroll ?? []).filter((p) => p.status === "pending").length;
-  const disbursed = (payroll ?? [])
-    .filter((p) => p.status === "paid")
-    .reduce((a, p) => a + Number(p.net_salary || 0), 0);
-  const openPositions = (jobs ?? [])
-    .filter((j: any) => j.status === "open")
-    .reduce((a: number, j: any) => a + Number(j.positions || 0), 0);
-  const avgRating =
-    reviews && reviews.length
-      ? (
-          reviews.reduce((a: number, r: any) => a + Number(r.rating || 0), 0) / reviews.length
-        ).toFixed(1)
-      : "—";
-  const present = (attn ?? []).filter((a: any) => a.status === "present").length;
-  const late = (attn ?? []).filter((a: any) => a.status === "late").length;
-  const attnPct = attn && attn.length ? Math.round((present / attn.length) * 100) : 0;
+  const total = data?.total ?? 0;
+  const active = data?.active ?? 0;
+  const onLeave = data?.onLeave ?? 0;
+  const teachers = data?.teachers ?? 0;
+  const nonTeaching = data?.nonTeaching ?? 0;
+  const newJoiners = total; // placeholder — parity with the original page
+  const pendingLeaves = data?.pendingLeaves ?? 0;
+  const pendingPayroll = data?.pendingPayroll ?? 0;
+  const disbursed = data?.disbursed ?? 0;
+  const openPositions = data?.openPositions ?? 0;
+  const avgRating = data?.avgRating != null ? String(data.avgRating) : "—";
+  const late = data?.lateArrivals ?? 0;
+  const attnPct = data?.attendancePct ?? 0;
 
-  const deptData = Object.entries(
-    (staff ?? []).reduce(
-      (a: Record<string, number>, s: any) => ({ ...a, [s.department]: (a[s.department] ?? 0) + 1 }),
-      {},
-    ),
-  ).map(([name, value]) => ({ name, value }));
+  const deptData: { name: string; value: number }[] = data?.byDepartment ?? [];
   const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6"];
 
   return (

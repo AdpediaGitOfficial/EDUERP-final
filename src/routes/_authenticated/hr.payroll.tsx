@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,13 +11,21 @@ export const Route = createFileRoute("/_authenticated/hr/payroll")({ component: 
 function Page() {
   const { data } = useQuery({
     queryKey: ["hr-payroll-all"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("payroll_runs")
-          .select("*, staff:staff_id(full_name, employee_code, designation)")
-          .order("month", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/hr/payroll-runs?pageSize=200");
+      return res.rows.map((p) => ({
+        id: p.id,
+        net_salary: p.netSalary,
+        status: p.status,
+        month: p.month,
+        pay_date: p.payDate,
+        staff: {
+          full_name: p.staffName,
+          employee_code: p.employeeCode,
+          designation: p.designation,
+        },
+      }));
+    },
   });
   const summary = { total: 0, paid: 0, pending: 0 };
   for (const p of data ?? []) {

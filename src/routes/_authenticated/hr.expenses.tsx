@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,21 +15,25 @@ function Page() {
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ["expense-claims"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("expense_claims")
-          .select("*, staff:staff_id(full_name, employee_code)")
-          .order("claim_date", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/hr/expense-claims?pageSize=200");
+      return res.rows.map((e) => ({
+        id: e.id,
+        category: e.category,
+        amount: e.amount,
+        claim_date: e.claimDate,
+        status: e.status,
+        notes: e.notes,
+        staff: { full_name: e.staffName, employee_code: e.employeeCode },
+      }));
+    },
   });
   const decide = useMutation({
     mutationFn: async (v: { id: string; status: "approved" | "rejected" }) => {
-      const { error } = await supabase
-        .from("expense_claims")
-        .update({ status: v.status })
-        .eq("id", v.id);
-      if (error) throw error;
+      await apiFetch(`/hr/expense-claims/${v.id}/decision`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: v.status }),
+      });
     },
     onSuccess: () => {
       toast.success("Updated");

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,30 +13,30 @@ function Page() {
   const qc = useQueryClient();
   const { data: requests } = useQuery({
     queryKey: ["hr-leave-requests"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("leave_requests")
-          .select("*, staff:staff_id(full_name, employee_code, department)")
-          .order("start_date", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => {
+      const res = await apiGet<{ rows: any[] }>("/hr/leave-requests?pageSize=200");
+      // Map the API's camelCase back to the fields this table renders.
+      return res.rows.map((r) => ({
+        id: r.id,
+        leave_type: r.leaveType,
+        start_date: r.startDate,
+        end_date: r.endDate,
+        days: r.days,
+        status: r.status,
+        staff: { full_name: r.staffName, employee_code: r.employeeCode, department: r.department },
+      }));
+    },
   });
   const { data: balances } = useQuery({
     queryKey: ["hr-leave-balances"],
-    queryFn: async () =>
-      (
-        await supabase
-          .from("leave_balances")
-          .select("*, staff:staff_id(full_name, employee_code)")
-          .order("year", { ascending: false })
-      ).data ?? [],
+    queryFn: async () => apiGet<any[]>("/hr/leave-balances"),
   });
   const decide = useMutation({
     mutationFn: async (v: { id: string; status: "approved" | "rejected" }) =>
-      await supabase
-        .from("leave_requests")
-        .update({ status: v.status, decided_at: new Date().toISOString() })
-        .eq("id", v.id),
+      apiFetch(`/hr/leave-requests/${v.id}/decision`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: v.status }),
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["hr-leave-requests"] }),
   });
   return (

@@ -128,7 +128,7 @@ function GradebookPage() {
     if (!classId) return;
     const fd = new FormData(e.currentTarget);
     try {
-      const { id } = await apiFetch<{ id: string }>("/exams", {
+      const res = await apiFetch("/exams", {
         method: "POST",
         body: JSON.stringify({
           classId,
@@ -139,10 +139,11 @@ function GradebookPage() {
           term: String(fd.get("term") || ""),
         }),
       });
+      const body = res ? await res.json() : null;
       toast.success("Exam created");
       setOpenNew(false);
       setNewSubjectId("");
-      setExamId(id);
+      if (body?.id) setExamId(body.id);
       qc.invalidateQueries({ queryKey: ["gb-exams", classId] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create exam");

@@ -23,6 +23,8 @@ const get = (p: string, r: keyof typeof ACCOUNTS) =>
   request(http).get(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`);
 const post = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
   request(http).post(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
+const patch = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
+  request(http).patch(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
 
 beforeAll(async () => {
   process.env.JWT_SECRET ||= "test-secret-not-for-production";
@@ -368,5 +370,58 @@ describe("assignments: student self-view + self-submit", () => {
     const after = await get("/assignments", "student");
     const updated = after.body.items.find((x: any) => x.id === a.id);
     expect(updated.submission.status).toBe("submitted");
+  });
+});
+
+describe("HR: dashboard + leave/payroll/expense reads and approvals", () => {
+  it("admin dashboard aggregates staff/leave/payroll; non-HR rejected", async () => {
+    const dash = await get("/hr/dashboard", "admin");
+    expect(dash.status).toBe(200);
+    expect(dash.body.total).toBeGreaterThan(0);
+    expect(Array.isArray(dash.body.byDepartment)).toBe(true);
+    expect(typeof dash.body.attendancePct).toBe("number");
+    // hr_admin_* — a teacher has no HR visibility.
+    expect((await get("/hr/dashboard", "teacher")).status).toBe(403);
+  });
+
+  it("payroll/leave/expense lists return the shapes the HR pages render", async () => {
+    const payroll = await get("/hr/payroll-runs?pageSize=5", "admin");
+    expect(payroll.status).toBe(200);
+    expect(payroll.body).toHaveProperty("rows");
+
+    const leave = await get("/hr/leave-requests?pageSize=5", "admin");
+    expect(leave.status).toBe(200);
+    expect(leave.body).toHaveProperty("rows");
+
+    const balances = await get("/hr/leave-balances", "admin");
+    expect(balances.status).toBe(200);
+    expect(Array.isArray(balances.body)).toBe(true);
+
+    const claims = await get("/hr/expense-claims?pageSize=5", "admin");
+    expect(claims.status).toBe(200);
+    expect(claims.body).toHaveProperty("rows");
+  });
+
+  it("admin approves an expense claim (approver_id -> staff FK); teacher rejected", async () => {
+    const claims = await get("/hr/expense-claims?pageSize=50", "admin");
+    const pending = claims.body.rows.find((c: any) => c.status === "pending");
+    // Seed always carries pending claims; guard anyway.
+    if (!pending) return;
+
+    expect(
+      (
+        await patch(`/hr/expense-claims/${pending.id}/decision`, "teacher", {
+          status: "approved",
+        })
+      ).status,
+    ).toBe(403);
+
+    const ok = await patch(`/hr/expense-claims/${pending.id}/decision`, "admin", {
+      status: "approved",
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body.ok).toBe(true);
+    // Re-run safe: once no pending claims remain (persistent local DB), the guard
+    // above returns early; CI runs against a fresh schema every time.
   });
 });

@@ -41,6 +41,11 @@ class DecideLeaveDto {
 export class HrController {
   constructor(@Inject(HrService) private readonly hr: HrService) {}
 
+  @Get("dashboard")
+  dashboard(@CurrentUser() actor: AuthUser) {
+    return this.hr.dashboard(actor);
+  }
+
   @Get("leave-requests")
   leaveRequests(
     @CurrentUser() actor: AuthUser,
@@ -82,5 +87,14 @@ export class HrController {
     @Query("pageSize", new ParseIntPipe({ optional: true })) pageSize?: number,
   ) {
     return this.hr.listExpenseClaims(actor, page ?? 1, Math.min(pageSize ?? 50, 200));
+  }
+
+  @Patch("expense-claims/:id/decision")
+  decideExpense(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: DecideLeaveDto,
+  ) {
+    return this.hr.decideExpenseClaim(actor, id, dto.status);
   }
 }
