@@ -101,3 +101,38 @@ BEGIN
 
   RAISE NOTICE 'Student-profile demo data seeded for the Fernandez family.';
 END $$;
+
+-- Parent-portal notices: the announcements feed on the child detail page reads
+-- audience all / parents / class. The base seed only carries teacher-audience
+-- notices, so add a few parent-facing ones (idempotent by title).
+DO $$
+DECLARE
+  admin_uid uuid;
+  st1_class uuid := (SELECT class_id FROM public.students WHERE id = 'de000000-0000-4000-8000-000000000001');
+BEGIN
+  -- profiles.id == auth.users.id, and announcements.author_id FKs to auth.users.
+  SELECT id INTO admin_uid FROM public.profiles WHERE email = 'admin@greenwood.test' LIMIT 1;
+  IF admin_uid IS NULL THEN RETURN; END IF;
+
+  INSERT INTO public.announcements (title, body, audience, class_id, author_id, created_at)
+  SELECT v.title, v.body, v.audience::announcement_audience, v.class_id, admin_uid, now() - v.ago
+  FROM (VALUES
+    ('Annual Sports Day — 5th August',
+     'The school Annual Sports Day will be held on 5th August. Parents are cordially invited. Students should report by 8:00 AM in house colours.',
+     'all', NULL::uuid, INTERVAL '3 days'),
+    ('Parent–Teacher Meeting this Saturday',
+     'The term PTM is scheduled for this Saturday, 9:00 AM–1:00 PM. Please book a slot with your child''s class teacher via the front office.',
+     'parents', NULL::uuid, INTERVAL '6 days'),
+    ('Fee reminder: Term 2 instalment',
+     'A gentle reminder that the Term 2 fee instalment is due by month end. Pay online from the Fees section to avoid late charges.',
+     'parents', NULL::uuid, INTERVAL '10 days'),
+    ('Class notice: bring art supplies Monday',
+     'Students should bring their art kits on Monday for the craft project. Aprons recommended.',
+     'class', st1_class, INTERVAL '1 day')
+  ) AS v(title, body, audience, class_id, ago)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.announcements a WHERE a.title = v.title
+  );
+
+  RAISE NOTICE 'Parent-portal demo notices seeded.';
+END $$;

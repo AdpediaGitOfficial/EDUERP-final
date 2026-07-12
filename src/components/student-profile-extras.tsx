@@ -36,6 +36,9 @@ import {
   Trash2,
   CheckCircle2,
   ExternalLink,
+  CalendarDays,
+  Megaphone,
+  Clock,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
@@ -894,5 +897,143 @@ export function AdmissionDetailsCard({ studentId }: { studentId: string }) {
         </Card>
       )}
     </div>
+  );
+}
+
+// ======================================================= TIMETABLE TAB ===
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+type TimetableRow = {
+  id: string;
+  dayOfWeek: number;
+  startTime: string | null;
+  endTime: string | null;
+  room: string | null;
+  subjectName: string | null;
+  teacherName: string | null;
+};
+
+/** A child's weekly class timetable — the parent-portal view of /timetable. */
+export function ClassTimetableTab({ studentId }: { studentId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["student-timetable", studentId],
+    queryFn: () => apiGet<TimetableRow[]>(`/students/${studentId}/timetable`),
+  });
+  const rows = data ?? [];
+  const byDay = useMemo(() => {
+    const m = new Map<number, TimetableRow[]>();
+    for (const r of rows) {
+      const arr = m.get(r.dayOfWeek) ?? [];
+      arr.push(r);
+      m.set(r.dayOfWeek, arr);
+    }
+    return m;
+  }, [rows]);
+
+  if (isLoading) {
+    return <Card className="rounded-2xl p-6 text-sm text-muted-foreground">Loading timetable…</Card>;
+  }
+  if (rows.length === 0) {
+    return (
+      <Card className="rounded-2xl p-6 text-sm text-muted-foreground">
+        No timetable is published for this class yet.
+      </Card>
+    );
+  }
+  return (
+    <div>
+      <div className="flex items-center gap-2 font-display font-semibold mb-4">
+        <CalendarDays className="size-4 text-primary" /> Weekly timetable
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {[1, 2, 3, 4, 5, 6].map((d) => {
+          const periods = byDay.get(d) ?? [];
+          if (periods.length === 0) return null;
+          return (
+            <Card key={d} className="rounded-2xl p-5">
+              <div className="font-display font-semibold mb-3">{DAY_NAMES[d]}</div>
+              <ul className="space-y-2">
+                {periods.map((p) => (
+                  <li key={p.id} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium text-sm">{p.subjectName ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 whitespace-nowrap">
+                        <Clock className="size-3" />
+                        {p.startTime ?? "—"}
+                        {p.endTime ? `–${p.endTime}` : ""}
+                      </div>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground flex flex-wrap gap-x-3">
+                      {p.teacherName && <span>{p.teacherName}</span>}
+                      {p.room && <span>{/^room/i.test(p.room) ? p.room : `Room ${p.room}`}</span>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ========================================================= NOTICES TAB ===
+
+type Notice = {
+  id: string;
+  title: string;
+  body: string;
+  audience: string;
+  className: string | null;
+  author: string | null;
+  createdAt: string;
+};
+
+function noticeBadge(audience: string, className: string | null) {
+  if (audience === "class")
+    return (
+      <Badge className="bg-indigo-100 text-indigo-700 border-0">{className ?? "Class"}</Badge>
+    );
+  if (audience === "parents")
+    return <Badge className="bg-emerald-100 text-emerald-700 border-0">Parents</Badge>;
+  return <Badge className="bg-sky-100 text-sky-700 border-0">School-wide</Badge>;
+}
+
+/** Per-child notices feed: school-wide + parent + this child's class notices. */
+export function NoticesTab({ studentId }: { studentId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["student-notices", studentId],
+    queryFn: () => apiGet<Notice[]>(`/students/${studentId}/notices`),
+  });
+  const rows = data ?? [];
+  return (
+    <Card className="rounded-2xl p-6">
+      <div className="flex items-center gap-2 font-display font-semibold mb-4">
+        <Megaphone className="size-4 text-primary" /> Notices
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading notices…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No notices for this student right now.</p>
+      ) : (
+        <ul className="space-y-3">
+          {rows.map((n) => (
+            <li key={n.id} className="rounded-xl border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="font-medium">{n.title}</div>
+                {noticeBadge(n.audience, n.className)}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{n.body}</p>
+              <div className="text-xs text-muted-foreground mt-2">
+                {fmtDateTime(n.createdAt)}
+                {n.author ? ` · ${n.author}` : ""}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

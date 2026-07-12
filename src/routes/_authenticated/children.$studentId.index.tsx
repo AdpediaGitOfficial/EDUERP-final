@@ -37,7 +37,17 @@ import {
 import { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { Users, HeartPulse, BedDouble, ShieldAlert, FileText, History, Bus } from "lucide-react";
+import {
+  Users,
+  HeartPulse,
+  BedDouble,
+  ShieldAlert,
+  FileText,
+  History,
+  Bus,
+  CalendarDays,
+  Megaphone,
+} from "lucide-react";
 import {
   MedicalTab,
   HostelTab,
@@ -45,6 +55,8 @@ import {
   DisciplinaryTab,
   DocumentsTab,
   ActivityTab,
+  ClassTimetableTab,
+  NoticesTab,
   AdmissionDetailsCard,
 } from "@/components/student-profile-extras";
 
@@ -481,6 +493,14 @@ function ChildDetailPage() {
           <TabsTrigger value="hostel">
             <BedDouble className="size-4 mr-1" />
             Hostel
+          </TabsTrigger>
+          <TabsTrigger value="timetable">
+            <CalendarDays className="size-4 mr-1" />
+            Timetable
+          </TabsTrigger>
+          <TabsTrigger value="notices">
+            <Megaphone className="size-4 mr-1" />
+            Notices
           </TabsTrigger>
           <TabsTrigger value="transport">
             <Bus className="size-4 mr-1" />
@@ -1053,6 +1073,12 @@ function ChildDetailPage() {
         </TabsContent>
         <TabsContent value="hostel">
           <HostelTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="timetable">
+          <ClassTimetableTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="notices">
+          <NoticesTab studentId={studentId} />
         </TabsContent>
         <TabsContent value="transport">
           <TransportTab studentId={studentId} />

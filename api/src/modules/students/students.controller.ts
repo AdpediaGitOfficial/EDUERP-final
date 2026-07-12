@@ -190,6 +190,16 @@ export class StudentsController {
     return this.students.transport(actor, id);
   }
 
+  @Get(":id/timetable")
+  timetable(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.students.classTimetable(actor, id);
+  }
+
+  @Get(":id/notices")
+  notices(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.students.notices(actor, id);
+  }
+
   // Downloadable PDF report card (scoped like the dashboard). ?term= filters to
   // one term; omit for a full-year card.
   @Get(":id/report-card.pdf")

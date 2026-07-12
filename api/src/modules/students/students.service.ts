@@ -851,4 +851,96 @@ export class StudentsService {
     });
     return { ok: true, studentId: student.id };
   }
+
+  /**
+   * A child's weekly class timetable, authorized through the student scope so a
+   * parent (or the student, or a class teacher, or admin) can view it. The
+   * global /timetable route is teacher/student-only; this surfaces the same data
+   * per-child on the parent portal without widening that route's audience.
+   */
+  async classTimetable(actor: AuthUser, studentId: string) {
+    const scope = this.scopeFilter(actor);
+    if (scope === null) throw new ForbiddenException();
+    const student = await this.prisma.students.findFirst({
+      where: { AND: [{ id: studentId }, scope] },
+      select: { class_id: true },
+    });
+    if (!student) throw new NotFoundException();
+    if (!student.class_id) return [];
+
+    const rows = await this.prisma.timetable.findMany({
+      where: { class_id: student.class_id },
+      orderBy: [{ day_of_week: "asc" }, { start_time: "asc" }],
+      include: { subjects: { select: { name: true } } },
+    });
+    // teacher_id -> profiles (users has no direct profiles relation).
+    const teacherIds = Array.from(
+      new Set(rows.map((t) => t.teacher_id).filter(Boolean)),
+    ) as string[];
+    const names = teacherIds.length
+      ? new Map(
+          (
+            await this.prisma.profiles.findMany({
+              where: { id: { in: teacherIds } },
+              select: { id: true, full_name: true },
+            })
+          ).map((p) => [p.id, p.full_name]),
+        )
+      : new Map<string, string>();
+    const hhmm = (d: Date | null) => (d ? d.toISOString().slice(11, 16) : null);
+    return rows.map((t) => ({
+      id: t.id,
+      dayOfWeek: t.day_of_week,
+      startTime: hhmm(t.start_time),
+      endTime: hhmm(t.end_time),
+      room: t.room,
+      subjectName: t.subjects?.name ?? null,
+      teacherName: t.teacher_id ? (names.get(t.teacher_id) ?? null) : null,
+    }));
+  }
+
+  /**
+   * Per-child notices feed: school-wide announcements, parent-audience notices,
+   * and class notices for the child's class. Same student scope as the rest of
+   * the child views, so a parent sees exactly the notices relevant to that child.
+   */
+  async notices(actor: AuthUser, studentId: string) {
+    const scope = this.scopeFilter(actor);
+    if (scope === null) throw new ForbiddenException();
+    const student = await this.prisma.students.findFirst({
+      where: { AND: [{ id: studentId }, scope] },
+      select: { class_id: true },
+    });
+    if (!student) throw new NotFoundException();
+
+    const or: Prisma.announcementsWhereInput[] = [{ audience: "all" }, { audience: "parents" }];
+    if (student.class_id) or.push({ audience: "class", class_id: student.class_id });
+
+    const rows = await this.prisma.announcements.findMany({
+      where: { OR: or },
+      orderBy: { created_at: "desc" },
+      take: 30,
+      include: { classes: { select: { name: true, section: true } } },
+    });
+    const authorIds = Array.from(new Set(rows.map((a) => a.author_id).filter(Boolean)));
+    const authors = authorIds.length
+      ? new Map(
+          (
+            await this.prisma.profiles.findMany({
+              where: { id: { in: authorIds } },
+              select: { id: true, full_name: true },
+            })
+          ).map((p) => [p.id, p.full_name]),
+        )
+      : new Map<string, string>();
+    return rows.map((a) => ({
+      id: a.id,
+      title: a.title,
+      body: a.body,
+      audience: a.audience,
+      className: a.classes ? `${a.classes.name} ${a.classes.section ?? ""}`.trim() : null,
+      author: authors.get(a.author_id) ?? null,
+      createdAt: a.created_at.toISOString(),
+    }));
+  }
 }
