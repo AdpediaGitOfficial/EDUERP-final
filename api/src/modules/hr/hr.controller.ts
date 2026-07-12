@@ -56,6 +56,17 @@ class StaffDto {
   @IsOptional() @IsString() join_date?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() confirmation_status?: string;
+  // Personal / statutory record
+  @IsOptional() @IsIn(["male", "female", "other"]) gender?: string;
+  @IsOptional() @IsIn(["single", "married", "divorced", "widowed"]) marital_status?: string;
+  @IsOptional() @IsDateString() dob?: string;
+  @IsOptional() @IsString() blood_group?: string;
+  @IsOptional() @IsString() father_name?: string;
+  @IsOptional() @IsString() mother_name?: string;
+  @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsString() biometric_id?: string;
+  @IsOptional() @IsString() staff_category?: string;
+  @IsOptional() @IsDateString() probation_end_date?: string;
 }
 
 class StatusDto {

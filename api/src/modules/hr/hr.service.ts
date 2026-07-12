@@ -21,6 +21,17 @@ export interface StaffInput {
   join_date?: string;
   status?: string;
   confirmation_status?: string;
+  // Personal / statutory record
+  gender?: string | null;
+  marital_status?: string | null;
+  dob?: string | null;
+  blood_group?: string | null;
+  father_name?: string | null;
+  mother_name?: string | null;
+  address?: string | null;
+  biometric_id?: string | null;
+  staff_category?: string | null;
+  probation_end_date?: string | null;
 }
 export interface DepartmentInput {
   name: string;
@@ -350,6 +361,16 @@ export class HrService {
       join_date: input.join_date ? new Date(input.join_date) : new Date(),
       status: input.status || "active",
       confirmation_status: input.confirmation_status || "probation",
+      gender: input.gender || null,
+      marital_status: input.marital_status || null,
+      dob: input.dob ? new Date(input.dob) : null,
+      blood_group: input.blood_group || null,
+      father_name: input.father_name || null,
+      mother_name: input.mother_name || null,
+      address: input.address || null,
+      biometric_id: input.biometric_id?.trim() || null,
+      staff_category: input.staff_category || null,
+      probation_end_date: input.probation_end_date ? new Date(input.probation_end_date) : null,
     };
   }
 
@@ -359,8 +380,14 @@ export class HrService {
       const row = await this.prisma.staff.create({ data: this.mapStaffInput(input) });
       return { id: row.id };
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
-        throw new ConflictException("That employee code is already in use.");
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        const target = String(e.meta?.target ?? "");
+        throw new ConflictException(
+          target.includes("biometric")
+            ? "That biometric ID is already assigned to another employee."
+            : "That employee code is already in use.",
+        );
+      }
       throw e;
     }
   }
@@ -383,8 +410,14 @@ export class HrService {
       ]);
       return { ok: true };
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
-        throw new ConflictException("That employee code is already in use.");
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        const target = String(e.meta?.target ?? "");
+        throw new ConflictException(
+          target.includes("biometric")
+            ? "That biometric ID is already assigned to another employee."
+            : "That employee code is already in use.",
+        );
+      }
       throw e;
     }
   }

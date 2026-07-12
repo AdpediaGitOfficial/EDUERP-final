@@ -1343,6 +1343,57 @@ describe("HR People: staff directory, detail, departments, designations", () => 
     // so this leaves an inactive EMP-JEST-* row in a persistent local DB; CI is fresh.
   });
 
+  it("persists the extended personal/statutory fields and enforces biometric-ID uniqueness", async () => {
+    const stamp = Date.now();
+    const bio = `BIO-${stamp}`;
+    const created = await post("/hr/staff", "admin", {
+      employee_code: `EMP-BIO-${stamp}`,
+      full_name: "Personal Fields Person",
+      department: "Administration",
+      designation: "Administrator",
+      gender: "female",
+      marital_status: "married",
+      dob: "1990-05-04",
+      blood_group: "O+",
+      father_name: "Father Person",
+      mother_name: "Mother Person",
+      address: "12 Test Lane",
+      biometric_id: bio,
+      staff_category: "administration",
+      probation_end_date: "2024-07-01",
+    });
+    expect(created.status).toBe(201);
+
+    const detail = await get(`/hr/staff/${created.body.id}`, "admin");
+    expect(detail.status).toBe(200);
+    expect(detail.body.staff.gender).toBe("female");
+    expect(detail.body.staff.marital_status).toBe("married");
+    expect(detail.body.staff.father_name).toBe("Father Person");
+    expect(detail.body.staff.mother_name).toBe("Mother Person");
+    expect(detail.body.staff.biometric_id).toBe(bio);
+    expect(detail.body.staff.staff_category).toBe("administration");
+
+    // a second employee cannot reuse the same biometric ID -> clean 409
+    const dupeBio = await post("/hr/staff", "admin", {
+      employee_code: `EMP-BIO2-${stamp}`,
+      full_name: "Clash Person",
+      department: "Administration",
+      designation: "Administrator",
+      biometric_id: bio,
+    });
+    expect(dupeBio.status).toBe(409);
+
+    // an invalid enum value is rejected by validation (400), not silently stored
+    const badEnum = await post("/hr/staff", "admin", {
+      employee_code: `EMP-BAD-${stamp}`,
+      full_name: "Bad Enum",
+      department: "Administration",
+      designation: "Administrator",
+      gender: "unknown",
+    });
+    expect(badEnum.status).toBe(400);
+  });
+
   it("staff detail is visible to the employee themselves but not to other staff", async () => {
     const list = await get("/hr/staff", "admin");
     const teacherStaff = list.body.find(

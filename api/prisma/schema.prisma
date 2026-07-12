@@ -1090,6 +1090,12 @@ model staff {
   skills                                                 String[]                   @default([])
   qualifications                                         Json?
   experience_years                                       Decimal?                   @db.Decimal
+  gender                                                 String?
+  marital_status                                         String?
+  father_name                                            String?
+  mother_name                                            String?
+  biometric_id                                           String?                    @unique
+  staff_category                                         String?
   departments                                            departments[]
   expense_claims_expense_claims_approver_idTostaff       expense_claims[]           @relation("expense_claims_approver_idTostaff")
   expense_claims_expense_claims_staff_idTostaff          expense_claims[]           @relation("expense_claims_staff_idTostaff")

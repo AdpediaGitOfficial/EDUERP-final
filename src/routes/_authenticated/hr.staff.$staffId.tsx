@@ -78,7 +78,19 @@ function Page() {
             <Field label="Join date" value={fmtDate(staff.join_date)} />
             <Field label="Address" value={staff.address ?? "—"} />
             <Field label="Date of birth" value={fmtDate(staff.dob)} />
+            <Field label="Gender" value={staff.gender ? niceLabel(staff.gender) : "—"} />
+            <Field
+              label="Marital status"
+              value={staff.marital_status ? niceLabel(staff.marital_status) : "—"}
+            />
             <Field label="Blood group" value={staff.blood_group} />
+            <Field label="Father's name" value={staff.father_name ?? "—"} />
+            <Field label="Mother's name" value={staff.mother_name ?? "—"} />
+            <Field label="Biometric ID" value={staff.biometric_id ?? "—"} />
+            <Field
+              label="Staff category"
+              value={staff.staff_category ? niceLabel(staff.staff_category) : "—"}
+            />
             <Field
               label="Experience"
               value={staff.experience_years ? `${staff.experience_years} yrs` : "—"}

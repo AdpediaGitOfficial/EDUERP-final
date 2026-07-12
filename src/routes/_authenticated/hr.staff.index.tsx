@@ -43,7 +43,42 @@ const EMPTY = {
   join_date: new Date().toISOString().slice(0, 10),
   status: "active",
   confirmation_status: "probation",
+  // Personal / statutory
+  gender: "",
+  marital_status: "",
+  dob: "",
+  blood_group: "",
+  father_name: "",
+  mother_name: "",
+  address: "",
+  biometric_id: "",
+  staff_category: "",
+  probation_end_date: "",
 };
+
+// class-validator's @IsOptional only skips null/undefined — an empty string on a
+// @IsDateString / @IsIn field would 400. Drop blank optionals before sending.
+const OPTIONAL_KEYS = [
+  "email",
+  "phone",
+  "gender",
+  "marital_status",
+  "dob",
+  "blood_group",
+  "father_name",
+  "mother_name",
+  "address",
+  "biometric_id",
+  "staff_category",
+  "probation_end_date",
+];
+function cleanPayload(form: any) {
+  const out: any = { ...form };
+  for (const k of OPTIONAL_KEYS) {
+    if (out[k] === "" || out[k] == null) delete out[k];
+  }
+  return out;
+}
 
 function Page() {
   const qc = useQueryClient();
@@ -86,12 +121,13 @@ function Page() {
 
   const save = useMutation({
     mutationFn: async () => {
+      const payload = cleanPayload(form);
       const res = editing
         ? await apiFetch(`/hr/staff/${editing.id}`, {
             method: "PATCH",
-            body: JSON.stringify(form),
+            body: JSON.stringify(payload),
           })
-        : await apiFetch("/hr/staff", { method: "POST", body: JSON.stringify(form) });
+        : await apiFetch("/hr/staff", { method: "POST", body: JSON.stringify(payload) });
       if (!res || !res.ok) {
         const body = res ? await res.json().catch(() => null) : null;
         throw new Error(body?.message ?? "Could not save employee");
@@ -144,6 +180,16 @@ function Page() {
       join_date: s.join_date,
       status: s.status,
       confirmation_status: s.confirmation_status ?? "probation",
+      gender: s.gender ?? "",
+      marital_status: s.marital_status ?? "",
+      dob: s.dob ? String(s.dob).slice(0, 10) : "",
+      blood_group: s.blood_group ?? "",
+      father_name: s.father_name ?? "",
+      mother_name: s.mother_name ?? "",
+      address: s.address ?? "",
+      biometric_id: s.biometric_id ?? "",
+      staff_category: s.staff_category ?? "",
+      probation_end_date: s.probation_end_date ? String(s.probation_end_date).slice(0, 10) : "",
     });
     setOpen(true);
   };
@@ -292,42 +338,39 @@ function Page() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit employee" : "Add employee"}</DialogTitle>
           </DialogHeader>
+
+          {/* Identity & role */}
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Identity &amp; role
+          </p>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <Label>Employee code</Label>
+              <Label>
+                Staff ID <span className="text-red-500">*</span>
+              </Label>
               <Input
                 value={form.employee_code}
+                placeholder="e.g. EMP0042"
                 onChange={(e) => setForm({ ...form, employee_code: e.target.value })}
               />
             </div>
             <div>
-              <Label>Full name</Label>
+              <Label>
+                Full name <span className="text-red-500">*</span>
+              </Label>
               <Input
                 value={form.full_name}
                 onChange={(e) => setForm({ ...form, full_name: e.target.value })}
               />
             </div>
             <div>
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Phone</Label>
-              <Input
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Department</Label>
+              <Label>
+                Department <span className="text-red-500">*</span>
+              </Label>
               <Select
                 value={form.department}
                 onValueChange={(v) => setForm({ ...form, department: v })}
@@ -345,7 +388,9 @@ function Page() {
               </Select>
             </div>
             <div>
-              <Label>Designation</Label>
+              <Label>
+                Designation <span className="text-red-500">*</span>
+              </Label>
               <Select
                 value={form.designation}
                 onValueChange={(v) => setForm({ ...form, designation: v })}
@@ -380,6 +425,147 @@ function Page() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>Staff category</Label>
+              <Select
+                value={form.staff_category || undefined}
+                onValueChange={(v) => setForm({ ...form, staff_category: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="teaching">Teaching</SelectItem>
+                  <SelectItem value="non_teaching">Non-teaching</SelectItem>
+                  <SelectItem value="administration">Administration</SelectItem>
+                  <SelectItem value="support">Support</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Personal details */}
+          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Personal details
+          </p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <Label>Gender</Label>
+              <Select
+                value={form.gender || undefined}
+                onValueChange={(v) => setForm({ ...form, gender: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Date of birth</Label>
+              <Input
+                type="date"
+                value={form.dob}
+                onChange={(e) => setForm({ ...form, dob: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Marital status</Label>
+              <Select
+                value={form.marital_status || undefined}
+                onValueChange={(v) => setForm({ ...form, marital_status: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">Single</SelectItem>
+                  <SelectItem value="married">Married</SelectItem>
+                  <SelectItem value="divorced">Divorced</SelectItem>
+                  <SelectItem value="widowed">Widowed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Blood group</Label>
+              <Select
+                value={form.blood_group || undefined}
+                onValueChange={(v) => setForm({ ...form, blood_group: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Father's name</Label>
+              <Input
+                value={form.father_name}
+                onChange={(e) => setForm({ ...form, father_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Mother's name</Label>
+              <Input
+                value={form.mother_name}
+                onChange={(e) => setForm({ ...form, mother_name: e.target.value })}
+              />
+            </div>
+            <div className="col-span-2">
+              <Label>Address</Label>
+              <Input
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Contact & attendance */}
+          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Contact &amp; attendance
+          </p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Phone</Label>
+              <Input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Biometric ID</Label>
+              <Input
+                value={form.biometric_id}
+                placeholder="Attendance-device key"
+                onChange={(e) => setForm({ ...form, biometric_id: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Employment status */}
+          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Employment status
+          </p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <Label>Join date</Label>
               <Input
@@ -417,7 +603,16 @@ function Page() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>Confirmation date</Label>
+              <Input
+                type="date"
+                value={form.probation_end_date}
+                onChange={(e) => setForm({ ...form, probation_end_date: e.target.value })}
+              />
+            </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
