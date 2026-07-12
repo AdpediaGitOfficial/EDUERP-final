@@ -2,9 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
-import { EmptyRow } from "@/components/empty-state";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { DataTable, type Column } from "@/components/data-table";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { badgeClass, daysUntil, fmtDate, niceLabel } from "@/lib/module-util";
+import { daysUntil, fmtDate } from "@/lib/module-util";
 import { Plus, Pencil, ChevronRight } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -76,6 +75,61 @@ function Page() {
     setOpen(true);
   };
 
+  const expiryCell = (date: string | null) => {
+    const d = daysUntil(date);
+    return (
+      <span className="whitespace-nowrap">
+        {fmtDate(date)} {d !== null && d <= 30 && <StatusBadge status="pending" label="Due" />}
+      </span>
+    );
+  };
+
+  const columns: Column<any>[] = [
+    {
+      id: "registration_no",
+      header: "Registration",
+      sortValue: (v) => v.registration_no ?? "",
+      cell: (v) => <span className="font-mono text-xs">{v.registration_no}</span>,
+    },
+    {
+      id: "vehicle_type",
+      header: "Type",
+      sortValue: (v) => v.vehicle_type ?? "",
+      cell: (v) => <span className="capitalize">{v.vehicle_type}</span>,
+    },
+    { id: "model", header: "Model", cell: (v) => v.model ?? "—" },
+    {
+      id: "capacity",
+      header: "Capacity",
+      align: "right",
+      sortValue: (v) => Number(v.capacity) || 0,
+      cell: (v) => v.capacity,
+    },
+    { id: "driver", header: "Driver", cell: (v) => v.drivers?.[0]?.full_name ?? "—" },
+    { id: "route", header: "Route", cell: (v) => v.transport_routes?.[0]?.name ?? "—" },
+    { id: "insurance", header: "Insurance", cell: (v) => expiryCell(v.insurance_expiry) },
+    { id: "permit", header: "Permit", cell: (v) => expiryCell(v.permit_expiry) },
+    {
+      id: "status",
+      header: "Status",
+      sortValue: (v) => v.status ?? "",
+      cell: (v) => <StatusBadge status={v.status} />,
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (v) => (
+        <span className="whitespace-nowrap" data-no-nav onClick={(e) => e.stopPropagation()}>
+          <Button variant="ghost" size="sm" onClick={() => openEdit(v)} aria-label="Edit vehicle">
+            <Pencil className="size-3.5" />
+          </Button>
+          <ChevronRight className="inline size-4 text-muted-foreground" />
+        </span>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -108,83 +162,16 @@ function Page() {
         </Select>
       </div>
 
-      <Card className="rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[760px]">
-            <thead className="bg-muted/40">
-              <tr className="text-left">
-                <th className="p-3">Registration</th>
-                <th className="p-3">Type</th>
-                <th className="p-3">Model</th>
-                <th className="p-3">Capacity</th>
-                <th className="p-3">Driver</th>
-                <th className="p-3">Route</th>
-                <th className="p-3">Insurance</th>
-                <th className="p-3">Permit</th>
-                <th className="p-3">Status</th>
-                <th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((v: any) => {
-                const ins = daysUntil(v.insurance_expiry);
-                const per = daysUntil(v.permit_expiry);
-                return (
-                  <tr
-                    key={v.id}
-                    className="border-t hover:bg-muted/30 cursor-pointer"
-                    onClick={() =>
-                      nav({ to: "/fleet/vehicles/$vehicleId", params: { vehicleId: v.id } })
-                    }
-                  >
-                    <td className="p-3 font-mono text-xs">{v.registration_no}</td>
-                    <td className="p-3 capitalize">{v.vehicle_type}</td>
-                    <td className="p-3">{v.model ?? "—"}</td>
-                    <td className="p-3">{v.capacity}</td>
-                    <td className="p-3">{v.drivers?.[0]?.full_name ?? "—"}</td>
-                    <td className="p-3">{v.transport_routes?.[0]?.name ?? "—"}</td>
-                    <td className="p-3 whitespace-nowrap">
-                      {fmtDate(v.insurance_expiry)}{" "}
-                      {ins !== null && ins <= 30 && (
-                        <Badge className={badgeClass("pending")}>Due</Badge>
-                      )}
-                    </td>
-                    <td className="p-3 whitespace-nowrap">
-                      {fmtDate(v.permit_expiry)}{" "}
-                      {per !== null && per <= 30 && (
-                        <Badge className={badgeClass("pending")}>Due</Badge>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <Badge className={badgeClass(v.status)}>{niceLabel(v.status)}</Badge>
-                    </td>
-                    <td className="p-3 text-right whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEdit(v);
-                        }}
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <ChevronRight className="inline size-4 text-muted-foreground" />
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <EmptyRow
-                  colSpan={10}
-                  title="No vehicles found"
-                  hint="Add a vehicle to start building your fleet."
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <DataTable
+        rows={data === undefined ? undefined : filtered}
+        columns={columns}
+        getRowId={(v) => v.id}
+        loading={data === undefined}
+        onRowClick={(v) => nav({ to: "/fleet/vehicles/$vehicleId", params: { vehicleId: v.id } })}
+        initialSort={{ id: "registration_no", dir: "asc" }}
+        emptyTitle="No vehicles found"
+        emptyHint="Add a vehicle to start building your fleet."
+      />
 
       <VehicleDialog
         open={open}
