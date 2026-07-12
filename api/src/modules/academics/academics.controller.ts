@@ -36,6 +36,16 @@ class CreateClassDto {
 export class AcademicsController {
   constructor(@Inject(AcademicsService) private readonly academics: AcademicsService) {}
 
+  @Get("academics/dashboard")
+  academicDashboard(@CurrentUser() actor: AuthUser, @Query("year") year?: string) {
+    return this.academics.academicDashboard(actor, year);
+  }
+
+  @Get("academics/integrity")
+  academicIntegrity(@CurrentUser() actor: AuthUser, @Query("year") year?: string) {
+    return this.academics.academicIntegrity(actor, year);
+  }
+
   @Get("classes")
   listClasses(@CurrentUser() actor: AuthUser, @Query("year") year?: string) {
     return this.academics.listClasses(actor, year);

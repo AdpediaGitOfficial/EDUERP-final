@@ -423,4 +423,351 @@ export class AcademicsService {
       room: t.room,
     }));
   }
+
+  // ── Academic command centre: live dashboard + data-integrity audit ──────────
+  private requireAcademicAdmin(actor: AuthUser) {
+    if (!actor.roles.some((r) => r === "admin" || r === "principal" || r === "coordinator"))
+      throw new ForbiddenException();
+  }
+
+  /**
+   * The "current" session. There is no sessions entity yet (Phase 2), so we resolve
+   * it as the academic_year whose classes hold the most active students — the live
+   * session in practice — falling back to the latest year string when none enrol.
+   */
+  private async currentYear(): Promise<string | null> {
+    const byYear = await this.prisma.$queryRaw<{ academic_year: string; n: bigint }[]>`
+      SELECT c.academic_year, COUNT(s.id)::bigint AS n
+      FROM public.classes c
+      LEFT JOIN public.students s ON s.class_id = c.id AND s.status = 'active'
+      WHERE c.academic_year IS NOT NULL
+      GROUP BY c.academic_year
+      ORDER BY n DESC, c.academic_year DESC
+      LIMIT 1`;
+    if (byYear.length && Number(byYear[0].n) > 0) return byYear[0].academic_year;
+    const rows = await this.prisma.classes.findMany({
+      select: { academic_year: true },
+      distinct: ["academic_year"],
+    });
+    const years = rows.map((r) => r.academic_year).filter(Boolean).sort();
+    return years.length ? years[years.length - 1] : null;
+  }
+
+  private startOfToday() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  /**
+   * One aggregation powering the Academic Management dashboard — every figure is
+   * derived live from the real relationships (classes/sections/students/teachers/
+   * subjects/timetable/attendance), scoped to a session (academic_year).
+   */
+  async academicDashboard(actor: AuthUser, year?: string) {
+    this.requireAcademicAdmin(actor);
+    const session = year && year !== "all" ? year : ((await this.currentYear()) ?? "");
+    const classes = await this.prisma.classes.findMany({
+      where: session ? { academic_year: session } : {},
+      include: { _count: { select: { students: true, subjects: true, timetable: true } } },
+      orderBy: [{ name: "asc" }, { section: "asc" }],
+    });
+    const classIds = classes.map((c) => c.id);
+
+    const [
+      sessionsRaw,
+      activeStudents,
+      unassignedStudents,
+      totalTeachers,
+      teacherIdRows,
+      subjectCount,
+      attnToday,
+      teacherAttnToday,
+      genderRows,
+      teacherLoadRows,
+      classTeacherProfiles,
+    ] = await Promise.all([
+      this.prisma.classes.groupBy({ by: ["academic_year"], _count: { _all: true } }),
+      classIds.length
+        ? this.prisma.students.count({ where: { class_id: { in: classIds }, status: "active" } })
+        : Promise.resolve(0),
+      this.prisma.students.count({ where: { class_id: null, status: "active" } }),
+      this.prisma.teachers.count(),
+      this.prisma.teacher_classes.findMany({
+        where: classIds.length ? { class_id: { in: classIds } } : {},
+        select: { teacher_id: true },
+        distinct: ["teacher_id"],
+      }),
+      classIds.length
+        ? this.prisma.subjects.count({ where: { class_id: { in: classIds } } })
+        : Promise.resolve(0),
+      this.prisma.attendance.groupBy({
+        by: ["status"],
+        where: { date: { gte: this.startOfToday() }, ...(classIds.length ? { class_id: { in: classIds } } : {}) },
+        _count: { _all: true },
+      }),
+      this.prisma.teacher_attendance.groupBy({
+        by: ["status"],
+        where: { date: { gte: this.startOfToday() } },
+        _count: { _all: true },
+      }),
+      classIds.length
+        ? this.prisma.students.groupBy({
+            by: ["gender"],
+            where: { class_id: { in: classIds }, status: "active" },
+            _count: { _all: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.timetable.groupBy({
+        by: ["teacher_id"],
+        where: classIds.length ? { class_id: { in: classIds } } : {},
+        _count: { _all: true },
+      }),
+      this.prisma.profiles.findMany({
+        where: { id: { in: classes.map((c) => c.class_teacher_id).filter((x): x is string => !!x) } },
+        select: { id: true, full_name: true },
+      }),
+    ]);
+
+    const teacherName = new Map(classTeacherProfiles.map((p) => [p.id, p.full_name]));
+
+    // Per class-section flags.
+    const withoutClassTeacher = classes.filter((c) => !c.class_teacher_id);
+    const withoutTimetable = classes.filter((c) => c._count.timetable === 0);
+    const withoutSubjects = classes.filter((c) => c._count.subjects === 0);
+    const timetableCompletion =
+      classes.length > 0
+        ? Math.round(((classes.length - withoutTimetable.length) / classes.length) * 100)
+        : 0;
+
+    // Attendance today (student).
+    const attnTotal = attnToday.reduce((s, r) => s + r._count._all, 0);
+    const attnPresent = attnToday
+      .filter((r) => r.status === "present" || r.status === "late")
+      .reduce((s, r) => s + r._count._all, 0);
+    const teacherAttnTotal = teacherAttnToday.reduce((s, r) => s + r._count._all, 0);
+    const teacherAttnPresent = teacherAttnToday
+      .filter((r) => r.status === "present" || r.status === "late")
+      .reduce((s, r) => s + r._count._all, 0);
+
+    // Charts.
+    const byClassName = new Map<string, number>();
+    for (const c of classes)
+      byClassName.set(c.name, (byClassName.get(c.name) ?? 0) + c._count.students);
+    const studentsByClass = [...byClassName.entries()].map(([name, count]) => ({ name, count }));
+
+    const genderRatio = genderRows.map((g) => ({
+      gender: g.gender ?? "unknown",
+      count: g._count._all,
+    }));
+
+    // Teacher workload — top teachers by weekly period count.
+    const loadProfiles = await this.prisma.profiles.findMany({
+      where: { id: { in: teacherLoadRows.map((t) => t.teacher_id).filter((x): x is string => !!x) } },
+      select: { id: true, full_name: true },
+    });
+    const loadName = new Map(loadProfiles.map((p) => [p.id, p.full_name]));
+    const teacherWorkload = teacherLoadRows
+      .filter((t) => t.teacher_id)
+      .map((t) => ({ name: loadName.get(t.teacher_id!) ?? "—", periods: t._count._all }))
+      .sort((a, b) => b.periods - a.periods)
+      .slice(0, 10);
+
+    // Class & section overview grouped by class name.
+    const overviewMap = new Map<
+      string,
+      { name: string; sections: string[]; inCharge: string | null; students: number }
+    >();
+    for (const c of classes) {
+      const g = overviewMap.get(c.name) ?? { name: c.name, sections: [], inCharge: null, students: 0 };
+      if (c.section) g.sections.push(c.section);
+      g.students += c._count.students;
+      if (!g.inCharge && c.class_teacher_id) g.inCharge = teacherName.get(c.class_teacher_id) ?? null;
+      overviewMap.set(c.name, g);
+    }
+    const classSectionOverview = [...overviewMap.values()].map((g) => ({
+      ...g,
+      sections: g.sections.sort(),
+    }));
+
+    const teacherCount = Math.max(teacherIdRows.length, 0);
+    return {
+      session,
+      sessions: sessionsRaw
+        .map((s) => ({ year: s.academic_year, students: s._count._all }))
+        .sort((a, b) => (a.year < b.year ? 1 : -1)),
+      stats: {
+        totalClasses: overviewMap.size,
+        totalSections: classes.length,
+        totalStudents: activeStudents,
+        totalTeachers,
+        studentTeacherRatio:
+          totalTeachers > 0 ? Math.round((activeStudents / totalTeachers) * 10) / 10 : 0,
+        activeSubjects: subjectCount,
+        timetableCompletion,
+        attendanceToday: { present: attnPresent, total: attnTotal },
+        teacherAttendanceToday: { present: teacherAttnPresent, total: teacherAttnTotal },
+        pendingTeacherAllocation: withoutClassTeacher.length,
+        classesWithoutClassTeacher: withoutClassTeacher.length,
+        classesWithoutTimetable: withoutTimetable.length,
+        classesWithoutSubjects: withoutSubjects.length,
+        unassignedStudents,
+        studentsToPromote: activeStudents,
+        assignedTeachers: teacherCount,
+      },
+      charts: { studentsByClass, genderRatio, teacherWorkload },
+      classSectionOverview,
+      alerts: {
+        classesWithoutTimetable: withoutTimetable.map((c) =>
+          `${c.name} ${c.section ?? ""}`.trim(),
+        ),
+        classesWithoutClassTeacher: withoutClassTeacher.map((c) =>
+          `${c.name} ${c.section ?? ""}`.trim(),
+        ),
+      },
+    };
+  }
+
+  /**
+   * Data-integrity audit for the academic domain — surfaces the exact conditions
+   * the acceptance criteria forbid (duplicate rolls, orphan/unassigned records,
+   * timetable conflicts). Read-only; returns counts plus a sample of offenders.
+   */
+  async academicIntegrity(actor: AuthUser, year?: string) {
+    this.requireAcademicAdmin(actor);
+    const session = year && year !== "all" ? year : ((await this.currentYear()) ?? "");
+    const classes = await this.prisma.classes.findMany({
+      where: session ? { academic_year: session } : {},
+      include: { _count: { select: { subjects: true, timetable: true } } },
+    });
+    const classIds = classes.map((c) => c.id);
+
+    // Duplicate roll numbers within the same class.
+    const dupRolls = classIds.length
+      ? await this.prisma.$queryRaw<{ class_id: string; roll_no: string; n: bigint }[]>`
+          SELECT class_id, roll_no, COUNT(*)::bigint AS n
+          FROM public.students
+          WHERE roll_no IS NOT NULL AND class_id = ANY(${classIds}::uuid[])
+          GROUP BY class_id, roll_no
+          HAVING COUNT(*) > 1
+          ORDER BY n DESC
+          LIMIT 25`
+      : [];
+
+    // Teacher double-booked: same teacher, same day, overlapping times.
+    const teacherConflicts = classIds.length
+      ? await this.prisma.$queryRaw<
+          { teacher_id: string; day_of_week: number; a: string; b: string }[]
+        >`
+          SELECT t1.teacher_id, t1.day_of_week,
+                 (t1.start_time || '-' || t1.end_time) AS a,
+                 (t2.start_time || '-' || t2.end_time) AS b
+          FROM public.timetable t1
+          JOIN public.timetable t2
+            ON t1.teacher_id = t2.teacher_id
+           AND t1.day_of_week = t2.day_of_week
+           AND t1.id < t2.id
+           AND t1.start_time < t2.end_time
+           AND t1.end_time > t2.start_time
+          WHERE t1.teacher_id IS NOT NULL
+            AND t1.class_id = ANY(${classIds}::uuid[])
+          LIMIT 25`
+      : [];
+
+    // Room double-booked: same non-null room, same day, overlapping times.
+    const roomConflicts = classIds.length
+      ? await this.prisma.$queryRaw<{ room: string; day_of_week: number }[]>`
+          SELECT t1.room, t1.day_of_week
+          FROM public.timetable t1
+          JOIN public.timetable t2
+            ON t1.room = t2.room
+           AND t1.day_of_week = t2.day_of_week
+           AND t1.id < t2.id
+           AND t1.start_time < t2.end_time
+           AND t1.end_time > t2.start_time
+          WHERE t1.room IS NOT NULL AND t1.room <> ''
+            AND t1.class_id = ANY(${classIds}::uuid[])
+          LIMIT 25`
+      : [];
+
+    // Class double-booked: same class in two places at once.
+    const classConflicts = classIds.length
+      ? await this.prisma.$queryRaw<{ class_id: string; day_of_week: number }[]>`
+          SELECT t1.class_id, t1.day_of_week
+          FROM public.timetable t1
+          JOIN public.timetable t2
+            ON t1.class_id = t2.class_id
+           AND t1.day_of_week = t2.day_of_week
+           AND t1.id < t2.id
+           AND t1.start_time < t2.end_time
+           AND t1.end_time > t2.start_time
+          WHERE t1.class_id = ANY(${classIds}::uuid[])
+          LIMIT 25`
+      : [];
+
+    const studentsWithoutClass = await this.prisma.students.count({
+      where: { class_id: null, status: "active" },
+    });
+    const classesWithoutSubjects = classes.filter((c) => c._count.subjects === 0);
+    const classesWithoutTimetable = classes.filter((c) => c._count.timetable === 0);
+
+    const checks = [
+      {
+        key: "duplicate_rolls",
+        label: "Duplicate roll numbers within a class",
+        count: dupRolls.length,
+        ok: dupRolls.length === 0,
+        samples: dupRolls.map((d) => `roll ${d.roll_no} ×${Number(d.n)}`),
+      },
+      {
+        key: "students_without_class",
+        label: "Active students not assigned to a class",
+        count: studentsWithoutClass,
+        ok: studentsWithoutClass === 0,
+        samples: [],
+      },
+      {
+        key: "teacher_conflicts",
+        label: "Teacher double-booked in the timetable",
+        count: teacherConflicts.length,
+        ok: teacherConflicts.length === 0,
+        samples: teacherConflicts.slice(0, 10).map((c) => `day ${c.day_of_week}: ${c.a} vs ${c.b}`),
+      },
+      {
+        key: "room_conflicts",
+        label: "Room double-booked in the timetable",
+        count: roomConflicts.length,
+        ok: roomConflicts.length === 0,
+        samples: roomConflicts.slice(0, 10).map((c) => `${c.room} (day ${c.day_of_week})`),
+      },
+      {
+        key: "class_conflicts",
+        label: "Class scheduled in two places at once",
+        count: classConflicts.length,
+        ok: classConflicts.length === 0,
+        samples: [],
+      },
+      {
+        key: "classes_without_subjects",
+        label: "Class-sections with no subjects",
+        count: classesWithoutSubjects.length,
+        ok: classesWithoutSubjects.length === 0,
+        samples: classesWithoutSubjects.slice(0, 10).map((c) => `${c.name} ${c.section ?? ""}`.trim()),
+      },
+      {
+        key: "classes_without_timetable",
+        label: "Class-sections with no timetable",
+        count: classesWithoutTimetable.length,
+        ok: classesWithoutTimetable.length === 0,
+        samples: classesWithoutTimetable.slice(0, 10).map((c) => `${c.name} ${c.section ?? ""}`.trim()),
+      },
+    ];
+
+    return {
+      session,
+      healthy: checks.every((c) => c.ok),
+      issueCount: checks.filter((c) => !c.ok).length,
+      checks,
+    };
+  }
 }

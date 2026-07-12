@@ -2791,3 +2791,68 @@ describe("HR: performance appraisals (criteria → cycle → scored review)", ()
     expect((await get("/hr/appraisals", "teacher")).status).toBe(403);
   });
 });
+
+describe("Academics: command-centre dashboard + integrity audit", () => {
+  it("dashboard aggregates live academic stats for admin; teacher 403", async () => {
+    const res = await get("/academics/dashboard", "admin");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("session");
+    const s = res.body.stats;
+    expect(s).toHaveProperty("totalClasses");
+    expect(s).toHaveProperty("totalSections");
+    expect(s).toHaveProperty("totalStudents");
+    expect(s).toHaveProperty("studentTeacherRatio");
+    expect(s).toHaveProperty("timetableCompletion");
+    expect(s.timetableCompletion).toBeGreaterThanOrEqual(0);
+    expect(s.timetableCompletion).toBeLessThanOrEqual(100);
+    // charts + overview are arrays
+    expect(Array.isArray(res.body.charts.studentsByClass)).toBe(true);
+    expect(Array.isArray(res.body.classSectionOverview)).toBe(true);
+    // the resolved current session has the most students of any session
+    const sessions = res.body.sessions as { year: string; students: number }[];
+    if (sessions.length > 1) {
+      const current = sessions.find((x) => x.year === res.body.session);
+      const maxStudents = Math.max(...sessions.map((x) => x.students));
+      expect(current?.students).toBe(maxStudents);
+    }
+    expect((await get("/academics/dashboard", "teacher")).status).toBe(403);
+  });
+
+  it("dashboard student count matches the sum of the class overview", async () => {
+    const res = await get("/academics/dashboard", "admin");
+    const overviewSum = (res.body.classSectionOverview as { students: number }[]).reduce(
+      (a, c) => a + c.students,
+      0,
+    );
+    expect(res.body.stats.totalStudents).toBe(overviewSum);
+  });
+
+  it("integrity audit returns the required checks and a health verdict; teacher 403", async () => {
+    const res = await get("/academics/integrity", "admin");
+    expect(res.status).toBe(200);
+    expect(typeof res.body.healthy).toBe("boolean");
+    const keys = (res.body.checks as { key: string }[]).map((c) => c.key);
+    for (const k of [
+      "duplicate_rolls",
+      "students_without_class",
+      "teacher_conflicts",
+      "room_conflicts",
+      "class_conflicts",
+      "classes_without_timetable",
+    ]) {
+      expect(keys).toContain(k);
+    }
+    // healthy iff no failing checks
+    const failing = (res.body.checks as { ok: boolean }[]).filter((c) => !c.ok).length;
+    expect(res.body.healthy).toBe(failing === 0);
+    expect(res.body.issueCount).toBe(failing);
+    expect((await get("/academics/integrity", "teacher")).status).toBe(403);
+  });
+
+  it("integrity audit finds no duplicate roll numbers in the demo data", async () => {
+    const res = await get("/academics/integrity", "admin");
+    const dup = (res.body.checks as any[]).find((c) => c.key === "duplicate_rolls");
+    expect(dup.count).toBe(0);
+    expect(dup.ok).toBe(true);
+  });
+});

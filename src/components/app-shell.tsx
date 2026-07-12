@@ -60,6 +60,7 @@ const NAV: NavItem[] = [
   { to: "/admissions", label: "Admissions", icon: ClipboardList, roles: ["admin", "reception"] },
   { to: "/student-categories", label: "Student Categories", icon: Tags, roles: ["admin"] },
   { to: "/custom-fields", label: "Custom Fields", icon: ListPlus, roles: ["admin"] },
+  { to: "/academics", label: "Academics", icon: BookOpen, roles: ["admin"] },
   { to: "/classes", label: "Classes", icon: School, roles: ["admin"] },
   { to: "/timetable", label: "Timetable", icon: CalendarDays, roles: ["teacher", "student"] },
   { to: "/attendance", label: "Attendance", icon: ClipboardCheck, roles: ["teacher"] },
