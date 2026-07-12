@@ -1930,6 +1930,25 @@ model hr_appraisal_ratings {
   @@schema("public")
 }
 
+model promotion_records {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_id      String   @db.Uuid
+  student_id    String   @db.Uuid
+  from_class_id String?  @db.Uuid
+  to_class_id   String?  @db.Uuid
+  from_session  String?
+  to_session    String?
+  result        String   @default("promoted")
+  notes         String?
+  created_by    String?  @db.Uuid
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([batch_id])
+  @@index([student_id])
+  @@index([from_session])
+  @@schema("public")
+}
+
 model elective_offerings {
   id            String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name          String

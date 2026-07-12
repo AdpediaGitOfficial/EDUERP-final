@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsIn,
@@ -20,7 +21,9 @@ import {
   IsUUID,
   Min,
   MinLength,
+  ValidateNested,
 } from "class-validator";
+import { Type } from "class-transformer";
 import { AcademicsService } from "./academics.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
@@ -67,6 +70,19 @@ class SubjectDto {
 }
 class SubjectActiveDto {
   @IsBoolean() is_active: boolean;
+}
+
+class PromotionItemDto {
+  @IsUUID() student_id: string;
+  @IsIn(["promoted", "detained", "passed_out"]) result: string;
+}
+class ExecutePromotionDto {
+  @IsUUID() from_class_id: string;
+  @IsOptional() @IsUUID() to_class_id?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PromotionItemDto)
+  promotions: PromotionItemDto[];
 }
 
 class ElectiveOfferingDto {
@@ -220,6 +236,21 @@ export class AcademicsController {
   @Get("classes/:id")
   getClass(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.academics.getClass(actor, id);
+  }
+
+  @Get("academics/promotion/preview")
+  promotionPreview(@CurrentUser() actor: AuthUser, @Query("fromClassId") fromClassId: string) {
+    return this.academics.promotionPreview(actor, fromClassId);
+  }
+
+  @Post("academics/promotion/execute")
+  executePromotion(@CurrentUser() actor: AuthUser, @Body() dto: ExecutePromotionDto) {
+    return this.academics.executePromotion(actor, dto);
+  }
+
+  @Get("academics/promotion/register")
+  promotionRegister(@CurrentUser() actor: AuthUser, @Query("session") session?: string) {
+    return this.academics.promotionRegister(actor, session);
   }
 
   @Get("academics/electives")

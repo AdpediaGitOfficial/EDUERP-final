@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
@@ -1179,6 +1180,157 @@ export class AcademicsService {
       );
     await this.prisma.classrooms.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // ── Promotion engine ────────────────────────────────────────────────────────
+
+  /** Students of a source class-section, as promotion candidates. */
+  async promotionPreview(actor: AuthUser, fromClassId: string) {
+    this.requireAcademicAdmin(actor);
+    const cls = await this.prisma.classes.findUnique({ where: { id: fromClassId } });
+    if (!cls) throw new NotFoundException("Class not found");
+    const students = await this.prisma.students.findMany({
+      where: { class_id: fromClassId, status: "active" },
+      select: { id: true, roll_no: true, admission_no: true, profiles: { select: { full_name: true } } },
+      orderBy: { roll_no: "asc" },
+    });
+    return {
+      fromClass: { id: cls.id, name: `${cls.name} ${cls.section ?? ""}`.trim(), session: cls.academic_year },
+      students: students.map((s) => ({
+        id: s.id,
+        name: s.profiles?.full_name ?? "—",
+        rollNo: s.roll_no,
+        admissionNo: s.admission_no,
+      })),
+    };
+  }
+
+  /**
+   * Execute a promotion run. Promoted students move to the target class-section
+   * (in its session); detained students keep their class. Rolls carry over — the
+   * integrity audit surfaces any clash in the target so they can be reassigned.
+   * Every decision is recorded in the register.
+   */
+  async executePromotion(
+    actor: AuthUser,
+    input: {
+      from_class_id: string;
+      to_class_id?: string | null;
+      promotions: { student_id: string; result: string }[];
+    },
+  ) {
+    this.requireAcademicAdmin(actor);
+    const fromClass = await this.prisma.classes.findUnique({ where: { id: input.from_class_id } });
+    if (!fromClass) throw new NotFoundException("Source class not found");
+
+    // A promotion-locked source session cannot be promoted from.
+    const fromSession = await this.prisma.academic_sessions.findFirst({
+      where: { name: fromClass.academic_year },
+    });
+    if (fromSession?.promotion_locked)
+      throw new BadRequestException("The source session is promotion-locked.");
+
+    const promoteResults = input.promotions.filter((p) => p.result === "promoted");
+    let toClass: { id: string; academic_year: string } | null = null;
+    if (promoteResults.length > 0) {
+      if (!input.to_class_id)
+        throw new BadRequestException("A target class is required to promote students.");
+      const tc = await this.prisma.classes.findUnique({ where: { id: input.to_class_id } });
+      if (!tc) throw new NotFoundException("Target class not found");
+      if (tc.id === fromClass.id)
+        throw new BadRequestException("The target class must differ from the source.");
+      toClass = { id: tc.id, academic_year: tc.academic_year };
+    }
+
+    const actorStaff = await this.prisma.profiles.findUnique({ where: { id: actor.id } });
+    const batchId = randomUUID();
+    const ops: Prisma.PrismaPromise<unknown>[] = [];
+    for (const p of input.promotions) {
+      const isPromote = p.result === "promoted";
+      ops.push(
+        this.prisma.promotion_records.create({
+          data: {
+            batch_id: batchId,
+            student_id: p.student_id,
+            from_class_id: fromClass.id,
+            to_class_id: isPromote ? (toClass?.id ?? null) : null,
+            from_session: fromClass.academic_year,
+            to_session: isPromote ? (toClass?.academic_year ?? null) : fromClass.academic_year,
+            result: p.result,
+            created_by: actorStaff?.id ?? null,
+          },
+        }),
+      );
+      if (isPromote && toClass) {
+        ops.push(
+          this.prisma.students.update({
+            where: { id: p.student_id },
+            data: { class_id: toClass.id },
+          }),
+        );
+      }
+    }
+    await this.prisma.$transaction(ops);
+    return {
+      batchId,
+      promoted: promoteResults.length,
+      detained: input.promotions.length - promoteResults.length,
+    };
+  }
+
+  /** The promotion register — decisions grouped into batches, newest first. */
+  async promotionRegister(actor: AuthUser, session?: string) {
+    this.requireAcademicAdmin(actor);
+    const rows = await this.prisma.promotion_records.findMany({
+      where: session && session !== "all" ? { from_session: session } : {},
+      orderBy: { created_at: "desc" },
+      take: 500,
+    });
+    const [students, classes] = await Promise.all([
+      this.prisma.students.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.student_id))] } },
+        select: { id: true, profiles: { select: { full_name: true } } },
+      }),
+      this.prisma.classes.findMany({
+        where: {
+          id: {
+            in: [
+              ...new Set(
+                rows.flatMap((r) => [r.from_class_id, r.to_class_id].filter((x): x is string => !!x)),
+              ),
+            ],
+          },
+        },
+        select: { id: true, name: true, section: true },
+      }),
+    ]);
+    const sn = new Map(students.map((s) => [s.id, s.profiles?.full_name ?? "—"]));
+    const cn = new Map(classes.map((c) => [c.id, `${c.name} ${c.section ?? ""}`.trim()]));
+    const batches = new Map<
+      string,
+      { batchId: string; date: Date; fromSession: string | null; toSession: string | null; promoted: number; detained: number; rows: any[] }
+    >();
+    for (const r of rows) {
+      const b = batches.get(r.batch_id) ?? {
+        batchId: r.batch_id,
+        date: r.created_at,
+        fromSession: r.from_session,
+        toSession: r.to_session,
+        promoted: 0,
+        detained: 0,
+        rows: [],
+      };
+      if (r.result === "promoted") b.promoted += 1;
+      else b.detained += 1;
+      b.rows.push({
+        studentName: sn.get(r.student_id) ?? "—",
+        fromClass: r.from_class_id ? (cn.get(r.from_class_id) ?? "—") : "—",
+        toClass: r.to_class_id ? (cn.get(r.to_class_id) ?? "—") : "—",
+        result: r.result,
+      });
+      batches.set(r.batch_id, b);
+    }
+    return [...batches.values()];
   }
 
   // ── Elective offerings + enrolment (seats + waitlist) ───────────────────────

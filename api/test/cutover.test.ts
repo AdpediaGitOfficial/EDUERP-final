@@ -3255,3 +3255,73 @@ describe("Academics: elective enrolment (seats + waitlist)", () => {
     expect((await del7(`/academics/electives/${offId}`, "admin")).status).toBe(200);
   });
 });
+
+describe("Academics: promotion engine", () => {
+  it("promotes + detains, updates class, records the register; guards; RBAC", async () => {
+    const classes = (await get("/classes", "admin")).body as any[];
+    // source: a class with >= 2 active students; target: a different class
+    let fromId = "";
+    let students: any[] = [];
+    for (const c of classes) {
+      const pv = await get(`/academics/promotion/preview?fromClassId=${c.id}`, "admin");
+      if (pv.body.students?.length >= 2) {
+        fromId = c.id;
+        students = pv.body.students;
+        break;
+      }
+    }
+    expect(fromId).toBeTruthy();
+    const toId = classes.find((c) => c.id !== fromId).id;
+    const [s1, s2] = students;
+
+    // teacher cannot run
+    expect(
+      (await post("/academics/promotion/execute", "teacher", {
+        from_class_id: fromId,
+        to_class_id: toId,
+        promotions: [{ student_id: s1.id, result: "promoted" }],
+      })).status,
+    ).toBe(403);
+
+    // promoting without a target -> 400
+    expect(
+      (await post("/academics/promotion/execute", "admin", {
+        from_class_id: fromId,
+        promotions: [{ student_id: s1.id, result: "promoted" }],
+      })).status,
+    ).toBe(400);
+
+    // promote s1, detain s2
+    const run = await post("/academics/promotion/execute", "admin", {
+      from_class_id: fromId,
+      to_class_id: toId,
+      promotions: [
+        { student_id: s1.id, result: "promoted" },
+        { student_id: s2.id, result: "detained" },
+      ],
+    });
+    expect(run.status).toBe(201);
+    expect(run.body.promoted).toBe(1);
+    expect(run.body.detained).toBe(1);
+
+    // s1 moved to the target class; s2 stayed in the source
+    const fromAfter = await get(`/academics/promotion/preview?fromClassId=${fromId}`, "admin");
+    const toAfter = await get(`/academics/promotion/preview?fromClassId=${toId}`, "admin");
+    expect(fromAfter.body.students.some((s: any) => s.id === s1.id)).toBe(false);
+    expect(fromAfter.body.students.some((s: any) => s.id === s2.id)).toBe(true);
+    expect(toAfter.body.students.some((s: any) => s.id === s1.id)).toBe(true);
+
+    // register shows a batch with 1 promoted + 1 detained
+    const reg = await get("/academics/promotion/register", "admin");
+    expect(reg.body.length).toBeGreaterThan(0);
+    const batch = reg.body.find((b: any) => b.promoted === 1 && b.detained === 1);
+    expect(batch).toBeTruthy();
+
+    // move s1 back to keep demo data intact
+    await post("/academics/promotion/execute", "admin", {
+      from_class_id: toId,
+      to_class_id: fromId,
+      promotions: [{ student_id: s1.id, result: "promoted" }],
+    });
+  });
+});
