@@ -113,6 +113,7 @@ import { Route as AuthenticatedAssetsCategoriesRouteImport } from './routes/_aut
 import { Route as AuthenticatedAssetsAllocationRouteImport } from './routes/_authenticated/assets.allocation'
 import { Route as AuthenticatedAdmissionsNewRouteImport } from './routes/_authenticated/admissions.new'
 import { Route as AuthenticatedAdmissionsAdmissionIdRouteImport } from './routes/_authenticated/admissions.$admissionId'
+import { Route as AuthenticatedAcademicsTeachersRouteImport } from './routes/_authenticated/academics.teachers'
 import { Route as AuthenticatedAcademicsSubjectsRouteImport } from './routes/_authenticated/academics.subjects'
 import { Route as AuthenticatedAcademicsSessionsRouteImport } from './routes/_authenticated/academics.sessions'
 import { Route as AuthenticatedAcademicsRoomsRouteImport } from './routes/_authenticated/academics.rooms'
@@ -704,6 +705,12 @@ const AuthenticatedAdmissionsAdmissionIdRoute =
     path: '/$admissionId',
     getParentRoute: () => AuthenticatedAdmissionsRoute,
   } as any)
+const AuthenticatedAcademicsTeachersRoute =
+  AuthenticatedAcademicsTeachersRouteImport.update({
+    id: '/teachers',
+    path: '/teachers',
+    getParentRoute: () => AuthenticatedAcademicsRoute,
+  } as any)
 const AuthenticatedAcademicsSubjectsRoute =
   AuthenticatedAcademicsSubjectsRouteImport.update({
     id: '/subjects',
@@ -837,6 +844,7 @@ export interface FileRoutesByFullPath {
   '/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
   '/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
+  '/academics/teachers': typeof AuthenticatedAcademicsTeachersRoute
   '/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -945,6 +953,7 @@ export interface FileRoutesByTo {
   '/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
   '/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
+  '/academics/teachers': typeof AuthenticatedAcademicsTeachersRoute
   '/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -1066,6 +1075,7 @@ export interface FileRoutesById {
   '/_authenticated/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
   '/_authenticated/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/_authenticated/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
+  '/_authenticated/academics/teachers': typeof AuthenticatedAcademicsTeachersRoute
   '/_authenticated/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/_authenticated/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/_authenticated/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -1188,6 +1198,7 @@ export interface FileRouteTypes {
     | '/academics/rooms'
     | '/academics/sessions'
     | '/academics/subjects'
+    | '/academics/teachers'
     | '/admissions/$admissionId'
     | '/admissions/new'
     | '/assets/allocation'
@@ -1296,6 +1307,7 @@ export interface FileRouteTypes {
     | '/academics/rooms'
     | '/academics/sessions'
     | '/academics/subjects'
+    | '/academics/teachers'
     | '/admissions/$admissionId'
     | '/admissions/new'
     | '/assets/allocation'
@@ -1416,6 +1428,7 @@ export interface FileRouteTypes {
     | '/_authenticated/academics/rooms'
     | '/_authenticated/academics/sessions'
     | '/_authenticated/academics/subjects'
+    | '/_authenticated/academics/teachers'
     | '/_authenticated/admissions/$admissionId'
     | '/_authenticated/admissions/new'
     | '/_authenticated/assets/allocation'
@@ -2232,6 +2245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdmissionsAdmissionIdRouteImport
       parentRoute: typeof AuthenticatedAdmissionsRoute
     }
+    '/_authenticated/academics/teachers': {
+      id: '/_authenticated/academics/teachers'
+      path: '/teachers'
+      fullPath: '/academics/teachers'
+      preLoaderRoute: typeof AuthenticatedAcademicsTeachersRouteImport
+      parentRoute: typeof AuthenticatedAcademicsRoute
+    }
     '/_authenticated/academics/subjects': {
       id: '/_authenticated/academics/subjects'
       path: '/subjects'
@@ -2344,6 +2364,7 @@ interface AuthenticatedAcademicsRouteChildren {
   AuthenticatedAcademicsRoomsRoute: typeof AuthenticatedAcademicsRoomsRoute
   AuthenticatedAcademicsSessionsRoute: typeof AuthenticatedAcademicsSessionsRoute
   AuthenticatedAcademicsSubjectsRoute: typeof AuthenticatedAcademicsSubjectsRoute
+  AuthenticatedAcademicsTeachersRoute: typeof AuthenticatedAcademicsTeachersRoute
   AuthenticatedAcademicsIndexRoute: typeof AuthenticatedAcademicsIndexRoute
 }
 
@@ -2352,6 +2373,7 @@ const AuthenticatedAcademicsRouteChildren: AuthenticatedAcademicsRouteChildren =
     AuthenticatedAcademicsRoomsRoute: AuthenticatedAcademicsRoomsRoute,
     AuthenticatedAcademicsSessionsRoute: AuthenticatedAcademicsSessionsRoute,
     AuthenticatedAcademicsSubjectsRoute: AuthenticatedAcademicsSubjectsRoute,
+    AuthenticatedAcademicsTeachersRoute: AuthenticatedAcademicsTeachersRoute,
     AuthenticatedAcademicsIndexRoute: AuthenticatedAcademicsIndexRoute,
   }
 

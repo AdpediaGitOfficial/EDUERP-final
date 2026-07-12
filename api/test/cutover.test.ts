@@ -3042,3 +3042,88 @@ describe("Academics: classrooms / rooms", () => {
     expect((await del4(`/academics/rooms/${used.id}`, "admin")).status).toBe(409);
   });
 });
+
+describe("Academics: teacher-subject assignment & workload", () => {
+  const del5 = (p: string, r: keyof typeof ACCOUNTS) =>
+    request(http).delete(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`);
+
+  it("assigns a teacher to a subject (dup 409, wrong class 400), lists, unassigns; RBAC", async () => {
+    // find a class that has at least one subject
+    const classes = (await get("/classes", "admin")).body as any[];
+    let classId = "";
+    let subjectId = "";
+    for (const c of classes) {
+      const subs = (await get(`/subjects?classId=${c.id}`, "admin")).body as any[];
+      if (subs.length) {
+        classId = c.id;
+        subjectId = subs[0].id;
+        break;
+      }
+    }
+    expect(classId).toBeTruthy();
+    const teacher = (await get("/classes/teacher-options", "admin")).body[0];
+    expect(teacher).toBeTruthy();
+
+    const created = await post("/academics/teacher-subjects", "admin", {
+      teacher_id: teacher.id,
+      class_id: classId,
+      subject_id: subjectId,
+    });
+    // could already exist from timetable backfill -> tolerate 201 or 409
+    expect([201, 409]).toContain(created.status);
+
+    // duplicate is always a 409
+    expect(
+      (await post("/academics/teacher-subjects", "admin", {
+        teacher_id: teacher.id,
+        class_id: classId,
+        subject_id: subjectId,
+      })).status,
+    ).toBe(409);
+
+    // subject that does not belong to the class -> 400
+    const otherClass = classes.find((c) => c.id !== classId);
+    if (otherClass) {
+      expect(
+        (await post("/academics/teacher-subjects", "admin", {
+          teacher_id: teacher.id,
+          class_id: otherClass.id,
+          subject_id: subjectId,
+        })).status,
+      ).toBe(400);
+    }
+
+    // teacher role cannot assign
+    expect(
+      (await post("/academics/teacher-subjects", "teacher", {
+        teacher_id: teacher.id,
+        class_id: classId,
+        subject_id: subjectId,
+      })).status,
+    ).toBe(403);
+
+    // list contains the assignment
+    const list = await get(`/academics/teacher-subjects?classId=${classId}`, "admin");
+    expect(list.status).toBe(200);
+    const mine = list.body.find((a: any) => a.subjectId === subjectId && a.teacherId === teacher.id);
+    expect(mine).toBeTruthy();
+    expect(mine.className).toBeTruthy();
+
+    // unassign
+    expect((await del5(`/academics/teacher-subjects/${mine.id}`, "admin")).status).toBe(200);
+  });
+
+  it("workload aggregates planned + scheduled periods per teacher; teacher 403", async () => {
+    const res = await get("/academics/teacher-workload", "admin");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("cap");
+    expect(Array.isArray(res.body.teachers)).toBe(true);
+    for (const t of res.body.teachers) {
+      expect(t).toHaveProperty("plannedPeriods");
+      expect(t).toHaveProperty("scheduledPeriods");
+      expect(t).toHaveProperty("remaining");
+      expect(t.remaining).toBe(Math.max(0, res.body.cap - t.scheduledPeriods));
+    }
+    expect((await get("/academics/teacher-workload", "teacher")).status).toBe(403);
+  });
+});

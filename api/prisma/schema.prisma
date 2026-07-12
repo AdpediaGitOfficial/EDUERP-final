@@ -1929,6 +1929,21 @@ model hr_appraisal_ratings {
   @@schema("public")
 }
 
+model teacher_subjects {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teacher_id String   @db.Uuid
+  class_id   String   @db.Uuid
+  subject_id String   @db.Uuid
+  role       String   @default("subject_teacher")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([teacher_id, class_id, subject_id, role])
+  @@index([class_id])
+  @@index([teacher_id])
+  @@index([subject_id])
+  @@schema("public")
+}
+
 model classrooms {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   room_number   String   @unique

@@ -69,6 +69,13 @@ class SubjectActiveDto {
   @IsBoolean() is_active: boolean;
 }
 
+class AssignTeacherSubjectDto {
+  @IsUUID() teacher_id: string;
+  @IsUUID() class_id: string;
+  @IsUUID() subject_id: string;
+  @IsOptional() @IsIn(["subject_teacher", "lab_teacher", "assistant", "coordinator"]) role?: string;
+}
+
 class RoomDto {
   @IsString() @MinLength(1) room_number: string;
   @IsOptional() @IsString() name?: string;
@@ -189,6 +196,30 @@ export class AcademicsController {
   @Get("classes/:id")
   getClass(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.academics.getClass(actor, id);
+  }
+
+  @Get("academics/teacher-subjects")
+  listTeacherSubjects(
+    @CurrentUser() actor: AuthUser,
+    @Query("classId") classId?: string,
+    @Query("teacherId") teacherId?: string,
+  ) {
+    return this.academics.listTeacherSubjects(actor, classId, teacherId);
+  }
+
+  @Post("academics/teacher-subjects")
+  assignTeacherSubject(@CurrentUser() actor: AuthUser, @Body() dto: AssignTeacherSubjectDto) {
+    return this.academics.assignTeacherSubject(actor, dto);
+  }
+
+  @Delete("academics/teacher-subjects/:id")
+  unassignTeacherSubject(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.academics.unassignTeacherSubject(actor, id);
+  }
+
+  @Get("academics/teacher-workload")
+  teacherWorkload(@CurrentUser() actor: AuthUser, @Query("year") year?: string) {
+    return this.academics.teacherWorkload(actor, year);
   }
 
   @Get("academics/rooms")

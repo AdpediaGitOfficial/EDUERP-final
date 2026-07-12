@@ -1161,4 +1161,152 @@ export class AcademicsService {
     await this.prisma.classrooms.delete({ where: { id } });
     return { ok: true };
   }
+
+  // ── Teacher ↔ subject assignment & workload ─────────────────────────────────
+
+  /** Assignments for a class (or teacher), with teacher / subject / class names. */
+  async listTeacherSubjects(actor: AuthUser, classId?: string, teacherId?: string) {
+    this.requireAcademicAdmin(actor);
+    const rows = await this.prisma.teacher_subjects.findMany({
+      where: { ...(classId ? { class_id: classId } : {}), ...(teacherId ? { teacher_id: teacherId } : {}) },
+      orderBy: { created_at: "asc" },
+    });
+    const [teachers, subjects, classes] = await Promise.all([
+      this.prisma.profiles.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.teacher_id))] } },
+        select: { id: true, full_name: true },
+      }),
+      this.prisma.subjects.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.subject_id))] } },
+        select: { id: true, name: true, code: true, weekly_periods: true },
+      }),
+      this.prisma.classes.findMany({
+        where: { id: { in: [...new Set(rows.map((r) => r.class_id))] } },
+        select: { id: true, name: true, section: true },
+      }),
+    ]);
+    const tn = new Map(teachers.map((t) => [t.id, t.full_name]));
+    const sn = new Map(subjects.map((s) => [s.id, s]));
+    const cn = new Map(classes.map((c) => [c.id, c]));
+    return rows.map((r) => {
+      const c = cn.get(r.class_id);
+      const s = sn.get(r.subject_id);
+      return {
+        id: r.id,
+        teacherId: r.teacher_id,
+        teacherName: tn.get(r.teacher_id) ?? "—",
+        classId: r.class_id,
+        className: c ? `${c.name} ${c.section ?? ""}`.trim() : "—",
+        subjectId: r.subject_id,
+        subjectName: s?.name ?? "—",
+        subjectCode: s?.code ?? null,
+        weeklyPeriods: s?.weekly_periods ?? 0,
+        role: r.role,
+      };
+    });
+  }
+
+  async assignTeacherSubject(
+    actor: AuthUser,
+    input: { teacher_id: string; class_id: string; subject_id: string; role?: string },
+  ) {
+    this.requireAcademicAdmin(actor);
+    const subject = await this.prisma.subjects.findUnique({ where: { id: input.subject_id } });
+    if (!subject) throw new NotFoundException("Subject not found");
+    if (subject.class_id !== input.class_id)
+      throw new BadRequestException("That subject does not belong to the selected class.");
+    const teacher = await this.prisma.profiles.findUnique({ where: { id: input.teacher_id } });
+    if (!teacher) throw new NotFoundException("Teacher not found");
+    try {
+      const row = await this.prisma.teacher_subjects.create({
+        data: {
+          teacher_id: input.teacher_id,
+          class_id: input.class_id,
+          subject_id: input.subject_id,
+          role: input.role || "subject_teacher",
+        },
+      });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("That teacher is already assigned to this subject.");
+      throw e;
+    }
+  }
+
+  async unassignTeacherSubject(actor: AuthUser, id: string) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.teacher_subjects.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Assignment not found");
+    await this.prisma.teacher_subjects.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  /**
+   * Per-teacher workload for a session: subject-assignment count, planned weekly
+   * periods (sum of assigned subjects' weekly_periods), scheduled timetable slots,
+   * and remaining capacity against a soft weekly cap.
+   */
+  async teacherWorkload(actor: AuthUser, year?: string) {
+    this.requireAcademicAdmin(actor);
+    const WEEKLY_CAP = 40;
+    const session = year && year !== "all" ? year : ((await this.currentYear()) ?? "");
+    const classes = await this.prisma.classes.findMany({
+      where: session ? { academic_year: session } : {},
+      select: { id: true },
+    });
+    const classIds = classes.map((c) => c.id);
+    if (!classIds.length) return { session, cap: WEEKLY_CAP, teachers: [] };
+
+    const [assignments, subjects, slots] = await Promise.all([
+      this.prisma.teacher_subjects.findMany({ where: { class_id: { in: classIds } } }),
+      this.prisma.subjects.findMany({
+        where: { class_id: { in: classIds } },
+        select: { id: true, weekly_periods: true },
+      }),
+      this.prisma.timetable.groupBy({
+        by: ["teacher_id"],
+        where: { class_id: { in: classIds }, teacher_id: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
+    const periodsBySubject = new Map(subjects.map((s) => [s.id, s.weekly_periods]));
+    const slotsByTeacher = new Map(slots.map((s) => [s.teacher_id, s._count._all]));
+
+    const byTeacher = new Map<string, { assignments: number; plannedPeriods: number }>();
+    for (const a of assignments) {
+      const cur = byTeacher.get(a.teacher_id) ?? { assignments: 0, plannedPeriods: 0 };
+      cur.assignments += 1;
+      cur.plannedPeriods += periodsBySubject.get(a.subject_id) ?? 0;
+      byTeacher.set(a.teacher_id, cur);
+    }
+    // include teachers who only appear in the timetable
+    for (const [tid] of slotsByTeacher) if (tid && !byTeacher.has(tid)) byTeacher.set(tid, { assignments: 0, plannedPeriods: 0 });
+
+    const ids = [...byTeacher.keys()];
+    const profs = await this.prisma.profiles.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, full_name: true },
+    });
+    const name = new Map(profs.map((p) => [p.id, p.full_name]));
+    return {
+      session,
+      cap: WEEKLY_CAP,
+      teachers: ids
+        .map((id) => {
+          const w = byTeacher.get(id)!;
+          const scheduled = slotsByTeacher.get(id) ?? 0;
+          return {
+            teacherId: id,
+            teacherName: name.get(id) ?? "—",
+            assignments: w.assignments,
+            plannedPeriods: w.plannedPeriods,
+            scheduledPeriods: scheduled,
+            remaining: Math.max(0, WEEKLY_CAP - scheduled),
+            overloaded: scheduled > WEEKLY_CAP,
+          };
+        })
+        .sort((a, b) => b.scheduledPeriods - a.scheduledPeriods),
+    };
+  }
 }
