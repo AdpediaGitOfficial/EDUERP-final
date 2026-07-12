@@ -76,6 +76,7 @@ import { Route as AuthenticatedHrRecruitmentRouteImport } from './routes/_authen
 import { Route as AuthenticatedHrPerformanceRouteImport } from './routes/_authenticated/hr.performance'
 import { Route as AuthenticatedHrPayrollRouteImport } from './routes/_authenticated/hr.payroll'
 import { Route as AuthenticatedHrOvertimeRouteImport } from './routes/_authenticated/hr.overtime'
+import { Route as AuthenticatedHrLoansRouteImport } from './routes/_authenticated/hr.loans'
 import { Route as AuthenticatedHrLeaveRouteImport } from './routes/_authenticated/hr.leave'
 import { Route as AuthenticatedHrExpensesRouteImport } from './routes/_authenticated/hr.expenses'
 import { Route as AuthenticatedHrExitRouteImport } from './routes/_authenticated/hr.exit'
@@ -484,6 +485,11 @@ const AuthenticatedHrOvertimeRoute = AuthenticatedHrOvertimeRouteImport.update({
   path: '/overtime',
   getParentRoute: () => AuthenticatedHrRoute,
 } as any)
+const AuthenticatedHrLoansRoute = AuthenticatedHrLoansRouteImport.update({
+  id: '/loans',
+  path: '/loans',
+  getParentRoute: () => AuthenticatedHrRoute,
+} as any)
 const AuthenticatedHrLeaveRoute = AuthenticatedHrLeaveRouteImport.update({
   id: '/leave',
   path: '/leave',
@@ -819,6 +825,7 @@ export interface FileRoutesByFullPath {
   '/hr/exit': typeof AuthenticatedHrExitRoute
   '/hr/expenses': typeof AuthenticatedHrExpensesRoute
   '/hr/leave': typeof AuthenticatedHrLeaveRoute
+  '/hr/loans': typeof AuthenticatedHrLoansRoute
   '/hr/overtime': typeof AuthenticatedHrOvertimeRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollRoute
   '/hr/performance': typeof AuthenticatedHrPerformanceRoute
@@ -921,6 +928,7 @@ export interface FileRoutesByTo {
   '/hr/exit': typeof AuthenticatedHrExitRoute
   '/hr/expenses': typeof AuthenticatedHrExpensesRoute
   '/hr/leave': typeof AuthenticatedHrLeaveRoute
+  '/hr/loans': typeof AuthenticatedHrLoansRoute
   '/hr/overtime': typeof AuthenticatedHrOvertimeRoute
   '/hr/payroll': typeof AuthenticatedHrPayrollRoute
   '/hr/performance': typeof AuthenticatedHrPerformanceRoute
@@ -1035,6 +1043,7 @@ export interface FileRoutesById {
   '/_authenticated/hr/exit': typeof AuthenticatedHrExitRoute
   '/_authenticated/hr/expenses': typeof AuthenticatedHrExpensesRoute
   '/_authenticated/hr/leave': typeof AuthenticatedHrLeaveRoute
+  '/_authenticated/hr/loans': typeof AuthenticatedHrLoansRoute
   '/_authenticated/hr/overtime': typeof AuthenticatedHrOvertimeRoute
   '/_authenticated/hr/payroll': typeof AuthenticatedHrPayrollRoute
   '/_authenticated/hr/performance': typeof AuthenticatedHrPerformanceRoute
@@ -1150,6 +1159,7 @@ export interface FileRouteTypes {
     | '/hr/exit'
     | '/hr/expenses'
     | '/hr/leave'
+    | '/hr/loans'
     | '/hr/overtime'
     | '/hr/payroll'
     | '/hr/performance'
@@ -1252,6 +1262,7 @@ export interface FileRouteTypes {
     | '/hr/exit'
     | '/hr/expenses'
     | '/hr/leave'
+    | '/hr/loans'
     | '/hr/overtime'
     | '/hr/payroll'
     | '/hr/performance'
@@ -1365,6 +1376,7 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/exit'
     | '/_authenticated/hr/expenses'
     | '/_authenticated/hr/leave'
+    | '/_authenticated/hr/loans'
     | '/_authenticated/hr/overtime'
     | '/_authenticated/hr/payroll'
     | '/_authenticated/hr/performance'
@@ -1886,6 +1898,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrOvertimeRouteImport
       parentRoute: typeof AuthenticatedHrRoute
     }
+    '/_authenticated/hr/loans': {
+      id: '/_authenticated/hr/loans'
+      path: '/loans'
+      fullPath: '/hr/loans'
+      preLoaderRoute: typeof AuthenticatedHrLoansRouteImport
+      parentRoute: typeof AuthenticatedHrRoute
+    }
     '/_authenticated/hr/leave': {
       id: '/_authenticated/hr/leave'
       path: '/leave'
@@ -2351,6 +2370,7 @@ interface AuthenticatedHrRouteChildren {
   AuthenticatedHrExitRoute: typeof AuthenticatedHrExitRoute
   AuthenticatedHrExpensesRoute: typeof AuthenticatedHrExpensesRoute
   AuthenticatedHrLeaveRoute: typeof AuthenticatedHrLeaveRoute
+  AuthenticatedHrLoansRoute: typeof AuthenticatedHrLoansRoute
   AuthenticatedHrOvertimeRoute: typeof AuthenticatedHrOvertimeRoute
   AuthenticatedHrPayrollRoute: typeof AuthenticatedHrPayrollRoute
   AuthenticatedHrPerformanceRoute: typeof AuthenticatedHrPerformanceRoute
@@ -2374,6 +2394,7 @@ const AuthenticatedHrRouteChildren: AuthenticatedHrRouteChildren = {
   AuthenticatedHrExitRoute: AuthenticatedHrExitRoute,
   AuthenticatedHrExpensesRoute: AuthenticatedHrExpensesRoute,
   AuthenticatedHrLeaveRoute: AuthenticatedHrLeaveRoute,
+  AuthenticatedHrLoansRoute: AuthenticatedHrLoansRoute,
   AuthenticatedHrOvertimeRoute: AuthenticatedHrOvertimeRoute,
   AuthenticatedHrPayrollRoute: AuthenticatedHrPayrollRoute,
   AuthenticatedHrPerformanceRoute: AuthenticatedHrPerformanceRoute,

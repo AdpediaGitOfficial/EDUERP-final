@@ -70,6 +70,20 @@ export interface EmployeeSalaryInput extends SalaryComponentsInput {
   effective_from?: string;
   notes?: string | null;
 }
+export interface LoanInput {
+  staff_id: string;
+  loan_type?: string;
+  principal: number;
+  interest_rate?: number;
+  tenure_months: number;
+  reason?: string | null;
+}
+export interface RepaymentInput {
+  amount: number;
+  paid_on?: string;
+  installment_no?: number;
+  notes?: string | null;
+}
 
 /**
  * RLS translation (api/db/rls-policies-extracted.csv):
@@ -749,6 +763,150 @@ export class HrService {
       }),
     ]);
     return { ok: true };
+  }
+
+  // ── Loans & advances: request → approve → disburse → repay ──────────────────
+  private static readonly LOAN_STATUSES = ["pending", "approved", "active", "closed", "rejected"];
+
+  /** Level monthly instalment. Interest-free → principal/tenure; else reducing-balance EMI. */
+  private computeEmi(principal: number, annualRatePct: number, tenure: number) {
+    const n = Math.max(1, Math.round(tenure));
+    if (!annualRatePct || annualRatePct <= 0) return Math.round((principal / n) * 100) / 100;
+    const r = annualRatePct / 100 / 12;
+    const emi = (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    return Math.round(emi * 100) / 100;
+  }
+
+  private loanView(loan: {
+    principal: unknown;
+    interest_rate: unknown;
+    tenure_months: number;
+    repayments?: { amount: unknown }[];
+  }) {
+    const principal = Number(loan.principal ?? 0);
+    const rate = Number(loan.interest_rate ?? 0);
+    const repaid =
+      loan.repayments?.reduce((s, r) => s + Number(r.amount ?? 0), 0) ?? 0;
+    const round = (n: number) => Math.round(n * 100) / 100;
+    return {
+      emi: this.computeEmi(principal, rate, loan.tenure_months),
+      totalRepaid: round(repaid),
+      outstanding: round(Math.max(0, principal - repaid)),
+    };
+  }
+
+  async listLoans(actor: AuthUser, staffId?: string) {
+    // hr|admin|accountant see everything; a staff member sees only their own.
+    let where: Prisma.hr_loansWhereInput = {};
+    if (this.canReadPay(actor)) {
+      where = staffId ? { staff_id: staffId } : {};
+    } else {
+      const me = await this.prisma.staff.findFirst({ where: { profile_id: actor.id } });
+      if (!me) throw new ForbiddenException();
+      where = { staff_id: me.id };
+    }
+    const rows = await this.prisma.hr_loans.findMany({
+      where,
+      orderBy: { created_at: "desc" },
+      include: {
+        repayments: { select: { amount: true } },
+        staff: { select: { full_name: true, employee_code: true } },
+      },
+    });
+    return rows.map((l) => ({ ...l, ...this.loanView(l) }));
+  }
+
+  async getLoan(actor: AuthUser, id: string) {
+    const loan = await this.prisma.hr_loans.findUnique({
+      where: { id },
+      include: {
+        repayments: { orderBy: { paid_on: "asc" } },
+        staff: { select: { id: true, full_name: true, employee_code: true, profile_id: true } },
+        approver: { select: { full_name: true } },
+      },
+    });
+    if (!loan) throw new NotFoundException("Loan not found");
+    if (!this.canReadPay(actor) && loan.staff.profile_id !== actor.id)
+      throw new ForbiddenException();
+    return { ...loan, ...this.loanView(loan) };
+  }
+
+  async createLoan(actor: AuthUser, input: LoanInput) {
+    this.requireHr(actor);
+    if (!(input.principal > 0)) throw new BadRequestException("Principal must be greater than zero");
+    if (!(input.tenure_months > 0)) throw new BadRequestException("Tenure must be at least 1 month");
+    const staff = await this.prisma.staff.findUnique({ where: { id: input.staff_id } });
+    if (!staff) throw new NotFoundException("Employee not found");
+    const row = await this.prisma.hr_loans.create({
+      data: {
+        staff_id: input.staff_id,
+        loan_type: input.loan_type || "advance",
+        principal: input.principal,
+        interest_rate: input.interest_rate ?? 0,
+        tenure_months: input.tenure_months,
+        reason: input.reason || null,
+        status: "pending",
+      },
+    });
+    return { id: row.id };
+  }
+
+  /** Approve (→ active, stamps disbursed_on + approver) or reject a pending loan. */
+  async decideLoan(actor: AuthUser, id: string, decision: "approved" | "rejected") {
+    this.requireHr(actor);
+    const loan = await this.prisma.hr_loans.findUnique({ where: { id } });
+    if (!loan) throw new NotFoundException("Loan not found");
+    if (loan.status !== "pending")
+      throw new BadRequestException("Only a pending loan can be approved or rejected");
+    const approver = await this.prisma.staff.findFirst({ where: { profile_id: actor.id } });
+    await this.prisma.hr_loans.update({
+      where: { id },
+      data:
+        decision === "approved"
+          ? {
+              status: "active",
+              disbursed_on: new Date(),
+              approved_by: approver?.id ?? null,
+              updated_at: new Date(),
+            }
+          : { status: "rejected", updated_at: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /** Record a repayment; auto-closes the loan once the outstanding balance hits zero. */
+  async recordRepayment(actor: AuthUser, loanId: string, input: RepaymentInput) {
+    this.requireHr(actor);
+    if (!(input.amount > 0)) throw new BadRequestException("Repayment amount must be positive");
+    const loan = await this.prisma.hr_loans.findUnique({
+      where: { id: loanId },
+      include: { repayments: { select: { amount: true } } },
+    });
+    if (!loan) throw new NotFoundException("Loan not found");
+    if (loan.status !== "active")
+      throw new BadRequestException("Repayments can only be recorded against an active loan");
+    const { outstanding } = this.loanView(loan);
+    if (input.amount > outstanding + 0.01)
+      throw new BadRequestException(
+        `Repayment exceeds the outstanding balance of ${outstanding.toFixed(2)}`,
+      );
+    const willClose = input.amount >= outstanding - 0.01;
+    await this.prisma.$transaction([
+      this.prisma.hr_loan_repayments.create({
+        data: {
+          loan_id: loanId,
+          amount: input.amount,
+          paid_on: input.paid_on ? new Date(input.paid_on) : new Date(),
+          installment_no: input.installment_no ?? (loan.repayments.length + 1),
+          notes: input.notes || null,
+        },
+      }),
+      this.prisma.hr_loans.update({
+        where: { id: loanId },
+        data: { updated_at: new Date(), ...(willClose ? { status: "closed" } : {}) },
+      }),
+    ]);
+    return { ok: true, closed: willClose };
   }
 
   async createDepartment(actor: AuthUser, input: DepartmentInput) {

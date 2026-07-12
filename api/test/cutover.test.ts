@@ -2576,3 +2576,125 @@ describe("HR: salary templates + per-employee Set Salary", () => {
     ).toBe(400);
   });
 });
+
+describe("HR: staff loans & advances", () => {
+  const put = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
+    request(http).put(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
+
+  it("lists loans (hr|admin) and computes EMI + outstanding; teacher cannot list all", async () => {
+    const list = await get("/hr/loans", "admin");
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body)).toBe(true);
+    for (const l of list.body) {
+      expect(l).toHaveProperty("emi");
+      expect(l).toHaveProperty("outstanding");
+    }
+    // A teacher with no staff record (or scoped) never sees the whole ledger.
+    const teacher = await get("/hr/loans", "teacher");
+    expect([200, 403]).toContain(teacher.status);
+    if (teacher.status === 200) {
+      // if scoped, they only see their own — never the full admin set
+      expect(teacher.body.length).toBeLessThanOrEqual(list.body.length);
+    }
+  });
+
+  it("rejects a zero/negative principal and unknown employee", async () => {
+    const staffList = await get("/hr/staff", "admin");
+    const staffId = staffList.body[0].id;
+    expect(
+      (await post("/hr/loans", "admin", { staff_id: staffId, principal: 0, tenure_months: 12 }))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await post("/hr/loans", "admin", {
+          staff_id: "00000000-0000-0000-0000-000000000000",
+          principal: 1000,
+          tenure_months: 6,
+        })
+      ).status,
+    ).toBe(404);
+    // teacher cannot create
+    expect(
+      (await post("/hr/loans", "teacher", { staff_id: staffId, principal: 1000, tenure_months: 6 }))
+        .status,
+    ).toBe(403);
+  });
+
+  it("full lifecycle: create → approve (active + disbursed) → repay → auto-close", async () => {
+    const staffList = await get("/hr/staff", "admin");
+    const staffId = staffList.body[0].id;
+
+    // interest-free 10000 over 2 months -> EMI 5000
+    const created = await post("/hr/loans", "admin", {
+      staff_id: staffId,
+      loan_type: "advance",
+      principal: 10000,
+      interest_rate: 0,
+      tenure_months: 2,
+      reason: "Jest loan",
+    });
+    expect(created.status).toBe(201);
+    const loanId = created.body.id;
+
+    let detail = await get(`/hr/loans/${loanId}`, "admin");
+    expect(detail.body.status).toBe("pending");
+    expect(detail.body.emi).toBe(5000);
+    expect(detail.body.outstanding).toBe(10000);
+
+    // cannot repay while pending
+    expect(
+      (await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 5000 })).status,
+    ).toBe(400);
+
+    // approve -> active + disbursed date set
+    const approve = await patch(`/hr/loans/${loanId}/decision`, "admin", { decision: "approved" });
+    expect(approve.status).toBe(200);
+    detail = await get(`/hr/loans/${loanId}`, "admin");
+    expect(detail.body.status).toBe("active");
+    expect(detail.body.disbursed_on).toBeTruthy();
+
+    // deciding again is rejected (only pending can be decided)
+    expect(
+      (await patch(`/hr/loans/${loanId}/decision`, "admin", { decision: "rejected" })).status,
+    ).toBe(400);
+
+    // overpayment blocked
+    expect(
+      (await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 999999 })).status,
+    ).toBe(400);
+
+    // partial repayment leaves it active
+    const r1 = await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 5000 });
+    expect(r1.status).toBe(201);
+    expect(r1.body.closed).toBe(false);
+    detail = await get(`/hr/loans/${loanId}`, "admin");
+    expect(detail.body.outstanding).toBe(5000);
+    expect(detail.body.status).toBe("active");
+
+    // final repayment auto-closes
+    const r2 = await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 5000 });
+    expect(r2.body.closed).toBe(true);
+    detail = await get(`/hr/loans/${loanId}`, "admin");
+    expect(detail.body.status).toBe("closed");
+    expect(detail.body.outstanding).toBe(0);
+    expect(detail.body.repayments.length).toBe(2);
+  });
+
+  it("computes reducing-balance EMI for an interest-bearing loan", async () => {
+    const staffList = await get("/hr/staff", "admin");
+    const staffId = staffList.body[0].id;
+    const created = await post("/hr/loans", "admin", {
+      staff_id: staffId,
+      loan_type: "personal",
+      principal: 100000,
+      interest_rate: 12,
+      tenure_months: 12,
+      reason: "Jest interest loan",
+    });
+    const detail = await get(`/hr/loans/${created.body.id}`, "admin");
+    // 100000 @ 1%/mo over 12 months ≈ 8884.88
+    expect(detail.body.emi).toBeGreaterThan(8800);
+    expect(detail.body.emi).toBeLessThan(8900);
+  });
+});

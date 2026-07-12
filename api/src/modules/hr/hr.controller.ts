@@ -132,6 +132,25 @@ class EmployeeSalaryDto extends SalaryComponentsDto {
   @IsOptional() @IsString() notes?: string;
 }
 
+class LoanDto {
+  @IsUUID() staff_id: string;
+  @IsOptional() @IsIn(["advance", "personal", "emergency", "festival", "vehicle", "housing"])
+  loan_type?: string;
+  @IsNumber() principal: number;
+  @IsOptional() @IsNumber() interest_rate?: number;
+  @IsNumber() tenure_months: number;
+  @IsOptional() @IsString() reason?: string;
+}
+class LoanDecisionDto {
+  @IsIn(["approved", "rejected"]) decision: "approved" | "rejected";
+}
+class RepaymentDto {
+  @IsNumber() amount: number;
+  @IsOptional() @IsDateString() paid_on?: string;
+  @IsOptional() @IsNumber() installment_no?: number;
+  @IsOptional() @IsString() notes?: string;
+}
+
 class AttnUpsertDto {
   @IsString() @MinLength(1) teacherId: string;
   @IsDateString() date: string;
@@ -348,6 +367,40 @@ export class HrController {
     @Body() dto: EmployeeSalaryDto,
   ) {
     return this.hr.setEmployeeSalary(actor, id, dto);
+  }
+
+  // ---- Loans & advances ---------------------------------------------------
+  @Get("loans")
+  listLoans(@CurrentUser() actor: AuthUser, @Query("staffId") staffId?: string) {
+    return this.hr.listLoans(actor, staffId);
+  }
+
+  @Post("loans")
+  createLoan(@CurrentUser() actor: AuthUser, @Body() dto: LoanDto) {
+    return this.hr.createLoan(actor, dto);
+  }
+
+  @Get("loans/:id")
+  getLoan(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.getLoan(actor, id);
+  }
+
+  @Patch("loans/:id/decision")
+  decideLoan(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: LoanDecisionDto,
+  ) {
+    return this.hr.decideLoan(actor, id, dto.decision);
+  }
+
+  @Post("loans/:id/repayments")
+  recordRepayment(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: RepaymentDto,
+  ) {
+    return this.hr.recordRepayment(actor, id, dto);
   }
 
   // ---- Departments --------------------------------------------------------

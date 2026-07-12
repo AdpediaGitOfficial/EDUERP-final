@@ -19,6 +19,7 @@ const TABS = [
   { to: "/hr/attendance", label: "Attendance" },
   { to: "/hr/payroll", label: "Payroll" },
   { to: "/hr/salary", label: "Salary" },
+  { to: "/hr/loans", label: "Loans" },
   { to: "/hr/leave", label: "Leave" },
   { to: "/hr/shifts", label: "Shifts" },
   { to: "/hr/performance", label: "Performance" },
