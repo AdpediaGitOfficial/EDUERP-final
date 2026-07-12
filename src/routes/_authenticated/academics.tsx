@@ -18,6 +18,7 @@ const TABS = [
   { to: "/academics/sessions", label: "Sessions" },
   { to: "/classes", label: "Classes" },
   { to: "/academics/subjects", label: "Subjects" },
+  { to: "/academics/rooms", label: "Rooms" },
   { to: "/timetable", label: "Timetable" },
 ];
 

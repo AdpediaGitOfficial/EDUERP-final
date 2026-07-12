@@ -10,6 +10,17 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
+export interface RoomInput {
+  room_number: string;
+  name?: string | null;
+  capacity?: number;
+  floor?: string | null;
+  building?: string | null;
+  room_type?: string;
+  is_smart?: boolean;
+  has_projector?: boolean;
+  is_active?: boolean;
+}
 export interface SubjectInput {
   class_id: string;
   name: string;
@@ -1059,5 +1070,95 @@ export class AcademicsService {
       return session;
     });
     return { id: created.id, clonedClasses: sourceClasses.length };
+  }
+
+  // ── Classrooms / rooms ──────────────────────────────────────────────────────
+
+  /** Rooms with live utilisation (class-sections + weekly timetable slots using the room). */
+  async listRooms(actor: AuthUser) {
+    this.requireAcademicAdmin(actor);
+    const [rooms, classUse, slotUse] = await Promise.all([
+      this.prisma.classrooms.findMany({ orderBy: { room_number: "asc" } }),
+      this.prisma.classes.groupBy({
+        by: ["room"],
+        where: { room: { not: null } },
+        _count: { _all: true },
+      }),
+      this.prisma.timetable.groupBy({
+        by: ["room"],
+        where: { room: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
+    const classByRoom = new Map(classUse.map((c) => [c.room, c._count._all]));
+    const slotByRoom = new Map(slotUse.map((c) => [c.room, c._count._all]));
+    return rooms.map((r) => ({
+      ...r,
+      assignedClasses: classByRoom.get(r.room_number) ?? 0,
+      weeklySlots: slotByRoom.get(r.room_number) ?? 0,
+    }));
+  }
+
+  private mapRoomInput(input: RoomInput) {
+    return {
+      room_number: input.room_number,
+      name: input.name || null,
+      capacity: input.capacity ?? 40,
+      floor: input.floor || null,
+      building: input.building || null,
+      room_type: input.room_type || "classroom",
+      is_smart: input.is_smart ?? false,
+      has_projector: input.has_projector ?? false,
+    };
+  }
+
+  async createRoom(actor: AuthUser, input: RoomInput) {
+    this.requireAcademicAdmin(actor);
+    try {
+      const row = await this.prisma.classrooms.create({ data: this.mapRoomInput(input) });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("A room with that number already exists.");
+      throw e;
+    }
+  }
+
+  async updateRoom(actor: AuthUser, id: string, input: RoomInput) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.classrooms.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Room not found");
+    try {
+      await this.prisma.classrooms.update({
+        where: { id },
+        data: {
+          ...this.mapRoomInput(input),
+          ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
+          updated_at: new Date(),
+        },
+      });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("A room with that number already exists.");
+      throw e;
+    }
+  }
+
+  /** Delete a room. Refused while it is still referenced by classes or timetable. */
+  async deleteRoom(actor: AuthUser, id: string) {
+    this.requireAcademicAdmin(actor);
+    const room = await this.prisma.classrooms.findUnique({ where: { id } });
+    if (!room) throw new NotFoundException("Room not found");
+    const [inClasses, inSlots] = await Promise.all([
+      this.prisma.classes.count({ where: { room: room.room_number } }),
+      this.prisma.timetable.count({ where: { room: room.room_number } }),
+    ]);
+    if (inClasses + inSlots > 0)
+      throw new ConflictException(
+        "This room is still assigned to classes or timetable slots; disable it instead.",
+      );
+    await this.prisma.classrooms.delete({ where: { id } });
+    return { ok: true };
   }
 }

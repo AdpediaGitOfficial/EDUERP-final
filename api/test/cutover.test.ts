@@ -2991,3 +2991,54 @@ describe("Academics: subject master", () => {
     expect(mine.name).toBe("Jest Subject v2");
   });
 });
+
+describe("Academics: classrooms / rooms", () => {
+  const patch4 = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
+    request(http).patch(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
+  const del4 = (p: string, r: keyof typeof ACCOUNTS) =>
+    request(http).delete(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`);
+
+  it("lists rooms with utilisation; teacher 403", async () => {
+    const res = await get("/academics/rooms", "admin");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    if (res.body.length) {
+      expect(res.body[0]).toHaveProperty("assignedClasses");
+      expect(res.body[0]).toHaveProperty("weeklySlots");
+    }
+    expect((await get("/academics/rooms", "teacher")).status).toBe(403);
+  });
+
+  it("creates (dup number 409), updates, and deletes an unused room", async () => {
+    const num = `JR-${Date.now()}`;
+    const created = await post("/academics/rooms", "admin", {
+      room_number: num,
+      room_type: "lab",
+      capacity: 30,
+      is_smart: true,
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+
+    expect((await post("/academics/rooms", "admin", { room_number: num })).status).toBe(409);
+    expect((await post("/academics/rooms", "teacher", { room_number: "X" })).status).toBe(403);
+    expect(
+      (await post("/academics/rooms", "admin", { room_number: "X", room_type: "nope" })).status,
+    ).toBe(400);
+
+    expect((await patch4(`/academics/rooms/${id}`, "admin", { room_number: num, capacity: 45 })).status).toBe(200);
+    const after = (await get("/academics/rooms", "admin")).body.find((r: any) => r.id === id);
+    expect(after.capacity).toBe(45);
+
+    // unused room deletes cleanly
+    expect((await del4(`/academics/rooms/${id}`, "admin")).status).toBe(200);
+    expect((await get("/academics/rooms", "admin")).body.some((r: any) => r.id === id)).toBe(false);
+  });
+
+  it("refuses to delete a room still referenced by classes/timetable", async () => {
+    const rooms = (await get("/academics/rooms", "admin")).body as any[];
+    const used = rooms.find((r) => r.assignedClasses + r.weeklySlots > 0);
+    if (!used) return; // seed guard
+    expect((await del4(`/academics/rooms/${used.id}`, "admin")).status).toBe(409);
+  });
+});

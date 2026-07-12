@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
@@ -66,6 +67,19 @@ class SubjectDto {
 }
 class SubjectActiveDto {
   @IsBoolean() is_active: boolean;
+}
+
+class RoomDto {
+  @IsString() @MinLength(1) room_number: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsInt() @Min(1) capacity?: number;
+  @IsOptional() @IsString() floor?: string;
+  @IsOptional() @IsString() building?: string;
+  @IsOptional() @IsIn(["classroom", "lab", "library", "sports", "auditorium", "activity"])
+  room_type?: string;
+  @IsOptional() @IsBoolean() is_smart?: boolean;
+  @IsOptional() @IsBoolean() has_projector?: boolean;
+  @IsOptional() @IsBoolean() is_active?: boolean;
 }
 
 class CreateClassDto {
@@ -175,6 +189,26 @@ export class AcademicsController {
   @Get("classes/:id")
   getClass(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.academics.getClass(actor, id);
+  }
+
+  @Get("academics/rooms")
+  listRooms(@CurrentUser() actor: AuthUser) {
+    return this.academics.listRooms(actor);
+  }
+
+  @Post("academics/rooms")
+  createRoom(@CurrentUser() actor: AuthUser, @Body() dto: RoomDto) {
+    return this.academics.createRoom(actor, dto);
+  }
+
+  @Patch("academics/rooms/:id")
+  updateRoom(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Body() dto: RoomDto) {
+    return this.academics.updateRoom(actor, id, dto);
+  }
+
+  @Delete("academics/rooms/:id")
+  deleteRoom(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.academics.deleteRoom(actor, id);
   }
 
   @Get("subjects")
