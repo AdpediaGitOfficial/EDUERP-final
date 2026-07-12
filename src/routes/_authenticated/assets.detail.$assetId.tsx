@@ -4,6 +4,7 @@ import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -393,17 +394,11 @@ function AssetDetail() {
                       </td>
                       <td className="p-1.5">
                         {expired ? (
-                          <Badge className="bg-red-100 text-red-900 border border-red-200">
-                            Expired
-                          </Badge>
+                          <StatusBadge tone="danger" label="Expired" />
                         ) : dueSoon ? (
-                          <Badge className="bg-amber-100 text-amber-900 border border-amber-200">
-                            Due · {days}d
-                          </Badge>
+                          <StatusBadge tone="warning" label={`Due · ${days}d`} />
                         ) : (
-                          <Badge className="bg-emerald-100 text-emerald-900 border border-emerald-200">
-                            Active
-                          </Badge>
+                          <StatusBadge tone="success" label="Active" />
                         )}
                       </td>
                     </tr>

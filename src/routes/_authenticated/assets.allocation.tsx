@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Select,
   SelectContent,
@@ -162,9 +162,7 @@ function Allocation() {
                       <span className="inline-flex items-center gap-1.5">
                         {new Date(a.expected_return_at).toLocaleDateString()}
                         {a.overdue && (
-                          <Badge className="bg-red-100 text-red-900 border border-red-200 gap-1">
-                            <AlertTriangle className="size-3" /> Overdue · {a.overdueDays}d
-                          </Badge>
+                          <StatusBadge tone="danger" label={`Overdue · ${a.overdueDays}d`} />
                         )}
                       </span>
                     ) : (
