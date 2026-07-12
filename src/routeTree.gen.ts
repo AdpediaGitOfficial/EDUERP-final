@@ -17,6 +17,7 @@ import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedTimetableRouteImport } from './routes/_authenticated/timetable'
 import { Route as AuthenticatedTeachersRouteImport } from './routes/_authenticated/teachers'
 import { Route as AuthenticatedStudentsRouteImport } from './routes/_authenticated/students'
+import { Route as AuthenticatedStudentCategoriesRouteImport } from './routes/_authenticated/student-categories'
 import { Route as AuthenticatedStaffMonitoringRouteImport } from './routes/_authenticated/staff-monitoring'
 import { Route as AuthenticatedStaffAccessRouteImport } from './routes/_authenticated/staff-access'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
@@ -35,6 +36,7 @@ import { Route as AuthenticatedFinanceRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedFeesRouteImport } from './routes/_authenticated/fees'
 import { Route as AuthenticatedEssRouteImport } from './routes/_authenticated/ess'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCustomFieldsRouteImport } from './routes/_authenticated/custom-fields'
 import { Route as AuthenticatedComplaintsRouteImport } from './routes/_authenticated/complaints'
 import { Route as AuthenticatedCommunicationRouteImport } from './routes/_authenticated/communication'
 import { Route as AuthenticatedChildrenRouteImport } from './routes/_authenticated/children'
@@ -156,6 +158,12 @@ const AuthenticatedStudentsRoute = AuthenticatedStudentsRouteImport.update({
   path: '/students',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedStudentCategoriesRoute =
+  AuthenticatedStudentCategoriesRouteImport.update({
+    id: '/student-categories',
+    path: '/student-categories',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedStaffMonitoringRoute =
   AuthenticatedStaffMonitoringRouteImport.update({
     id: '/staff-monitoring',
@@ -250,6 +258,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCustomFieldsRoute =
+  AuthenticatedCustomFieldsRouteImport.update({
+    id: '/custom-fields',
+    path: '/custom-fields',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedComplaintsRoute = AuthenticatedComplaintsRouteImport.update({
   id: '/complaints',
   path: '/complaints',
@@ -728,6 +742,7 @@ export interface FileRoutesByFullPath {
   '/children': typeof AuthenticatedChildrenRouteWithChildren
   '/communication': typeof AuthenticatedCommunicationRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
+  '/custom-fields': typeof AuthenticatedCustomFieldsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/ess': typeof AuthenticatedEssRouteWithChildren
   '/fees': typeof AuthenticatedFeesRoute
@@ -746,6 +761,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/staff-access': typeof AuthenticatedStaffAccessRoute
   '/staff-monitoring': typeof AuthenticatedStaffMonitoringRoute
+  '/student-categories': typeof AuthenticatedStudentCategoriesRoute
   '/students': typeof AuthenticatedStudentsRoute
   '/teachers': typeof AuthenticatedTeachersRouteWithChildren
   '/timetable': typeof AuthenticatedTimetableRoute
@@ -833,6 +849,7 @@ export interface FileRoutesByTo {
   '/attendance-overview': typeof AuthenticatedAttendanceOverviewRoute
   '/communication': typeof AuthenticatedCommunicationRoute
   '/complaints': typeof AuthenticatedComplaintsRoute
+  '/custom-fields': typeof AuthenticatedCustomFieldsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/fees': typeof AuthenticatedFeesRoute
   '/gradebook': typeof AuthenticatedGradebookRoute
@@ -845,6 +862,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/staff-access': typeof AuthenticatedStaffAccessRoute
   '/staff-monitoring': typeof AuthenticatedStaffMonitoringRoute
+  '/student-categories': typeof AuthenticatedStudentCategoriesRoute
   '/students': typeof AuthenticatedStudentsRoute
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -935,6 +953,7 @@ export interface FileRoutesById {
   '/_authenticated/children': typeof AuthenticatedChildrenRouteWithChildren
   '/_authenticated/communication': typeof AuthenticatedCommunicationRoute
   '/_authenticated/complaints': typeof AuthenticatedComplaintsRoute
+  '/_authenticated/custom-fields': typeof AuthenticatedCustomFieldsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/ess': typeof AuthenticatedEssRouteWithChildren
   '/_authenticated/fees': typeof AuthenticatedFeesRoute
@@ -953,6 +972,7 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/staff-access': typeof AuthenticatedStaffAccessRoute
   '/_authenticated/staff-monitoring': typeof AuthenticatedStaffMonitoringRoute
+  '/_authenticated/student-categories': typeof AuthenticatedStudentCategoriesRoute
   '/_authenticated/students': typeof AuthenticatedStudentsRoute
   '/_authenticated/teachers': typeof AuthenticatedTeachersRouteWithChildren
   '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
@@ -1045,6 +1065,7 @@ export interface FileRouteTypes {
     | '/children'
     | '/communication'
     | '/complaints'
+    | '/custom-fields'
     | '/dashboard'
     | '/ess'
     | '/fees'
@@ -1063,6 +1084,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/staff-access'
     | '/staff-monitoring'
+    | '/student-categories'
     | '/students'
     | '/teachers'
     | '/timetable'
@@ -1150,6 +1172,7 @@ export interface FileRouteTypes {
     | '/attendance-overview'
     | '/communication'
     | '/complaints'
+    | '/custom-fields'
     | '/dashboard'
     | '/fees'
     | '/gradebook'
@@ -1162,6 +1185,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/staff-access'
     | '/staff-monitoring'
+    | '/student-categories'
     | '/students'
     | '/timetable'
     | '/users'
@@ -1251,6 +1275,7 @@ export interface FileRouteTypes {
     | '/_authenticated/children'
     | '/_authenticated/communication'
     | '/_authenticated/complaints'
+    | '/_authenticated/custom-fields'
     | '/_authenticated/dashboard'
     | '/_authenticated/ess'
     | '/_authenticated/fees'
@@ -1269,6 +1294,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/staff-access'
     | '/_authenticated/staff-monitoring'
+    | '/_authenticated/student-categories'
     | '/_authenticated/students'
     | '/_authenticated/teachers'
     | '/_authenticated/timetable'
@@ -1411,6 +1437,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStudentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/student-categories': {
+      id: '/_authenticated/student-categories'
+      path: '/student-categories'
+      fullPath: '/student-categories'
+      preLoaderRoute: typeof AuthenticatedStudentCategoriesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/staff-monitoring': {
       id: '/_authenticated/staff-monitoring'
       path: '/staff-monitoring'
@@ -1535,6 +1568,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/custom-fields': {
+      id: '/_authenticated/custom-fields'
+      path: '/custom-fields'
+      fullPath: '/custom-fields'
+      preLoaderRoute: typeof AuthenticatedCustomFieldsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/complaints': {
@@ -2378,6 +2418,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChildrenRoute: typeof AuthenticatedChildrenRouteWithChildren
   AuthenticatedCommunicationRoute: typeof AuthenticatedCommunicationRoute
   AuthenticatedComplaintsRoute: typeof AuthenticatedComplaintsRoute
+  AuthenticatedCustomFieldsRoute: typeof AuthenticatedCustomFieldsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedEssRoute: typeof AuthenticatedEssRouteWithChildren
   AuthenticatedFeesRoute: typeof AuthenticatedFeesRoute
@@ -2396,6 +2437,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStaffAccessRoute: typeof AuthenticatedStaffAccessRoute
   AuthenticatedStaffMonitoringRoute: typeof AuthenticatedStaffMonitoringRoute
+  AuthenticatedStudentCategoriesRoute: typeof AuthenticatedStudentCategoriesRoute
   AuthenticatedStudentsRoute: typeof AuthenticatedStudentsRoute
   AuthenticatedTeachersRoute: typeof AuthenticatedTeachersRouteWithChildren
   AuthenticatedTimetableRoute: typeof AuthenticatedTimetableRoute
@@ -2415,6 +2457,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChildrenRoute: AuthenticatedChildrenRouteWithChildren,
   AuthenticatedCommunicationRoute: AuthenticatedCommunicationRoute,
   AuthenticatedComplaintsRoute: AuthenticatedComplaintsRoute,
+  AuthenticatedCustomFieldsRoute: AuthenticatedCustomFieldsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedEssRoute: AuthenticatedEssRouteWithChildren,
   AuthenticatedFeesRoute: AuthenticatedFeesRoute,
@@ -2433,6 +2476,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStaffAccessRoute: AuthenticatedStaffAccessRoute,
   AuthenticatedStaffMonitoringRoute: AuthenticatedStaffMonitoringRoute,
+  AuthenticatedStudentCategoriesRoute: AuthenticatedStudentCategoriesRoute,
   AuthenticatedStudentsRoute: AuthenticatedStudentsRoute,
   AuthenticatedTeachersRoute: AuthenticatedTeachersRouteWithChildren,
   AuthenticatedTimetableRoute: AuthenticatedTimetableRoute,

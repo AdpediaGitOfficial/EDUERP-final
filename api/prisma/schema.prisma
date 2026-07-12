@@ -948,6 +948,8 @@ model profiles {
   parent_code                 String?
   passport_no                 String?
   company                     String?
+  qualification               String?
+  annual_income               Decimal?                      @db.Decimal
   created_at                  DateTime                      @default(now()) @db.Timestamptz(6)
   updated_at                  DateTime                      @default(now()) @db.Timestamptz(6)
   asset_allocations           asset_allocations[]
@@ -963,6 +965,7 @@ model profiles {
   student_disciplinary        student_disciplinary[]
   student_documents           student_documents[]
   student_activity_log        student_activity_log[]
+  student_details             student_details[]
   teacher_performance_reviews teacher_performance_reviews[]
 
   @@schema("public")
@@ -1198,6 +1201,7 @@ model students {
   student_disciplinary student_disciplinary[]
   student_documents    student_documents[]
   student_activity_log student_activity_log[]
+  student_details      student_details?
   classes              classes?               @relation(fields: [class_id], references: [id], onUpdate: NoAction)
   profiles             profiles               @relation(fields: [profile_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -1223,12 +1227,75 @@ model student_medical {
   insurance_provider      String?
   insurance_number        String?
   notes                   String?
+  height_cm               Decimal?  @db.Decimal
+  weight_kg               Decimal?  @db.Decimal
   updated_by              String?   @db.Uuid
   created_at              DateTime  @default(now()) @db.Timestamptz(6)
   updated_at              DateTime  @default(now()) @db.Timestamptz(6)
   students                students  @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   profiles                profiles? @relation(fields: [updated_by], references: [id], onUpdate: NoAction)
 
+  @@schema("public")
+}
+
+model student_categories {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime          @default(now()) @db.Timestamptz(6)
+  student_details student_details[]
+
+  @@schema("public")
+}
+
+model student_custom_fields {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  label      String
+  field_type String   @default("text")
+  options    Json     @default("[]")
+  active     Boolean  @default(true)
+  sort_order Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("public")
+}
+
+model student_details {
+  student_id          String              @id @db.Uuid
+  first_name          String?
+  middle_name         String?
+  last_name           String?
+  category_id         String?             @db.Uuid
+  house               String?
+  religion            String?
+  caste               String?
+  sub_caste           String?
+  mother_tongue       String?
+  place_of_birth      String?
+  nationality         String?             @default("Indian")
+  aadhaar_no          String?
+  pen_sssm_id         String?
+  bpl                 Boolean             @default(false)
+  rte                 Boolean             @default(false)
+  biometric_id        String?
+  previous_school     String?
+  opening_due_balance Decimal             @default(0) @db.Decimal
+  bank_name           String?
+  bank_account        String?
+  bank_ifsc           String?
+  photo_url           String?
+  student_phone       String?
+  student_email       String?
+  custom              Json                @default("{}")
+  updated_by          String?             @db.Uuid
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
+  students            students            @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  student_categories  student_categories? @relation(fields: [category_id], references: [id], onUpdate: NoAction)
+  profiles            profiles?           @relation(fields: [updated_by], references: [id], onUpdate: NoAction)
+
+  @@index([category_id], map: "idx_student_details_category")
   @@schema("public")
 }
 

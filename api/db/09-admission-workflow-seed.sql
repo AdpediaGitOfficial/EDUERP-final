@@ -30,21 +30,47 @@ BEGIN
   SELECT id INTO g1a_fee FROM public.fee_structures WHERE name ILIKE 'Grade 1 A%' LIMIT 1;
   SELECT id INTO g2a_fee FROM public.fee_structures WHERE name ILIKE 'Grade 2 A%' LIMIT 1;
 
-  -- ---- 3rd multi-child parent: give Priya Singh a second child -------------
-  IF priya_id IS NOT NULL THEN
-    IF (SELECT count(*) FROM public.parent_student WHERE parent_id = priya_id) < 2 THEN
-      SELECT s.id INTO second_child
-      FROM public.students s
-      WHERE NOT EXISTS (SELECT 1 FROM public.parent_student ps WHERE ps.student_id = s.id)
-      LIMIT 1;
-      IF second_child IS NOT NULL THEN
+  -- ---- 3rd multi-child parent: a dedicated parent account (NOT the demo login,
+  -- which test fixtures assert has exactly one child). Sanjay Kulkarni is a full
+  -- portal parent (auth account + profile + role) linked to two students.
+  DECLARE
+    sanjay_id uuid := 'c5000000-0000-4000-8000-000000000001';
+    sanjay_pw text := '$2a$06$66HHHAJE7g2jWkLtsFlN0.LPuLXIuSd0vhEuvuVPeDAsQQha0oekG'; -- Greenwood@2026
+    kid1 uuid; kid2 uuid;
+  BEGIN
+    INSERT INTO auth.users (id, email, encrypted_password, aud, role, email_confirmed_at)
+    VALUES (sanjay_id, 'sanjay.kulkarni@family.demo', sanjay_pw,
+            'authenticated', 'authenticated', now())
+    ON CONFLICT (id) DO NOTHING;
+    UPDATE public.profiles
+      SET full_name = 'Sanjay Kulkarni', email = 'sanjay.kulkarni@family.demo',
+          phone = '+91 90000 22222', occupation = 'Engineer', parent_code = 'PAR-SANJAY01'
+      WHERE id = sanjay_id;
+    INSERT INTO public.user_roles (user_id, role)
+    VALUES (sanjay_id, 'parent') ON CONFLICT DO NOTHING;
+
+    IF (SELECT count(*) FROM public.parent_student WHERE parent_id = sanjay_id) < 2 THEN
+      SELECT s.id INTO kid1 FROM public.students s
+        WHERE NOT EXISTS (SELECT 1 FROM public.parent_student ps WHERE ps.student_id = s.id)
+        LIMIT 1;
+      SELECT s.id INTO kid2 FROM public.students s
+        WHERE NOT EXISTS (SELECT 1 FROM public.parent_student ps WHERE ps.student_id = s.id)
+          AND s.id <> COALESCE(kid1, '00000000-0000-0000-0000-000000000000')
+        LIMIT 1;
+      IF kid1 IS NOT NULL THEN
         INSERT INTO public.parent_student
           (parent_id, student_id, relationship_type, is_primary, fee_responsible, emergency_contact)
-        VALUES (priya_id, second_child, 'mother', true, true, true)
+        VALUES (sanjay_id, kid1, 'father', true, true, true)
+        ON CONFLICT (parent_id, student_id) DO NOTHING;
+      END IF;
+      IF kid2 IS NOT NULL THEN
+        INSERT INTO public.parent_student
+          (parent_id, student_id, relationship_type, is_primary, fee_responsible)
+        VALUES (sanjay_id, kid2, 'father', false, false)
         ON CONFLICT (parent_id, student_id) DO NOTHING;
       END IF;
     END IF;
-  END IF;
+  END;
 
   -- ---- 15 admission enquiries across stages -------------------------------
   -- Non-admitted stages: pure metadata rows (no side-effects). Guarded by name.

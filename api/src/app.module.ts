@@ -25,6 +25,7 @@ import { FilesModule } from "./modules/files/files.module";
 import { ParentsModule } from "./modules/parents/parents.module";
 import { AdmissionsModule } from "./modules/admissions/admissions.module";
 import { StudentProfileModule } from "./modules/student-profile/student-profile.module";
+import { SisModule } from "./modules/sis/sis.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -55,6 +56,7 @@ import { HealthController } from "./health.controller";
     ParentsModule,
     AdmissionsModule,
     StudentProfileModule,
+    SisModule,
   ],
   controllers: [HealthController],
 })
