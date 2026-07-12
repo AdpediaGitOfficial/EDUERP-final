@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { apiGet, apiPost } from "@/lib/api/client";
+import { CHART_PRIMARY } from "@/lib/chart";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -886,7 +887,7 @@ function ChildDetailPage() {
                     formatter={(v: any) => [`${v}%`, "Attendance"]}
                     cursor={{ fill: "hsl(var(--muted))" }}
                   />
-                  <Bar dataKey="pct" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="pct" fill={CHART_PRIMARY} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

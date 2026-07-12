@@ -146,7 +146,7 @@ function Page() {
                               ? "bg-red-100 text-red-800 border-0"
                               : i.severity === "medium"
                                 ? "bg-amber-100 text-amber-800 border-0"
-                                : "bg-slate-100 text-slate-700 border-0"
+                                : "bg-muted text-muted-foreground border-0"
                           }
                         >
                           {niceLabel(i.severity)}
@@ -160,7 +160,7 @@ function Page() {
                               ? "bg-amber-100 text-amber-800 border-0"
                               : i.status === "resolved"
                                 ? "bg-emerald-100 text-emerald-800 border-0"
-                                : "bg-slate-100 text-slate-700 border-0"
+                                : "bg-muted text-muted-foreground border-0"
                           }
                         >
                           {niceLabel(i.status)}

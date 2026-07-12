@@ -127,7 +127,7 @@ function BorrowerCell({ b }: { b: Borrower | null }) {
 
 function StatusBadge({ s }: { s: "returned" | "overdue" | "active" }) {
   const map = {
-    returned: "bg-slate-100 text-slate-700",
+    returned: "bg-muted text-muted-foreground",
     overdue: "bg-red-100 text-red-900",
     active: "bg-amber-100 text-amber-900",
   } as const;
@@ -633,7 +633,7 @@ function FinesTab({ loans, onChange }: { loans: any[]; onChange: () => void }) {
                         ? "bg-amber-100 text-amber-900"
                         : l.fine_status === "paid"
                           ? "bg-emerald-100 text-emerald-800"
-                          : "bg-slate-100 text-slate-700",
+                          : "bg-muted text-muted-foreground",
                     )}
                   >
                     {l.fine_status.charAt(0).toUpperCase() + l.fine_status.slice(1)}

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { apiGet } from "@/lib/api/client";
+import { CHART_PRIMARY, CHART_DANGER } from "@/lib/chart";
 import { PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
 import { QueryError, StatCardsSkeleton } from "@/components/query-states";
@@ -153,12 +154,14 @@ function Page() {
                 <Input
                   type="date"
                   className="h-8 w-[140px]"
+                  aria-label="Custom range start date"
                   value={custom.from}
                   onChange={(e) => setCustom({ ...custom, from: e.target.value })}
                 />
                 <Input
                   type="date"
                   className="h-8 w-[140px]"
+                  aria-label="Custom range end date"
                   value={custom.to}
                   onChange={(e) => setCustom({ ...custom, to: e.target.value })}
                 />
@@ -206,7 +209,7 @@ function Page() {
                 <Line
                   type="monotone"
                   dataKey="revenue"
-                  stroke="hsl(var(--primary))"
+                  stroke={CHART_PRIMARY}
                   strokeWidth={2}
                   dot={{ r: 3 }}
                 />
@@ -261,22 +264,22 @@ function Page() {
               <Bar
                 dataKey="collected"
                 stackId="a"
-                fill="hsl(var(--primary))"
+                fill={CHART_PRIMARY}
                 name="Collected"
                 onClick={(d: any) => {
                   if (d?.id) window.location.assign(`/classes/${d.id}?tab=fees`);
                 }}
-                style={{ cursor: "pointer" }}
+                className="cursor-pointer"
               />
               <Bar
                 dataKey="outstanding"
                 stackId="a"
-                fill="hsl(var(--destructive))"
+                fill={CHART_DANGER}
                 name="Outstanding"
                 onClick={(d: any) => {
                   if (d?.id) window.location.assign(`/classes/${d.id}?tab=fees`);
                 }}
-                style={{ cursor: "pointer" }}
+                className="cursor-pointer"
               />
             </BarChart>
           </ResponsiveContainer>

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
+import { CHART_PRIMARY } from "@/lib/chart";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -432,7 +433,7 @@ function AssetDetail() {
                 <Line
                   type="monotone"
                   dataKey="value"
-                  stroke="hsl(var(--primary))"
+                  stroke={CHART_PRIMARY}
                   strokeWidth={2}
                   dot={{ r: 3 }}
                 />

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
+import { CHART_PRIMARY } from "@/lib/chart";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -105,7 +106,7 @@ function Dashboard() {
         <StatCard icon={CheckCircle2} label="In Use" value={stats.in_use} tint="text-blue-600" />
         <StatCard icon={Circle} label="Available" value={stats.available} tint="text-emerald-600" />
         <StatCard icon={Wrench} label="In Repair" value={stats.repair} tint="text-amber-600" />
-        <StatCard icon={Archive} label="Retired" value={stats.retired} tint="text-slate-600" />
+        <StatCard icon={Archive} label="Retired" value={stats.retired} tint="text-muted-foreground" />
         <StatCard icon={Trash2} label="Disposed" value={stats.disposed} tint="text-red-600" />
       </div>
 
@@ -141,7 +142,7 @@ function Dashboard() {
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                 <Tooltip />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" fill={CHART_PRIMARY} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

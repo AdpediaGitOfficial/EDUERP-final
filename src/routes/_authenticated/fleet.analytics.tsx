@@ -156,7 +156,7 @@ function Page() {
                           ? "bg-red-100 text-red-800 border-0"
                           : r.daysLeft <= 60
                             ? "bg-amber-100 text-amber-800 border-0"
-                            : "bg-slate-100 text-slate-700 border-0"
+                            : "bg-muted text-muted-foreground border-0"
                       }
                     >
                       {r.daysLeft}d

@@ -112,7 +112,7 @@ function paymentStatusBadge(s: string) {
     successful: "bg-emerald-100 text-emerald-900",
     pending: "bg-amber-100 text-amber-900",
     failed: "bg-red-100 text-red-900",
-    refunded: "bg-slate-200 text-slate-900",
+    refunded: "bg-muted text-foreground",
   };
   const label: Record<string, string> = {
     successful: "Successful",

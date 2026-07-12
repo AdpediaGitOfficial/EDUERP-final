@@ -38,7 +38,7 @@ export const Route = createFileRoute("/_authenticated/complaints")({
 });
 
 const SEV: Record<string, string> = {
-  low: "bg-slate-100 text-slate-900",
+  low: "bg-muted text-foreground",
   medium: "bg-amber-100 text-amber-900",
   high: "bg-red-100 text-red-900",
 };

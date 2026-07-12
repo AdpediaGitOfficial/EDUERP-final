@@ -522,6 +522,7 @@ function SubmitDialog({
                   <div className="text-xs font-medium">Your submission</div>
                   <Input
                     placeholder="Attachment URL (link to your work)"
+                    aria-label="Submission attachment URL"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                   />

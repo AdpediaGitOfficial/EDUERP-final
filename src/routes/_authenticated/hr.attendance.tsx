@@ -187,7 +187,7 @@ function Page() {
         </Card>
         <Card className="p-4 rounded-2xl">
           <div className="text-xs text-muted-foreground">Not Marked</div>
-          <div className="text-2xl font-semibold text-slate-600">{notMarked}</div>
+          <div className="text-2xl font-semibold text-muted-foreground">{notMarked}</div>
         </Card>
       </div>
 
@@ -240,7 +240,7 @@ function Page() {
                         {row ? (
                           <Badge className={badgeClass(row.status)}>{niceLabel(row.status)}</Badge>
                         ) : nm ? (
-                          <Badge className="bg-slate-200 text-slate-800 border-0">Not Marked</Badge>
+                          <Badge className="bg-muted text-foreground border-0">Not Marked</Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">Pending</span>
                         )}

@@ -30,7 +30,7 @@ function Page() {
           value={cnt("converted")}
           tint="text-emerald-600"
         />
-        <Stat icon={XCircle} label="Lost" value={cnt("lost")} tint="text-slate-500" />
+        <Stat icon={XCircle} label="Lost" value={cnt("lost")} tint="text-muted-foreground" />
         <Stat icon={Users} label="Visitors today" value={total} tint="text-foreground" />
         <Stat icon={Clock} label="Currently in" value={active} tint="text-emerald-600" />
       </div>

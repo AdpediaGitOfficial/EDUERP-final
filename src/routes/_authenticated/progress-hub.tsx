@@ -39,7 +39,7 @@ export const Route = createFileRoute("/_authenticated/progress-hub")({
 
 const TONE_META: Record<string, string> = {
   positive: "bg-emerald-100 text-emerald-900",
-  neutral: "bg-slate-100 text-slate-900",
+  neutral: "bg-muted text-foreground",
   concern: "bg-amber-100 text-amber-900",
 };
 

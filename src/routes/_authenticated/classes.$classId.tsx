@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
+import { CHART_PRIMARY, CHART_MUTED } from "@/lib/chart";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { RequireRole } from "@/components/require-role";
 import { Card } from "@/components/ui/card";
@@ -556,7 +557,7 @@ function ClassDetailPage() {
                   <Line
                     type="monotone"
                     dataKey="pct"
-                    stroke="hsl(var(--primary))"
+                    stroke={CHART_PRIMARY}
                     strokeWidth={2}
                     dot={false}
                   />
@@ -578,8 +579,8 @@ function ClassDetailPage() {
                     <XAxis dataKey="subject" />
                     <YAxis domain={[0, 100]} />
                     <Tooltip />
-                    <Bar dataKey="avg" fill="hsl(var(--primary))" name="This class" />
-                    <Bar dataKey="schoolAvg" fill="hsl(var(--muted-foreground))" name="Grade avg" />
+                    <Bar dataKey="avg" fill={CHART_PRIMARY} name="This class" />
+                    <Bar dataKey="schoolAvg" fill={CHART_MUTED} name="Grade avg" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -593,7 +594,7 @@ function ClassDetailPage() {
                     <XAxis dataKey="grade" />
                     <YAxis />
                     <Tooltip />
-                    <Bar dataKey="count" fill="hsl(var(--primary))" />
+                    <Bar dataKey="count" fill={CHART_PRIMARY} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

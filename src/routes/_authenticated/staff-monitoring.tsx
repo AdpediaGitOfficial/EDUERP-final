@@ -95,6 +95,7 @@ function Page() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search teachers…"
+              aria-label="Search teachers"
               className="pl-9"
             />
           </div>

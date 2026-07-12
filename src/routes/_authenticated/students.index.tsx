@@ -788,7 +788,7 @@ function AdminStudentsView() {
   };
   const statusBadge = (s: string) => {
     if (s === "alumni")
-      return <Badge className="bg-slate-100 text-slate-700 border-0">Alumni</Badge>;
+      return <Badge className="bg-muted text-muted-foreground border-0">Alumni</Badge>;
     if (s === "inactive")
       return <Badge className="bg-zinc-100 text-zinc-600 border-0">Inactive</Badge>;
     return <Badge className="bg-emerald-50 text-emerald-700 border-0">Active</Badge>;

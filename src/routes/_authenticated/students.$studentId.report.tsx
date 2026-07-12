@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiFileObjectUrl } from "@/lib/api/client";
+import { CHART_PRIMARY, CHART_MUTED, CHART_GRID } from "@/lib/chart";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -308,16 +309,16 @@ function StudentReportPage() {
       return <Badge className="bg-emerald-100 text-emerald-700 border-0">Positive</Badge>;
     if (t === "attention")
       return <Badge className="bg-red-100 text-red-700 border-0">Needs improvement</Badge>;
-    return <Badge className="bg-slate-100 text-slate-700 border-0">Neutral</Badge>;
+    return <Badge className="bg-muted text-muted-foreground border-0">Neutral</Badge>;
   };
   const cellClass = (status?: string, weekend?: boolean) => {
-    if (weekend) return "bg-slate-100";
-    if (!status) return "bg-slate-50";
+    if (weekend) return "bg-muted";
+    if (!status) return "bg-muted/50";
     if (status === "present") return "bg-emerald-400";
     if (status === "late") return "bg-amber-300";
     if (status === "excused") return "bg-sky-300";
     if (status === "absent") return "bg-red-400";
-    return "bg-slate-100";
+    return "bg-muted";
   };
 
   const chartData = subjectRows.map((r) => ({ subject: r.subject, You: r.pct, Class: r.classAvg }));
@@ -545,10 +546,10 @@ function StudentReportPage() {
                       <YAxis fontSize={11} domain={[0, 100]} />
                       <Tooltip />
                       <Legend />
-                      <Bar dataKey="You" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="You" fill={CHART_PRIMARY} radius={[6, 6, 0, 0]} />
                       <Bar
                         dataKey="Class"
-                        fill="hsl(var(--muted-foreground))"
+                        fill={CHART_MUTED}
                         radius={[6, 6, 0, 0]}
                       />
                     </BarChart>
@@ -567,7 +568,7 @@ function StudentReportPage() {
                       <Line
                         type="monotone"
                         dataKey="pct"
-                        stroke="hsl(var(--primary))"
+                        stroke={CHART_PRIMARY}
                         strokeWidth={2}
                         dot
                       />
@@ -612,7 +613,7 @@ function StudentReportPage() {
                       cy="18"
                       r="15.9"
                       fill="none"
-                      stroke="hsl(var(--muted))"
+                      stroke={CHART_GRID}
                       strokeWidth="3"
                     />
                     <circle
@@ -685,7 +686,7 @@ function StudentReportPage() {
                     <span className="size-3 rounded-sm bg-sky-300" /> Leave
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="size-3 rounded-sm bg-slate-100" /> Weekend / no data
+                    <span className="size-3 rounded-sm bg-muted" /> Weekend / no data
                   </span>
                 </div>
                 <div className="mt-4 print:hidden">

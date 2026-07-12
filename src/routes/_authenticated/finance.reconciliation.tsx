@@ -89,6 +89,7 @@ function Page() {
                       {r?.bank_ref ?? (
                         <Input
                           placeholder="Bank statement ref"
+                          aria-label="Bank statement reference"
                           value={refs[p.id] ?? ""}
                           onChange={(e) => setRefs({ ...refs, [p.id]: e.target.value })}
                           className="max-w-56"
