@@ -70,6 +70,7 @@ import { Route as AuthenticatedHrTravelRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedHrTrainingRouteImport } from './routes/_authenticated/hr.training'
 import { Route as AuthenticatedHrShiftsRouteImport } from './routes/_authenticated/hr.shifts'
 import { Route as AuthenticatedHrSettingsRouteImport } from './routes/_authenticated/hr.settings'
+import { Route as AuthenticatedHrSalaryRouteImport } from './routes/_authenticated/hr.salary'
 import { Route as AuthenticatedHrReportsRouteImport } from './routes/_authenticated/hr.reports'
 import { Route as AuthenticatedHrRecruitmentRouteImport } from './routes/_authenticated/hr.recruitment'
 import { Route as AuthenticatedHrPerformanceRouteImport } from './routes/_authenticated/hr.performance'
@@ -451,6 +452,11 @@ const AuthenticatedHrSettingsRoute = AuthenticatedHrSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedHrRoute,
 } as any)
+const AuthenticatedHrSalaryRoute = AuthenticatedHrSalaryRouteImport.update({
+  id: '/salary',
+  path: '/salary',
+  getParentRoute: () => AuthenticatedHrRoute,
+} as any)
 const AuthenticatedHrReportsRoute = AuthenticatedHrReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -818,6 +824,7 @@ export interface FileRoutesByFullPath {
   '/hr/performance': typeof AuthenticatedHrPerformanceRoute
   '/hr/recruitment': typeof AuthenticatedHrRecruitmentRoute
   '/hr/reports': typeof AuthenticatedHrReportsRoute
+  '/hr/salary': typeof AuthenticatedHrSalaryRoute
   '/hr/settings': typeof AuthenticatedHrSettingsRoute
   '/hr/shifts': typeof AuthenticatedHrShiftsRoute
   '/hr/training': typeof AuthenticatedHrTrainingRoute
@@ -919,6 +926,7 @@ export interface FileRoutesByTo {
   '/hr/performance': typeof AuthenticatedHrPerformanceRoute
   '/hr/recruitment': typeof AuthenticatedHrRecruitmentRoute
   '/hr/reports': typeof AuthenticatedHrReportsRoute
+  '/hr/salary': typeof AuthenticatedHrSalaryRoute
   '/hr/settings': typeof AuthenticatedHrSettingsRoute
   '/hr/shifts': typeof AuthenticatedHrShiftsRoute
   '/hr/training': typeof AuthenticatedHrTrainingRoute
@@ -1032,6 +1040,7 @@ export interface FileRoutesById {
   '/_authenticated/hr/performance': typeof AuthenticatedHrPerformanceRoute
   '/_authenticated/hr/recruitment': typeof AuthenticatedHrRecruitmentRoute
   '/_authenticated/hr/reports': typeof AuthenticatedHrReportsRoute
+  '/_authenticated/hr/salary': typeof AuthenticatedHrSalaryRoute
   '/_authenticated/hr/settings': typeof AuthenticatedHrSettingsRoute
   '/_authenticated/hr/shifts': typeof AuthenticatedHrShiftsRoute
   '/_authenticated/hr/training': typeof AuthenticatedHrTrainingRoute
@@ -1146,6 +1155,7 @@ export interface FileRouteTypes {
     | '/hr/performance'
     | '/hr/recruitment'
     | '/hr/reports'
+    | '/hr/salary'
     | '/hr/settings'
     | '/hr/shifts'
     | '/hr/training'
@@ -1247,6 +1257,7 @@ export interface FileRouteTypes {
     | '/hr/performance'
     | '/hr/recruitment'
     | '/hr/reports'
+    | '/hr/salary'
     | '/hr/settings'
     | '/hr/shifts'
     | '/hr/training'
@@ -1359,6 +1370,7 @@ export interface FileRouteTypes {
     | '/_authenticated/hr/performance'
     | '/_authenticated/hr/recruitment'
     | '/_authenticated/hr/reports'
+    | '/_authenticated/hr/salary'
     | '/_authenticated/hr/settings'
     | '/_authenticated/hr/shifts'
     | '/_authenticated/hr/training'
@@ -1830,6 +1842,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/hr/settings'
       preLoaderRoute: typeof AuthenticatedHrSettingsRouteImport
+      parentRoute: typeof AuthenticatedHrRoute
+    }
+    '/_authenticated/hr/salary': {
+      id: '/_authenticated/hr/salary'
+      path: '/salary'
+      fullPath: '/hr/salary'
+      preLoaderRoute: typeof AuthenticatedHrSalaryRouteImport
       parentRoute: typeof AuthenticatedHrRoute
     }
     '/_authenticated/hr/reports': {
@@ -2337,6 +2356,7 @@ interface AuthenticatedHrRouteChildren {
   AuthenticatedHrPerformanceRoute: typeof AuthenticatedHrPerformanceRoute
   AuthenticatedHrRecruitmentRoute: typeof AuthenticatedHrRecruitmentRoute
   AuthenticatedHrReportsRoute: typeof AuthenticatedHrReportsRoute
+  AuthenticatedHrSalaryRoute: typeof AuthenticatedHrSalaryRoute
   AuthenticatedHrSettingsRoute: typeof AuthenticatedHrSettingsRoute
   AuthenticatedHrShiftsRoute: typeof AuthenticatedHrShiftsRoute
   AuthenticatedHrTrainingRoute: typeof AuthenticatedHrTrainingRoute
@@ -2359,6 +2379,7 @@ const AuthenticatedHrRouteChildren: AuthenticatedHrRouteChildren = {
   AuthenticatedHrPerformanceRoute: AuthenticatedHrPerformanceRoute,
   AuthenticatedHrRecruitmentRoute: AuthenticatedHrRecruitmentRoute,
   AuthenticatedHrReportsRoute: AuthenticatedHrReportsRoute,
+  AuthenticatedHrSalaryRoute: AuthenticatedHrSalaryRoute,
   AuthenticatedHrSettingsRoute: AuthenticatedHrSettingsRoute,
   AuthenticatedHrShiftsRoute: AuthenticatedHrShiftsRoute,
   AuthenticatedHrTrainingRoute: AuthenticatedHrTrainingRoute,

@@ -46,6 +46,30 @@ export interface DesignationInput {
   min_pay?: number | null;
   max_pay?: number | null;
 }
+export interface SalaryLineItem {
+  label: string;
+  amount: number;
+}
+export interface SalaryComponentsInput {
+  basic?: number;
+  earnings?: SalaryLineItem[];
+  deductions?: SalaryLineItem[];
+  pf_enabled?: boolean;
+  esi_enabled?: boolean;
+  pt_enabled?: boolean;
+  tds_enabled?: boolean;
+  tds_amount?: number;
+}
+export interface SalaryTemplateInput extends SalaryComponentsInput {
+  name: string;
+  code: string;
+  description?: string | null;
+}
+export interface EmployeeSalaryInput extends SalaryComponentsInput {
+  template_id?: string | null;
+  effective_from?: string;
+  notes?: string | null;
+}
 
 /**
  * RLS translation (api/db/rls-policies-extracted.csv):
@@ -537,6 +561,194 @@ export class HrService {
       where: { is_active: true },
       orderBy: { name: "asc" },
     });
+  }
+
+  // ── Compensation: salary templates + per-employee "Set Salary" ──────────────
+  //
+  // Statutory rates mirror the demo defaults on the HR Settings page. They are
+  // computed here so PF/ESI/PT are never entered (or double-counted) by hand.
+  private static readonly PF_RATE = 0.12; // employee PF on basic
+  private static readonly ESI_RATE = 0.0075; // ESI on gross
+  private static readonly ESI_WAGE_CEILING = 21000; // ESI only applies at/under this gross
+  private static readonly PT_FLAT = 200; // monthly professional tax
+
+  /** Read-side gate: hr|admin write everything, accountant may read compensation. */
+  private canReadPay(actor: AuthUser) {
+    return this.isHr(actor) || actor.roles.includes("accountant");
+  }
+
+  private lineItems(raw: unknown): { label: string; amount: number }[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((x) => ({
+        label: String((x as any)?.label ?? "").trim(),
+        amount: Number((x as any)?.amount ?? 0),
+      }))
+      .filter((x) => x.label && Number.isFinite(x.amount));
+  }
+
+  /** Derive the full statutory + net breakdown for a template or structure row. */
+  private computeBreakdown(row: {
+    basic: unknown;
+    earnings: unknown;
+    deductions: unknown;
+    pf_enabled: boolean;
+    esi_enabled: boolean;
+    pt_enabled: boolean;
+    tds_enabled: boolean;
+    tds_amount: unknown;
+  }) {
+    const basic = Math.max(0, Number(row.basic ?? 0));
+    const earnings = this.lineItems(row.earnings);
+    const deductions = this.lineItems(row.deductions);
+    const round = (n: number) => Math.round(n * 100) / 100;
+
+    const gross = round(basic + earnings.reduce((s, e) => s + e.amount, 0));
+    const pf = row.pf_enabled ? round(basic * HrService.PF_RATE) : 0;
+    const esi =
+      row.esi_enabled && gross <= HrService.ESI_WAGE_CEILING
+        ? round(gross * HrService.ESI_RATE)
+        : 0;
+    const pt = row.pt_enabled ? HrService.PT_FLAT : 0;
+    const tds = row.tds_enabled ? Math.max(0, Number(row.tds_amount ?? 0)) : 0;
+    const otherDeductions = round(deductions.reduce((s, d) => s + d.amount, 0));
+    const totalDeductions = round(pf + esi + pt + tds + otherDeductions);
+    const net = round(gross - totalDeductions);
+
+    return {
+      basic,
+      earnings,
+      deductions,
+      gross,
+      statutory: { pf, esi, pt, tds },
+      otherDeductions,
+      totalDeductions,
+      net,
+      annualCtc: round(gross * 12),
+    };
+  }
+
+  private mapSalaryInput(input: SalaryComponentsInput) {
+    return {
+      basic: input.basic ?? 0,
+      earnings: this.lineItems(input.earnings) as unknown as Prisma.InputJsonValue,
+      deductions: this.lineItems(input.deductions) as unknown as Prisma.InputJsonValue,
+      pf_enabled: input.pf_enabled ?? true,
+      esi_enabled: input.esi_enabled ?? true,
+      pt_enabled: input.pt_enabled ?? true,
+      tds_enabled: input.tds_enabled ?? false,
+      tds_amount: input.tds_amount ?? 0,
+    };
+  }
+
+  async listSalaryTemplates(actor: AuthUser) {
+    if (!this.canReadPay(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.hr_salary_templates.findMany({
+      where: { is_active: true },
+      orderBy: { name: "asc" },
+    });
+    return rows.map((t) => ({ ...t, breakdown: this.computeBreakdown(t) }));
+  }
+
+  async createSalaryTemplate(actor: AuthUser, input: SalaryTemplateInput) {
+    this.requireHr(actor);
+    try {
+      const row = await this.prisma.hr_salary_templates.create({
+        data: { name: input.name, code: input.code, description: input.description || null, ...this.mapSalaryInput(input) },
+      });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("That template code is already in use.");
+      throw e;
+    }
+  }
+
+  async updateSalaryTemplate(actor: AuthUser, id: string, input: SalaryTemplateInput) {
+    this.requireHr(actor);
+    const existing = await this.prisma.hr_salary_templates.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Template not found");
+    try {
+      await this.prisma.hr_salary_templates.update({
+        where: { id },
+        data: {
+          name: input.name,
+          code: input.code,
+          description: input.description || null,
+          updated_at: new Date(),
+          ...this.mapSalaryInput(input),
+        },
+      });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("That template code is already in use.");
+      throw e;
+    }
+  }
+
+  async deleteSalaryTemplate(actor: AuthUser, id: string) {
+    this.requireHr(actor);
+    const existing = await this.prisma.hr_salary_templates.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Template not found");
+    // Soft-deactivate: structures reference it (ON DELETE SET NULL keeps them safe,
+    // but keeping the row lets existing assignments still name their source).
+    await this.prisma.hr_salary_templates.update({
+      where: { id },
+      data: { is_active: false, updated_at: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /** Current salary structure for one employee, with the computed breakdown. */
+  async getEmployeeSalary(actor: AuthUser, staffId: string) {
+    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+    if (!staff) throw new NotFoundException("Employee not found");
+    if (!this.canReadPay(actor) && staff.profile_id !== actor.id) throw new ForbiddenException();
+    const structure = await this.prisma.hr_salary_structures.findUnique({
+      where: { staff_id: staffId },
+      include: { template: { select: { name: true, code: true } } },
+    });
+    if (!structure) return { structure: null, breakdown: null };
+    return { structure, breakdown: this.computeBreakdown(structure) };
+  }
+
+  /** Set (create or replace) an employee's salary structure. hr|admin only. */
+  async setEmployeeSalary(actor: AuthUser, staffId: string, input: EmployeeSalaryInput) {
+    this.requireHr(actor);
+    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+    if (!staff) throw new NotFoundException("Employee not found");
+    if (input.template_id) {
+      const tpl = await this.prisma.hr_salary_templates.findUnique({
+        where: { id: input.template_id },
+      });
+      if (!tpl) throw new BadRequestException("Unknown salary template");
+    }
+    const data = {
+      template_id: input.template_id || null,
+      effective_from: input.effective_from ? new Date(input.effective_from) : new Date(),
+      notes: input.notes || null,
+      ...this.mapSalaryInput(input),
+    };
+    const existing = await this.prisma.hr_salary_structures.findUnique({
+      where: { staff_id: staffId },
+    });
+    await this.prisma.$transaction([
+      this.prisma.hr_salary_structures.upsert({
+        where: { staff_id: staffId },
+        create: { staff_id: staffId, ...data },
+        update: { ...data, updated_at: new Date() },
+      }),
+      this.prisma.staff_employment_history.create({
+        data: {
+          staff_id: staffId,
+          event_type: existing ? "salary_revised" : "salary_assigned",
+          effective_date: data.effective_from,
+          notes: "Salary structure " + (existing ? "revised" : "assigned"),
+        },
+      }),
+    ]);
+    return { ok: true };
   }
 
   async createDepartment(actor: AuthUser, input: DepartmentInput) {

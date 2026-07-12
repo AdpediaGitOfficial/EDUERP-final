@@ -2455,3 +2455,124 @@ describe("Notifications center", () => {
     expect((await get("/notifications/unread-count", "parent")).body.count).toBe(0);
   });
 });
+
+describe("HR: salary templates + per-employee Set Salary", () => {
+  const put = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
+    request(http).put(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
+  const del = (p: string, r: keyof typeof ACCOUNTS) =>
+    request(http).delete(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`);
+
+  it("seeds starter templates and computes the statutory breakdown", async () => {
+    const list = await get("/hr/salary-templates", "admin");
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body)).toBe(true);
+    const teach = list.body.find((t: any) => t.code === "TPL-TEACH");
+    expect(teach).toBeTruthy();
+    // basic 30000 + HRA 12000 + conv 3000 + special 5000 = 50000 gross
+    expect(teach.breakdown.gross).toBe(50000);
+    // PF = 12% of 30000 = 3600; ESI off (gross > 21k); PT 200; TDS enabled but 0
+    expect(teach.breakdown.statutory.pf).toBe(3600);
+    expect(teach.breakdown.statutory.esi).toBe(0);
+    expect(teach.breakdown.statutory.pt).toBe(200);
+    expect(teach.breakdown.net).toBe(50000 - 3600 - 200);
+  });
+
+  it("teacher cannot read or write compensation", async () => {
+    expect((await get("/hr/salary-templates", "teacher")).status).toBe(403);
+    expect(
+      (await post("/hr/salary-templates", "teacher", { name: "X", code: "X" })).status,
+    ).toBe(403);
+  });
+
+  it("creates a template (dup code 409), computes ESI when gross is under the ceiling", async () => {
+    const code = `TPL-JEST-${Date.now()}`;
+    const created = await post("/hr/salary-templates", "admin", {
+      name: "Jest Template",
+      code,
+      basic: 12000,
+      earnings: [{ label: "HRA", amount: 4000 }],
+      deductions: [{ label: "Canteen", amount: 500 }],
+      pf_enabled: true,
+      esi_enabled: true,
+      pt_enabled: true,
+      tds_enabled: false,
+    });
+    expect(created.status).toBe(201);
+
+    // duplicate code -> 409
+    expect(
+      (await post("/hr/salary-templates", "admin", { name: "Dupe", code, basic: 1 })).status,
+    ).toBe(409);
+
+    const list = await get("/hr/salary-templates", "admin");
+    const mine = list.body.find((t: any) => t.code === code);
+    // gross 16000 <= 21000 so ESI applies: 0.75% of 16000 = 120
+    expect(mine.breakdown.gross).toBe(16000);
+    expect(mine.breakdown.statutory.esi).toBe(120);
+    expect(mine.breakdown.statutory.pf).toBe(1440); // 12% of 12000
+    // net = 16000 - (1440 + 120 + 200 + 0 + 500)
+    expect(mine.breakdown.net).toBe(16000 - 1440 - 120 - 200 - 500);
+
+    // soft-delete removes it from the active list
+    expect((await del(`/hr/salary-templates/${mine.id}`, "admin")).status).toBe(200);
+    const after = await get("/hr/salary-templates", "admin");
+    expect(after.body.some((t: any) => t.code === code)).toBe(false);
+  });
+
+  it("sets and revises an employee's salary, writing employment history", async () => {
+    const staffList = await get("/hr/staff", "admin");
+    const staffId = staffList.body[0].id;
+
+    // no structure yet
+    const before = await get(`/hr/staff/${staffId}/salary`, "admin");
+    expect(before.status).toBe(200);
+
+    const setRes = await put(`/hr/staff/${staffId}/salary`, "admin", {
+      basic: 40000,
+      earnings: [{ label: "HRA", amount: 16000 }],
+      deductions: [],
+      pf_enabled: true,
+      esi_enabled: true,
+      pt_enabled: true,
+      tds_enabled: true,
+      tds_amount: 2500,
+      effective_from: "2024-04-01",
+      notes: "Initial",
+    });
+    expect(setRes.status).toBe(200);
+
+    const got = await get(`/hr/staff/${staffId}/salary`, "admin");
+    expect(got.body.structure).toBeTruthy();
+    expect(got.body.breakdown.gross).toBe(56000);
+    expect(got.body.breakdown.statutory.tds).toBe(2500);
+    expect(got.body.breakdown.statutory.esi).toBe(0); // gross > 21k
+    expect(got.body.breakdown.net).toBe(56000 - 4800 - 200 - 2500); // pf 12% of 40000 = 4800
+
+    // revise -> upsert stays unique per staff, history gets a salary event
+    const revise = await put(`/hr/staff/${staffId}/salary`, "admin", {
+      basic: 45000,
+      pf_enabled: true,
+      esi_enabled: false,
+      pt_enabled: true,
+      tds_enabled: false,
+    });
+    expect(revise.status).toBe(200);
+    const after = await get(`/hr/staff/${staffId}/salary`, "admin");
+    expect(Number(after.body.structure.basic)).toBe(45000);
+
+    const detail = await get(`/hr/staff/${staffId}`, "admin");
+    expect(
+      detail.body.history.some((h: any) => String(h.event_type).startsWith("salary_")),
+    ).toBe(true);
+
+    // unknown template id is rejected
+    expect(
+      (
+        await put(`/hr/staff/${staffId}/salary`, "admin", {
+          basic: 1000,
+          template_id: "00000000-0000-0000-0000-000000000000",
+        })
+      ).status,
+    ).toBe(400);
+  });
+});

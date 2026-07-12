@@ -8,6 +8,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -16,13 +17,17 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   MinLength,
+  ValidateNested,
 } from "class-validator";
+import { Type } from "class-transformer";
 
 class CreateLeaveDto {
   @IsString()
@@ -92,6 +97,39 @@ class DesignationDto {
   @IsOptional() @IsString() salary_grade?: string;
   @IsOptional() @IsNumber() min_pay?: number;
   @IsOptional() @IsNumber() max_pay?: number;
+}
+
+class SalaryLineItemDto {
+  @IsString() @MinLength(1) label: string;
+  @IsNumber() amount: number;
+}
+class SalaryComponentsDto {
+  @IsOptional() @IsNumber() basic?: number;
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SalaryLineItemDto)
+  earnings?: SalaryLineItemDto[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SalaryLineItemDto)
+  deductions?: SalaryLineItemDto[];
+  @IsOptional() @IsBoolean() pf_enabled?: boolean;
+  @IsOptional() @IsBoolean() esi_enabled?: boolean;
+  @IsOptional() @IsBoolean() pt_enabled?: boolean;
+  @IsOptional() @IsBoolean() tds_enabled?: boolean;
+  @IsOptional() @IsNumber() tds_amount?: number;
+}
+class SalaryTemplateDto extends SalaryComponentsDto {
+  @IsString() @MinLength(1) name: string;
+  @IsString() @MinLength(1) code: string;
+  @IsOptional() @IsString() description?: string;
+}
+class EmployeeSalaryDto extends SalaryComponentsDto {
+  @IsOptional() @IsUUID() template_id?: string;
+  @IsOptional() @IsDateString() effective_from?: string;
+  @IsOptional() @IsString() notes?: string;
 }
 
 class AttnUpsertDto {
@@ -271,6 +309,45 @@ export class HrController {
   @Get("leave-types")
   listLeaveTypes() {
     return this.hr.listLeaveTypes();
+  }
+
+  // ---- Compensation: salary templates + Set Salary ------------------------
+  @Get("salary-templates")
+  listSalaryTemplates(@CurrentUser() actor: AuthUser) {
+    return this.hr.listSalaryTemplates(actor);
+  }
+
+  @Post("salary-templates")
+  createSalaryTemplate(@CurrentUser() actor: AuthUser, @Body() dto: SalaryTemplateDto) {
+    return this.hr.createSalaryTemplate(actor, dto);
+  }
+
+  @Patch("salary-templates/:id")
+  updateSalaryTemplate(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: SalaryTemplateDto,
+  ) {
+    return this.hr.updateSalaryTemplate(actor, id, dto);
+  }
+
+  @Delete("salary-templates/:id")
+  deleteSalaryTemplate(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.deleteSalaryTemplate(actor, id);
+  }
+
+  @Get("staff/:id/salary")
+  getEmployeeSalary(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.getEmployeeSalary(actor, id);
+  }
+
+  @Put("staff/:id/salary")
+  setEmployeeSalary(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: EmployeeSalaryDto,
+  ) {
+    return this.hr.setEmployeeSalary(actor, id, dto);
   }
 
   // ---- Departments --------------------------------------------------------

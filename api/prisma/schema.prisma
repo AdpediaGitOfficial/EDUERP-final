@@ -1106,6 +1106,7 @@ model staff {
   overtime_requests_overtime_requests_approver_idTostaff overtime_requests[]        @relation("overtime_requests_approver_idTostaff")
   overtime_requests_overtime_requests_staff_idTostaff    overtime_requests[]        @relation("overtime_requests_staff_idTostaff")
   payroll_runs                                           payroll_runs[]
+  salary_structure                                       hr_salary_structures?
   resignations                                           resignations[]
   profiles                                               profiles?                  @relation(fields: [profile_id], references: [id], onUpdate: NoAction)
   staff                                                  staff?                     @relation("staffTostaff", fields: [reporting_manager_id], references: [id], onUpdate: NoAction)
@@ -1765,5 +1766,49 @@ model hr_leave_types {
   is_active     Boolean  @default(true)
   created_at    DateTime @default(now()) @db.Timestamptz(6)
 
+  @@schema("public")
+}
+
+model hr_salary_templates {
+  id          String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  code        String                  @unique
+  description String?
+  basic       Decimal                 @default(0) @db.Decimal(12, 2)
+  earnings    Json                    @default("[]")
+  deductions  Json                    @default("[]")
+  pf_enabled  Boolean                 @default(true)
+  esi_enabled Boolean                 @default(true)
+  pt_enabled  Boolean                 @default(true)
+  tds_enabled Boolean                 @default(false)
+  tds_amount  Decimal                 @default(0) @db.Decimal(12, 2)
+  is_active   Boolean                 @default(true)
+  created_at  DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime                @default(now()) @db.Timestamptz(6)
+  structures  hr_salary_structures[]
+
+  @@schema("public")
+}
+
+model hr_salary_structures {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  staff_id       String               @unique @db.Uuid
+  template_id    String?              @db.Uuid
+  basic          Decimal              @default(0) @db.Decimal(12, 2)
+  earnings       Json                 @default("[]")
+  deductions     Json                 @default("[]")
+  pf_enabled     Boolean              @default(true)
+  esi_enabled    Boolean              @default(true)
+  pt_enabled     Boolean              @default(true)
+  tds_enabled    Boolean              @default(false)
+  tds_amount     Decimal              @default(0) @db.Decimal(12, 2)
+  effective_from DateTime             @default(dbgenerated("CURRENT_DATE")) @db.Date
+  notes          String?
+  created_at     DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime             @default(now()) @db.Timestamptz(6)
+  staff          staff                @relation(fields: [staff_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  template       hr_salary_templates? @relation(fields: [template_id], references: [id], onUpdate: NoAction)
+
+  @@index([template_id])
   @@schema("public")
 }
