@@ -33,11 +33,3 @@ export function stageBadgeClass(stage: string): string {
   if (stage === "draft") return "bg-muted text-muted-foreground";
   return "bg-blue-100 text-blue-800";
 }
-
-/** The next stage label shown on the "advance" button (null at terminal). */
-export function nextStageLabel(stage: string): string | null {
-  const i = ADMISSION_STAGES.indexOf(stage as any);
-  if (i < 0 || i >= ADMISSION_STAGES.length - 1) return null;
-  if (stage === "draft") return null; // draft advances via Submit, not Advance
-  return STAGE_LABEL[ADMISSION_STAGES[i + 1]];
-}

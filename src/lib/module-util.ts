@@ -119,10 +119,6 @@ export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function firstOfMonth(d = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
 // Download an array of records as CSV. Keys of the first row become the header.
 export function downloadCsv(rows: Record<string, any>[], filename: string): void {
   if (!rows.length) return;

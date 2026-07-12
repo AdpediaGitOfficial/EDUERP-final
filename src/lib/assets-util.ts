@@ -58,12 +58,3 @@ export function daysBetween(a: string | Date, b: string | Date = new Date()) {
   const B = typeof b === "string" ? new Date(b) : b;
   return Math.floor((B.getTime() - A.getTime()) / (24 * 3600 * 1000));
 }
-
-export function nextAssetCode(existing: string[]): string {
-  let max = 0;
-  for (const c of existing) {
-    const m = /AST-(\d+)/.exec(c || "");
-    if (m) max = Math.max(max, parseInt(m[1], 10));
-  }
-  return `AST-${String(max + 1).padStart(4, "0")}`;
-}
