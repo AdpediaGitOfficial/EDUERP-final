@@ -10,6 +10,23 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
+export interface SubjectInput {
+  class_id: string;
+  name: string;
+  code?: string | null;
+  short_name?: string | null;
+  category?: string | null;
+  subject_type?: string;
+  nature?: string;
+  credits?: number;
+  weekly_periods?: number;
+  pass_marks?: number;
+  max_marks?: number;
+  lab_required?: boolean;
+  department?: string | null;
+  color?: string | null;
+}
+
 /**
  * RLS translation (api/db/rls-policies-extracted.csv):
  *   classes:   classes_read_auth  -> any authenticated user may read (qual: true)
@@ -157,8 +174,87 @@ export class AcademicsService {
     const rows = await this.prisma.subjects.findMany({
       where: classId ? { class_id: classId } : {},
       orderBy: { name: "asc" },
+      include: { classes: { select: { name: true, section: true, academic_year: true } } },
     });
-    return rows.map((s) => ({ id: s.id, classId: s.class_id, name: s.name, code: s.code }));
+    return rows.map((s) => ({
+      id: s.id,
+      classId: s.class_id,
+      className: s.classes ? `${s.classes.name} ${s.classes.section ?? ""}`.trim() : null,
+      academicYear: s.classes?.academic_year ?? null,
+      name: s.name,
+      code: s.code,
+      shortName: s.short_name,
+      category: s.category,
+      subjectType: s.subject_type,
+      nature: s.nature,
+      credits: Number(s.credits),
+      weeklyPeriods: s.weekly_periods,
+      passMarks: Number(s.pass_marks),
+      maxMarks: Number(s.max_marks),
+      labRequired: s.lab_required,
+      department: s.department,
+      color: s.color,
+      isActive: s.is_active,
+    }));
+  }
+
+  private mapSubjectInput(input: SubjectInput) {
+    return {
+      name: input.name,
+      code: input.code || null,
+      short_name: input.short_name || null,
+      category: input.category || null,
+      subject_type: input.subject_type || "compulsory",
+      nature: input.nature || "theory",
+      credits: input.credits ?? 0,
+      weekly_periods: input.weekly_periods ?? 0,
+      pass_marks: input.pass_marks ?? 33,
+      max_marks: input.max_marks ?? 100,
+      lab_required: input.lab_required ?? false,
+      department: input.department || null,
+      color: input.color || null,
+    };
+  }
+
+  async createSubject(actor: AuthUser, input: SubjectInput) {
+    this.requireAcademicAdmin(actor);
+    const cls = await this.prisma.classes.findUnique({ where: { id: input.class_id } });
+    if (!cls) throw new NotFoundException("Class not found");
+    if (input.code) {
+      const dup = await this.prisma.subjects.findFirst({
+        where: { class_id: input.class_id, code: input.code },
+        select: { id: true },
+      });
+      if (dup) throw new ConflictException("That subject code already exists for this class.");
+    }
+    const row = await this.prisma.subjects.create({
+      data: { class_id: input.class_id, ...this.mapSubjectInput(input) },
+    });
+    return { id: row.id };
+  }
+
+  async updateSubject(actor: AuthUser, id: string, input: SubjectInput) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.subjects.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Subject not found");
+    if (input.code && input.code !== existing.code) {
+      const dup = await this.prisma.subjects.findFirst({
+        where: { class_id: existing.class_id, code: input.code, id: { not: id } },
+        select: { id: true },
+      });
+      if (dup) throw new ConflictException("That subject code already exists for this class.");
+    }
+    await this.prisma.subjects.update({ where: { id }, data: this.mapSubjectInput(input) });
+    return { ok: true };
+  }
+
+  /** Soft enable/disable — subjects have exam/timetable/homework FKs, never hard-deleted. */
+  async setSubjectActive(actor: AuthUser, id: string, isActive: boolean) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.subjects.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Subject not found");
+    await this.prisma.subjects.update({ where: { id }, data: { is_active: isActive } });
+    return { ok: true };
   }
 
   /**
@@ -507,7 +603,7 @@ export class AcademicsService {
         distinct: ["teacher_id"],
       }),
       classIds.length
-        ? this.prisma.subjects.count({ where: { class_id: { in: classIds } } })
+        ? this.prisma.subjects.count({ where: { class_id: { in: classIds }, is_active: true } })
         : Promise.resolve(0),
       this.prisma.attendance.groupBy({
         by: ["status"],

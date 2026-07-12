@@ -2929,3 +2929,65 @@ describe("Academics: sessions entity", () => {
     expect((await post(`/academics/sessions/${source.id}/clone`, "admin", { name: newName })).status).toBe(409);
   });
 });
+
+describe("Academics: subject master", () => {
+  const patch3 = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
+    request(http).patch(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
+
+  it("lists subjects with the enriched master fields", async () => {
+    const res = await get("/subjects", "admin");
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    const s = res.body[0];
+    for (const k of ["subjectType", "nature", "credits", "weeklyPeriods", "maxMarks", "isActive"]) {
+      expect(s).toHaveProperty(k);
+    }
+  });
+
+  it("creates a subject (dup code per class 409), updates it, and soft-disables it", async () => {
+    const cls = (await get("/classes", "admin")).body[0];
+    const code = `JS-${Date.now()}`;
+    const created = await post("/subjects", "admin", {
+      class_id: cls.id,
+      name: "Jest Subject",
+      code,
+      subject_type: "elective",
+      nature: "practical",
+      weekly_periods: 4,
+      max_marks: 50,
+      lab_required: true,
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+
+    // duplicate code within the same class -> 409
+    expect(
+      (await post("/subjects", "admin", { class_id: cls.id, name: "Dupe", code })).status,
+    ).toBe(409);
+
+    // invalid enum rejected
+    expect(
+      (await post("/subjects", "admin", { class_id: cls.id, name: "Bad", subject_type: "nope" }))
+        .status,
+    ).toBe(400);
+
+    // teacher cannot create
+    expect(
+      (await post("/subjects", "teacher", { class_id: cls.id, name: "No" })).status,
+    ).toBe(403);
+
+    // update
+    expect(
+      (await patch3(`/subjects/${id}`, "admin", { class_id: cls.id, name: "Jest Subject v2", weekly_periods: 6 }))
+        .status,
+    ).toBe(200);
+
+    // disable -> excluded when active filter is applied client-side; dashboard active count drops
+    expect((await patch3(`/subjects/${id}/active`, "admin", { is_active: false })).status).toBe(200);
+    const after = await get(`/subjects?classId=${cls.id}`, "admin");
+    const mine = after.body.find((x: any) => x.id === id);
+    expect(mine.isActive).toBe(false);
+    expect(mine.weeklyPeriods).toBe(6);
+    expect(mine.name).toBe("Jest Subject v2");
+  });
+});

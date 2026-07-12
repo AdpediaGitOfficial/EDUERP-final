@@ -113,6 +113,7 @@ import { Route as AuthenticatedAssetsCategoriesRouteImport } from './routes/_aut
 import { Route as AuthenticatedAssetsAllocationRouteImport } from './routes/_authenticated/assets.allocation'
 import { Route as AuthenticatedAdmissionsNewRouteImport } from './routes/_authenticated/admissions.new'
 import { Route as AuthenticatedAdmissionsAdmissionIdRouteImport } from './routes/_authenticated/admissions.$admissionId'
+import { Route as AuthenticatedAcademicsSubjectsRouteImport } from './routes/_authenticated/academics.subjects'
 import { Route as AuthenticatedAcademicsSessionsRouteImport } from './routes/_authenticated/academics.sessions'
 import { Route as AuthenticatedStudentsStudentIdIndexRouteImport } from './routes/_authenticated/students.$studentId.index'
 import { Route as AuthenticatedHrStaffIndexRouteImport } from './routes/_authenticated/hr.staff.index'
@@ -702,6 +703,12 @@ const AuthenticatedAdmissionsAdmissionIdRoute =
     path: '/$admissionId',
     getParentRoute: () => AuthenticatedAdmissionsRoute,
   } as any)
+const AuthenticatedAcademicsSubjectsRoute =
+  AuthenticatedAcademicsSubjectsRouteImport.update({
+    id: '/subjects',
+    path: '/subjects',
+    getParentRoute: () => AuthenticatedAcademicsRoute,
+  } as any)
 const AuthenticatedAcademicsSessionsRoute =
   AuthenticatedAcademicsSessionsRouteImport.update({
     id: '/sessions',
@@ -821,6 +828,7 @@ export interface FileRoutesByFullPath {
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
   '/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
+  '/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
   '/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -927,6 +935,7 @@ export interface FileRoutesByTo {
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
   '/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
+  '/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
   '/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -1046,6 +1055,7 @@ export interface FileRoutesById {
   '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
+  '/_authenticated/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
   '/_authenticated/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/_authenticated/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/_authenticated/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -1166,6 +1176,7 @@ export interface FileRouteTypes {
     | '/timetable'
     | '/users'
     | '/academics/sessions'
+    | '/academics/subjects'
     | '/admissions/$admissionId'
     | '/admissions/new'
     | '/assets/allocation'
@@ -1272,6 +1283,7 @@ export interface FileRouteTypes {
     | '/timetable'
     | '/users'
     | '/academics/sessions'
+    | '/academics/subjects'
     | '/admissions/$admissionId'
     | '/admissions/new'
     | '/assets/allocation'
@@ -1390,6 +1402,7 @@ export interface FileRouteTypes {
     | '/_authenticated/timetable'
     | '/_authenticated/users'
     | '/_authenticated/academics/sessions'
+    | '/_authenticated/academics/subjects'
     | '/_authenticated/admissions/$admissionId'
     | '/_authenticated/admissions/new'
     | '/_authenticated/assets/allocation'
@@ -2206,6 +2219,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdmissionsAdmissionIdRouteImport
       parentRoute: typeof AuthenticatedAdmissionsRoute
     }
+    '/_authenticated/academics/subjects': {
+      id: '/_authenticated/academics/subjects'
+      path: '/subjects'
+      fullPath: '/academics/subjects'
+      preLoaderRoute: typeof AuthenticatedAcademicsSubjectsRouteImport
+      parentRoute: typeof AuthenticatedAcademicsRoute
+    }
     '/_authenticated/academics/sessions': {
       id: '/_authenticated/academics/sessions'
       path: '/sessions'
@@ -2302,12 +2322,14 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAcademicsRouteChildren {
   AuthenticatedAcademicsSessionsRoute: typeof AuthenticatedAcademicsSessionsRoute
+  AuthenticatedAcademicsSubjectsRoute: typeof AuthenticatedAcademicsSubjectsRoute
   AuthenticatedAcademicsIndexRoute: typeof AuthenticatedAcademicsIndexRoute
 }
 
 const AuthenticatedAcademicsRouteChildren: AuthenticatedAcademicsRouteChildren =
   {
     AuthenticatedAcademicsSessionsRoute: AuthenticatedAcademicsSessionsRoute,
+    AuthenticatedAcademicsSubjectsRoute: AuthenticatedAcademicsSubjectsRoute,
     AuthenticatedAcademicsIndexRoute: AuthenticatedAcademicsIndexRoute,
   }
 

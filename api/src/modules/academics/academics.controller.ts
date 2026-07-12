@@ -48,6 +48,26 @@ class CloneSessionDto {
   @IsString() @MinLength(4) name: string;
 }
 
+class SubjectDto {
+  @IsUUID() class_id: string;
+  @IsString() @MinLength(1) name: string;
+  @IsOptional() @IsString() code?: string;
+  @IsOptional() @IsString() short_name?: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsIn(["compulsory", "elective", "optional"]) subject_type?: string;
+  @IsOptional() @IsIn(["theory", "practical", "both"]) nature?: string;
+  @IsOptional() @IsInt() @Min(0) credits?: number;
+  @IsOptional() @IsInt() @Min(0) weekly_periods?: number;
+  @IsOptional() @IsInt() @Min(0) pass_marks?: number;
+  @IsOptional() @IsInt() @Min(0) max_marks?: number;
+  @IsOptional() @IsBoolean() lab_required?: boolean;
+  @IsOptional() @IsString() department?: string;
+  @IsOptional() @IsString() color?: string;
+}
+class SubjectActiveDto {
+  @IsBoolean() is_active: boolean;
+}
+
 class CreateClassDto {
   @IsString()
   @MinLength(2)
@@ -160,6 +180,25 @@ export class AcademicsController {
   @Get("subjects")
   listSubjects(@CurrentUser() actor: AuthUser, @Query("classId") classId?: string) {
     return this.academics.listSubjects(actor, classId);
+  }
+
+  @Post("subjects")
+  createSubject(@CurrentUser() actor: AuthUser, @Body() dto: SubjectDto) {
+    return this.academics.createSubject(actor, dto);
+  }
+
+  @Patch("subjects/:id")
+  updateSubject(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Body() dto: SubjectDto) {
+    return this.academics.updateSubject(actor, id, dto);
+  }
+
+  @Patch("subjects/:id/active")
+  setSubjectActive(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: SubjectActiveDto,
+  ) {
+    return this.academics.setSubjectActive(actor, id, dto.is_active);
   }
 
   @Get("classes/:id/detail")

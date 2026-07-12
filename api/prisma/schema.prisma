@@ -1388,16 +1388,29 @@ model student_activity_log {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model subjects {
-  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  class_id   String?     @db.Uuid
-  name       String
-  code       String?
-  created_at DateTime    @default(now()) @db.Timestamptz(6)
-  exams      exams[]
-  homework   homework[]
-  classes    classes?    @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  timetable  timetable[]
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  class_id       String?     @db.Uuid
+  name           String
+  code           String?
+  created_at     DateTime    @default(now()) @db.Timestamptz(6)
+  short_name     String?
+  category       String?
+  subject_type   String      @default("compulsory")
+  nature         String      @default("theory")
+  credits        Decimal     @default(0) @db.Decimal(5, 2)
+  weekly_periods Int         @default(0)
+  pass_marks     Decimal     @default(33) @db.Decimal(6, 2)
+  max_marks      Decimal     @default(100) @db.Decimal(6, 2)
+  lab_required   Boolean     @default(false)
+  department     String?
+  color          String?
+  is_active      Boolean     @default(true)
+  exams          exams[]
+  homework       homework[]
+  classes        classes?    @relation(fields: [class_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  timetable      timetable[]
 
+  @@index([is_active])
   @@schema("public")
 }
 
