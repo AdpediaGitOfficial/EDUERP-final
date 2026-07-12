@@ -1266,6 +1266,9 @@ model student_details {
   first_name          String?
   middle_name         String?
   last_name           String?
+  dob                 DateTime?           @db.Date
+  current_address     String?
+  permanent_address   String?
   category_id         String?             @db.Uuid
   house               String?
   religion            String?

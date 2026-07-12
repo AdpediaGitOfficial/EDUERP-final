@@ -14,13 +14,16 @@ import {
 import {
   IsArray,
   IsBoolean,
+  IsIn,
+  IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
   MinLength,
 } from "class-validator";
-import { AdmissionsService } from "./admissions.service";
+import { AdmissionsService, type AdmitDirectInput } from "./admissions.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 
@@ -61,6 +64,62 @@ class DocsDto {
   @IsArray() documents: unknown[];
 }
 
+class AdmitDirectDto {
+  // Academic
+  @IsOptional() @IsString() @MaxLength(40) admissionNo?: string;
+  @IsOptional() @IsString() @MaxLength(40) rollNo?: string;
+  @IsOptional() @IsString() admissionDate?: string;
+  @IsUUID() classId: string;
+  @IsOptional() @IsString() section?: string;
+  @IsOptional() @IsString() @MaxLength(60) biometricId?: string;
+  @IsOptional() @IsString() @MaxLength(500) previousSchool?: string;
+  @IsOptional() @IsNumber() openingDueBalance?: number;
+  // Personal
+  @IsString() @MinLength(1) @MaxLength(80) firstName: string;
+  @IsOptional() @IsString() @MaxLength(80) middleName?: string;
+  @IsOptional() @IsString() @MaxLength(80) lastName?: string;
+  @IsOptional() @IsIn(["male", "female", "other"]) gender?: string;
+  @IsOptional() @IsString() dob?: string;
+  @IsOptional() @IsUUID() categoryId?: string;
+  @IsOptional() @IsString() @MaxLength(60) house?: string;
+  @IsOptional() @IsString() @MaxLength(10) bloodGroup?: string;
+  @IsOptional() @IsString() @MaxLength(40) religion?: string;
+  @IsOptional() @IsString() @MaxLength(40) aadhaarNo?: string;
+  @IsOptional() @IsString() @MaxLength(40) penSssmId?: string;
+  @IsOptional() @IsString() @MaxLength(60) caste?: string;
+  @IsOptional() @IsString() @MaxLength(60) subCaste?: string;
+  @IsOptional() @IsString() @MaxLength(40) motherTongue?: string;
+  @IsOptional() @IsString() @MaxLength(80) placeOfBirth?: string;
+  @IsOptional() @IsString() @MaxLength(40) nationality?: string;
+  @IsOptional() @IsBoolean() bpl?: boolean;
+  @IsOptional() @IsBoolean() rte?: boolean;
+  @IsOptional() @IsString() @MaxLength(30) studentPhone?: string;
+  @IsOptional() @IsString() @MaxLength(255) studentEmail?: string;
+  @IsOptional() @IsString() photoUrl?: string;
+  // Parents
+  @IsIn(["new", "existing"]) parentMode: "new" | "existing";
+  @IsOptional() @IsUUID() existingParentId?: string;
+  @IsOptional() @IsIn(["father", "mother", "other"]) primaryGuardian?: "father" | "mother" | "other";
+  @IsOptional() @IsObject() father?: Record<string, unknown>;
+  @IsOptional() @IsObject() mother?: Record<string, unknown>;
+  @IsOptional() @IsString() @MaxLength(255) parentLoginEmail?: string;
+  @IsOptional() @IsString() @MaxLength(120) emergencyContactName?: string;
+  @IsOptional() @IsString() @MaxLength(30) emergencyContactPhone?: string;
+  @IsOptional() @IsString() @MaxLength(400) guardianAddress?: string;
+  @IsOptional() @IsString() @MaxLength(400) currentAddress?: string;
+  @IsOptional() @IsString() @MaxLength(400) permanentAddress?: string;
+  // Health & bank
+  @IsOptional() @IsNumber() heightCm?: number;
+  @IsOptional() @IsNumber() weightKg?: number;
+  @IsOptional() @IsString() @MaxLength(1000) medicalHistory?: string;
+  @IsOptional() @IsString() @MaxLength(120) bankName?: string;
+  @IsOptional() @IsString() @MaxLength(40) bankAccount?: string;
+  @IsOptional() @IsString() @MaxLength(20) bankIfsc?: string;
+  // Fees & custom
+  @IsOptional() @IsArray() @IsUUID("all", { each: true }) feeGroupIds?: string[];
+  @IsOptional() @IsObject() customFields?: Record<string, unknown>;
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller("admissions")
 export class AdmissionsController {
@@ -80,6 +139,12 @@ export class AdmissionsController {
   @Post()
   create(@CurrentUser() actor: AuthUser, @Body() dto: ApplicantDto) {
     return this.svc.createDraft(actor, dto);
+  }
+
+  /** Direct 5-step admission — creates the student + fees + parent atomically. */
+  @Post("admit")
+  admitDirect(@CurrentUser() actor: AuthUser, @Body() dto: AdmitDirectDto) {
+    return this.svc.admitDirect(actor, dto as unknown as AdmitDirectInput);
   }
 
   @Get(":id")

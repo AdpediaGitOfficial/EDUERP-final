@@ -5,9 +5,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { PrismaService } from "../../infra/database/prisma.service";
 import { AuthService } from "../auth/auth.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { ParentsService } from "../parents/parents.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
 /** The ordered admission pipeline. `rejected` is a terminal off-ramp. */
@@ -40,6 +43,7 @@ export class AdmissionsService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(ParentsService) private readonly parents: ParentsService,
   ) {}
 
   private requireDesk(actor: AuthUser) {
@@ -478,4 +482,338 @@ export class AdmissionsService {
       throw e;
     }
   }
+
+  /**
+   * Direct admission (the 5-step "Admit Student" wizard). Atomically creates the
+   * student account + rich details + medical, resolves the parent (link an
+   * existing one or create a new deduped account), links guardians, and raises a
+   * fee invoice for every selected fee group plus any opening balance — in one
+   * operation. Rolls back the provisioned accounts if the transaction fails.
+   */
+  async admitDirect(actor: AuthUser, dto: AdmitDirectInput) {
+    this.requireDesk(actor);
+    const first = (dto.firstName ?? "").trim();
+    if (!first) throw new BadRequestException("First name is required");
+    if (!dto.classId) throw new BadRequestException("Class is required");
+    const fullName = [dto.firstName, dto.middleName, dto.lastName]
+      .map((s) => (s ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
+
+    // Admission number + roll (reuse the standard DB sequences).
+    let admissionNo = dto.admissionNo?.trim() || null;
+    if (!admissionNo) {
+      const r = await this.prisma.$queryRaw<{ next_admission_no: string }[]>`
+        SELECT public.next_admission_no() AS next_admission_no`;
+      admissionNo = r[0]?.next_admission_no ?? null;
+    }
+    let rollNo = dto.rollNo?.trim() || null;
+    if (!rollNo) {
+      const r = await this.prisma.$queryRaw<{ next_roll_no: string }[]>`
+        SELECT public.next_roll_no(${dto.classId}::uuid) AS next_roll_no`;
+      rollNo = r[0]?.next_roll_no ?? null;
+    }
+
+    // ---- resolve the parent (existing link or a new deduped account) --------
+    let parentId: string | null = null;
+    let parentTempPassword: string | null = null;
+    let createdParentId: string | null = null;
+    if (dto.parentMode === "existing") {
+      if (!dto.existingParentId) throw new BadRequestException("Select an existing parent to link");
+      const p = await this.prisma.profiles.findUnique({ where: { id: dto.existingParentId } });
+      if (!p) throw new NotFoundException("Selected parent not found");
+      parentId = p.id;
+    } else {
+      const guardian = dto.primaryGuardian === "mother" ? dto.mother : dto.father;
+      const gName = (guardian?.name ?? "").trim() || fullName + " (Guardian)";
+      const email = (dto.parentLoginEmail ?? "").trim();
+      if (!email) throw new BadRequestException("Parent Account Login Email is required for a new parent");
+      // Reuse the parents module: dedup (email/phone/national id) + provision.
+      const created = await this.parents.create(actor, {
+        fullName: gName,
+        email,
+        phone: guardian?.phone ?? undefined,
+        nationalId: guardian?.aadhaar ?? undefined,
+        occupation: guardian?.occupation ?? undefined,
+        address: dto.guardianAddress ?? undefined,
+      });
+      parentId = created.parentId;
+      createdParentId = created.parentId;
+      parentTempPassword = created.tempPassword;
+      // Persist the primary guardian's extra fields.
+      await this.prisma.profiles.update({
+        where: { id: parentId },
+        data: {
+          qualification: guardian?.qualification ?? null,
+          annual_income: guardian?.annualIncome != null ? new Prisma.Decimal(guardian.annualIncome) : null,
+        },
+      });
+    }
+
+    // Student account.
+    const studentEmail =
+      dto.studentEmail?.trim() ||
+      `adm.${slug(fullName)}.${(admissionNo ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")}@student.greenwood.test`;
+    const tempPassword = `Welcome-${Math.random().toString(36).slice(2, 8)}!`;
+    const { userId } = await this.auth.provisionAccount({
+      email: studentEmail,
+      password: tempPassword,
+      fullName,
+      role: "student",
+      phone: dto.studentPhone ?? null,
+    });
+
+    try {
+      const studentId = await this.prisma.$transaction(async (tx) => {
+        const student = await tx.students.create({
+          data: {
+            profile_id: userId,
+            class_id: dto.classId,
+            admission_no: admissionNo,
+            roll_no: rollNo,
+            gender: dto.gender ?? null,
+            status: "active",
+            ...(dto.admissionDate ? { admission_date: new Date(dto.admissionDate) } : {}),
+          },
+        });
+
+        await tx.student_details.create({
+          data: {
+            student_id: student.id,
+            first_name: dto.firstName ?? null,
+            middle_name: dto.middleName ?? null,
+            last_name: dto.lastName ?? null,
+            dob: dto.dob ? new Date(dto.dob) : null,
+            current_address: dto.currentAddress ?? null,
+            permanent_address: dto.permanentAddress ?? null,
+            category_id: dto.categoryId ?? null,
+            house: dto.house ?? null,
+            religion: dto.religion ?? null,
+            caste: dto.caste ?? null,
+            sub_caste: dto.subCaste ?? null,
+            mother_tongue: dto.motherTongue ?? null,
+            place_of_birth: dto.placeOfBirth ?? null,
+            nationality: dto.nationality ?? "Indian",
+            aadhaar_no: dto.aadhaarNo ?? null,
+            pen_sssm_id: dto.penSssmId ?? null,
+            bpl: !!dto.bpl,
+            rte: !!dto.rte,
+            biometric_id: dto.biometricId ?? null,
+            previous_school: dto.previousSchool ?? null,
+            opening_due_balance: new Prisma.Decimal(dto.openingDueBalance ?? 0),
+            bank_name: dto.bankName ?? null,
+            bank_account: dto.bankAccount ?? null,
+            bank_ifsc: dto.bankIfsc ?? null,
+            photo_url: dto.photoUrl ?? null,
+            student_phone: dto.studentPhone ?? null,
+            student_email: dto.studentEmail ?? studentEmail,
+            custom: (dto.customFields ?? {}) as Prisma.InputJsonValue,
+            updated_by: actor.id,
+          },
+        });
+
+        if (
+          dto.heightCm != null ||
+          dto.weightKg != null ||
+          dto.bloodGroup ||
+          dto.medicalHistory ||
+          dto.emergencyContactName ||
+          dto.emergencyContactPhone
+        ) {
+          await tx.student_medical.create({
+            data: {
+              student_id: student.id,
+              blood_group: dto.bloodGroup ?? null,
+              allergies: dto.medicalHistory ?? null,
+              height_cm: dto.heightCm != null ? new Prisma.Decimal(dto.heightCm) : null,
+              weight_kg: dto.weightKg != null ? new Prisma.Decimal(dto.weightKg) : null,
+              emergency_contact_name: dto.emergencyContactName ?? null,
+              emergency_contact_phone: dto.emergencyContactPhone ?? null,
+              updated_by: actor.id,
+            },
+          });
+        }
+
+        // Primary guardian link.
+        if (parentId) {
+          const rel =
+            dto.primaryGuardian === "mother"
+              ? "mother"
+              : dto.primaryGuardian === "other"
+                ? "guardian"
+                : "father";
+          await tx.parent_student.upsert({
+            where: { parent_id_student_id: { parent_id: parentId, student_id: student.id } },
+            create: {
+              parent_id: parentId,
+              student_id: student.id,
+              relationship_type: rel,
+              is_primary: true,
+              fee_responsible: true,
+              emergency_contact: true,
+            },
+            update: {},
+          });
+        }
+
+        // Fee invoices for each selected fee group.
+        for (const fid of dto.feeGroupIds ?? []) {
+          const fs = await tx.fee_structures.findUnique({ where: { id: fid } });
+          if (!fs) continue;
+          await tx.fee_assignments.create({
+            data: {
+              student_id: student.id,
+              structure_id: fs.id,
+              title: fs.name,
+              amount_due: fs.amount,
+              due_date: new Date(Date.now() + 30 * 86_400_000),
+            },
+          });
+        }
+        // Opening balance as its own invoice line.
+        if (dto.openingDueBalance && dto.openingDueBalance > 0) {
+          await tx.fee_assignments.create({
+            data: {
+              student_id: student.id,
+              title: "Opening Due Balance",
+              amount_due: new Prisma.Decimal(dto.openingDueBalance),
+              due_date: new Date(Date.now() + 30 * 86_400_000),
+            },
+          });
+        }
+
+        // Activity log entry.
+        await tx.student_activity_log.create({
+          data: {
+            student_id: student.id,
+            actor_id: actor.id,
+            event_type: "admitted",
+            description: `Admitted via admission wizard (${admissionNo ?? "no number"}).`,
+          },
+        });
+
+        return student.id;
+      });
+
+      // Secondary guardian (the other parent block) — a guardian record so
+      // "multiple guardians per student" holds, without a second login.
+      const other = dto.primaryGuardian === "mother" ? dto.father : dto.mother;
+      if (dto.parentMode === "new" && other?.name?.trim()) {
+        await this.linkSecondaryGuardian(studentId, other, dto.primaryGuardian ?? "father");
+      }
+
+      // Notify the parent portal.
+      if (parentId) {
+        await this.notifications
+          .notify({
+            senderId: actor.id,
+            userIds: [parentId],
+            subject: "Admission confirmed",
+            body: `${fullName}'s admission is confirmed. Admission No: ${admissionNo}.`,
+          })
+          .catch(() => undefined);
+      }
+
+      return { ok: true, studentId, admissionNo, rollNo, tempPassword, parentId, parentTempPassword };
+    } catch (e) {
+      await this.auth.deleteAccount(userId).catch(() => undefined);
+      if (createdParentId) await this.auth.deleteAccount(createdParentId).catch(() => undefined);
+      throw e;
+    }
+  }
+
+  /** Create a non-login guardian profile for the secondary parent and link it. */
+  private async linkSecondaryGuardian(
+    studentId: string,
+    g: GuardianInput,
+    primary: string,
+  ) {
+    const rel = primary === "mother" ? "father" : "mother";
+    const profile = await this.prisma.profiles.create({
+      data: {
+        id: randomUUID(),
+        full_name: g.name!.trim(),
+        phone: g.phone ?? null,
+        occupation: g.occupation ?? null,
+        qualification: g.qualification ?? null,
+        national_id: g.aadhaar ?? null,
+        annual_income: g.annualIncome != null ? new Prisma.Decimal(g.annualIncome) : null,
+      },
+    });
+    await this.prisma.parent_student.create({
+      data: {
+        parent_id: profile.id,
+        student_id: studentId,
+        relationship_type: rel,
+        is_primary: false,
+      },
+    });
+  }
 }
+
+export type GuardianInput = {
+  name?: string;
+  middleName?: string;
+  phone?: string;
+  occupation?: string;
+  qualification?: string;
+  aadhaar?: string;
+  annualIncome?: number;
+  photoUrl?: string;
+};
+
+export type AdmitDirectInput = {
+  // Academic
+  admissionNo?: string;
+  rollNo?: string;
+  admissionDate?: string;
+  classId: string;
+  section?: string;
+  biometricId?: string;
+  previousSchool?: string;
+  openingDueBalance?: number;
+  // Personal
+  firstName: string;
+  middleName?: string;
+  lastName?: string;
+  gender?: string;
+  dob?: string;
+  categoryId?: string;
+  house?: string;
+  bloodGroup?: string;
+  religion?: string;
+  aadhaarNo?: string;
+  penSssmId?: string;
+  caste?: string;
+  subCaste?: string;
+  motherTongue?: string;
+  placeOfBirth?: string;
+  nationality?: string;
+  bpl?: boolean;
+  rte?: boolean;
+  studentPhone?: string;
+  studentEmail?: string;
+  photoUrl?: string;
+  // Parents
+  parentMode: "new" | "existing";
+  existingParentId?: string;
+  primaryGuardian?: "father" | "mother" | "other";
+  father?: GuardianInput;
+  mother?: GuardianInput;
+  parentLoginEmail?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  guardianAddress?: string;
+  currentAddress?: string;
+  permanentAddress?: string;
+  // Health & bank
+  heightCm?: number;
+  weightKg?: number;
+  medicalHistory?: string;
+  bankName?: string;
+  bankAccount?: string;
+  bankIfsc?: string;
+  // Fees & custom
+  feeGroupIds?: string[];
+  customFields?: Record<string, unknown>;
+};
