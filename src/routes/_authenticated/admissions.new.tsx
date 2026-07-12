@@ -160,6 +160,12 @@ function NewAdmissionWizard() {
     (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       set(k, e.target.value);
 
+  // De-duplicate fee groups by name for a tidy picker (test data can repeat names).
+  const feeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return feeGroups.filter((fee) => (seen.has(fee.name) ? false : seen.add(fee.name)));
+  }, [feeGroups]);
+
   const classNames = useMemo(() => Array.from(new Set(classes.map((c) => c.name))), [classes]);
   const sectionsForClass = useMemo(
     () => classes.filter((c) => c.name === f.className),
@@ -657,7 +663,7 @@ function NewAdmissionWizard() {
             <div>
               <div className="text-sm font-medium mb-2">Fee Groups</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {feeGroups.map((fee) => (
+                {feeOptions.map((fee) => (
                   <label
                     key={fee.id}
                     className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm cursor-pointer hover:bg-muted/30"
@@ -674,7 +680,7 @@ function NewAdmissionWizard() {
                     </span>
                   </label>
                 ))}
-                {feeGroups.length === 0 && (
+                {feeOptions.length === 0 && (
                   <p className="text-sm text-muted-foreground">No fee structures configured.</p>
                 )}
               </div>
