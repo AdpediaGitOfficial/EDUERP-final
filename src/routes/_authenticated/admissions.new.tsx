@@ -79,7 +79,14 @@ const emptyGuardian = (): Guardian => ({
 type ClassRow = { id: string; name: string; section: string };
 type Fee = { id: string; name: string; amount: string; frequency?: string; academicYear?: string };
 type CustomField = { id: string; label: string; fieldType: string; options: string[] };
-type ParentMatch = { id: string; fullName: string; email: string | null; phone: string | null };
+type ParentMatch = {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  hasLogin?: boolean;
+  children?: { name?: string }[];
+};
 
 function NewAdmissionWizard() {
   const navigate = useNavigate();
@@ -159,6 +166,25 @@ function NewAdmissionWizard() {
   const txt =
     (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       set(k, e.target.value);
+
+  // "Auto" buttons: fetch (and reserve) a real admission / roll number.
+  const [autoBusy, setAutoBusy] = useState<"adm" | "roll" | null>(null);
+  const fillAuto = async (which: "adm" | "roll") => {
+    if (which === "roll" && !f.classId) return toast.error("Select a class & section first.");
+    setAutoBusy(which);
+    try {
+      const q = which === "roll" ? `?classId=${f.classId}` : "";
+      const res = await apiGet<{ admissionNo: string | null; rollNo: string | null }>(
+        `/admissions/next-numbers${q}`,
+      );
+      if (which === "adm" && res.admissionNo) set("admissionNo", res.admissionNo);
+      if (which === "roll" && res.rollNo) set("rollNo", res.rollNo);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate");
+    } finally {
+      setAutoBusy(null);
+    }
+  };
 
   // De-duplicate fee groups by name for a tidy picker (test data can repeat names).
   const feeOptions = useMemo(() => {
@@ -321,29 +347,33 @@ function NewAdmissionWizard() {
       <Card className="rounded-2xl p-6">
         {step === 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="Admission No" hint="Blank = auto">
+            <Field label="Admission No" hint="Editable · click the wand to auto-generate, or leave blank">
               <div className="flex gap-2">
                 <Input value={f.admissionNo} onChange={txt("admissionNo")} placeholder="Auto" />
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
-                  onClick={() => set("admissionNo", "")}
-                  title="Auto-generate"
+                  onClick={() => fillAuto("adm")}
+                  disabled={autoBusy === "adm"}
+                  title="Auto-generate admission number"
+                  aria-label="Auto-generate admission number"
                 >
                   <Wand2 className="size-4" />
                 </Button>
               </div>
             </Field>
-            <Field label="Roll Number" hint="Blank = auto per section">
+            <Field label="Roll Number" hint="Editable · wand auto-numbers per section (pick a class first)">
               <div className="flex gap-2">
                 <Input value={f.rollNo} onChange={txt("rollNo")} placeholder="Auto" />
                 <Button
                   type="button"
                   variant="outline"
                   size="icon"
-                  onClick={() => set("rollNo", "")}
-                  title="Auto-generate"
+                  onClick={() => fillAuto("roll")}
+                  disabled={autoBusy === "roll"}
+                  title="Auto-generate roll number"
+                  aria-label="Auto-generate roll number"
                 >
                   <Wand2 className="size-4" />
                 </Button>
@@ -548,7 +578,23 @@ function NewAdmissionWizard() {
                           set("existingParentId", m.id);
                         }}
                       >
-                        <div className="font-medium">{m.fullName}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{m.fullName}</span>
+                          {m.hasLogin ? (
+                            <Badge className="bg-emerald-100 text-emerald-700 text-[10px]">
+                              Portal
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px]">
+                              Guardian
+                            </Badge>
+                          )}
+                          {(m.children?.length ?? 0) > 0 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {m.children!.length} child(ren)
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {m.email ?? "—"} · {m.phone ?? "—"}
                         </div>

@@ -141,6 +141,12 @@ export class AdmissionsController {
     return this.svc.createDraft(actor, dto);
   }
 
+  /** Preview/reserve the next admission + roll numbers for the wizard's Auto buttons. */
+  @Get("next-numbers")
+  nextNumbers(@CurrentUser() actor: AuthUser, @Query("classId") classId?: string) {
+    return this.svc.nextNumbers(actor, classId);
+  }
+
   /** Direct 5-step admission — creates the student + fees + parent atomically. */
   @Post("admit")
   admitDirect(@CurrentUser() actor: AuthUser, @Body() dto: AdmitDirectDto) {

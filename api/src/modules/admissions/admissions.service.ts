@@ -484,6 +484,24 @@ export class AdmissionsService {
   }
 
   /**
+   * Preview/reserve the next admission and roll numbers for the wizard's "Auto"
+   * buttons. The admission number consumes the sequence (so it's reserved and can
+   * never collide with a later auto-assignment); the roll is MAX+1 for the class.
+   */
+  async nextNumbers(actor: AuthUser, classId?: string) {
+    this.requireDesk(actor);
+    const a = await this.prisma.$queryRaw<{ n: string }[]>`
+      SELECT public.next_admission_no() AS n`;
+    let rollNo: string | null = null;
+    if (classId) {
+      const r = await this.prisma.$queryRaw<{ n: string }[]>`
+        SELECT public.next_roll_no(${classId}::uuid) AS n`;
+      rollNo = r[0]?.n ?? null;
+    }
+    return { admissionNo: a[0]?.n ?? null, rollNo };
+  }
+
+  /**
    * Direct admission (the 5-step "Admit Student" wizard). Atomically creates the
    * student account + rich details + medical, resolves the parent (link an
    * existing one or create a new deduped account), links guardians, and raises a

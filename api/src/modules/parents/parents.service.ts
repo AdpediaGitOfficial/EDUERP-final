@@ -102,6 +102,10 @@ export class ParentsService {
         Prisma.sql`(p.full_name ILIKE ${like} OR p.email ILIKE ${like} OR p.phone ILIKE ${like} OR p.parent_code ILIKE ${like})`,
       );
     }
+    // A guardian is anyone with the parent role (a portal login) OR anyone
+    // already linked to a student via parent_student. Historically most
+    // guardians were created without the parent role, so a role-only search
+    // made 96% of real guardians un-findable — this widens it to all of them.
     const rows = await this.prisma.$queryRaw<
       {
         id: string;
@@ -110,13 +114,18 @@ export class ParentsService {
         phone: string | null;
         national_id: string | null;
         parent_code: string | null;
+        has_login: boolean;
       }[]
     >(Prisma.sql`
-      SELECT DISTINCT p.id, p.full_name, p.email, p.phone, p.national_id, p.parent_code
+      SELECT DISTINCT p.id, p.full_name, p.email, p.phone, p.national_id, p.parent_code,
+             EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = p.id AND ur.role = 'parent') AS has_login
       FROM profiles p
-      JOIN user_roles ur ON ur.user_id = p.id AND ur.role = 'parent'
-      WHERE ${Prisma.join(conds, " OR ")}
-      ORDER BY p.full_name
+      WHERE (${Prisma.join(conds, " OR ")})
+        AND (
+          EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = p.id AND ur.role = 'parent')
+          OR EXISTS (SELECT 1 FROM parent_student ps WHERE ps.parent_id = p.id)
+        )
+      ORDER BY has_login DESC, p.full_name
       LIMIT 25
     `);
     const kids = await this.childrenByParent(rows.map((r) => r.id));
@@ -128,6 +137,7 @@ export class ParentsService {
         phone: r.phone,
         nationalId: r.national_id,
         parentCode: r.parent_code,
+        hasLogin: r.has_login,
         children: kids.get(r.id) ?? [],
       })),
     };

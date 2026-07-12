@@ -60,22 +60,33 @@ export class TeacherProfileService {
     const teacher = await this.getTeacher(teacherId);
     if (teacher.staff_id) return teacher.staff_id;
     const profileId = await this.resolveProfileId(teacher);
-    const employeeCode = `TCH-${teacher.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-    const created = await this.prisma.staff.create({
-      data: {
-        employee_code: employeeCode,
-        full_name: teacher.full_name,
-        email: teacher.email,
-        phone: teacher.phone,
-        department: "Academic",
-        designation: "Teacher",
-        employment_type: "full_time",
-        status: teacher.status ?? "active",
-        confirmation_status: "confirmed",
-        join_date: teacher.joined_date ?? new Date(),
-        ...(profileId ? { profile_id: profileId } : {}),
-      },
-    });
+    const base = `TCH-${teacher.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+    const data = {
+      full_name: teacher.full_name,
+      email: teacher.email || null,
+      phone: teacher.phone,
+      department: "Academic",
+      designation: "Teacher",
+      employment_type: "full_time",
+      status: teacher.status ?? "active",
+      confirmation_status: "confirmed",
+      join_date: teacher.joined_date ?? new Date(),
+      ...(profileId ? { profile_id: profileId } : {}),
+    };
+    // employee_code is unique; on the rare collision (two teacher ids sharing an
+    // 8-char prefix) retry with a longer suffix so linking never dead-ends.
+    let created;
+    try {
+      created = await this.prisma.staff.create({ data: { employee_code: base, ...data } });
+    } catch (e) {
+      if ((e as { code?: string }).code === "P2002") {
+        created = await this.prisma.staff.create({
+          data: { employee_code: `${base}-${teacher.id.replace(/-/g, "").slice(8, 14).toUpperCase()}`, ...data },
+        });
+      } else {
+        throw e;
+      }
+    }
     await this.prisma.teachers.update({
       where: { id: teacherId },
       data: { staff_id: created.id },
