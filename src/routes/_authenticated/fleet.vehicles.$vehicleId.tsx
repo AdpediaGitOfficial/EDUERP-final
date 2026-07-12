@@ -4,13 +4,13 @@ import { apiGet, apiFetch, apiPost, apiFileObjectUrl } from "@/lib/api/client";
 import { useConfirm } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileUpload } from "@/components/file-upload";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { badgeClass, daysUntil, fmtDate, money, niceLabel } from "@/lib/module-util";
+import { daysUntil, fmtDate, money, niceLabel } from "@/lib/module-util";
 import { ArrowLeft, Pencil, Power } from "lucide-react";
 import { useState } from "react";
 import { VehicleDialog } from "./fleet.vehicles.index";
@@ -181,7 +181,7 @@ function Page() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <Stat label="Status">
-          <Badge className={badgeClass(v.status)}>{niceLabel(v.status)}</Badge>
+          <StatusBadge status={v.status} />
         </Stat>
         <Stat label="Assigned driver">
           {driver ? (
@@ -208,11 +208,11 @@ function Page() {
         <Stat label="Trips (fuel refills)">{trips}</Stat>
         <Stat label="Insurance">
           {fmtDate(v.insurance_expiry)}{" "}
-          {ins !== null && ins <= 60 && <Badge className={badgeClass("pending")}>{ins}d</Badge>}
+          {ins !== null && ins <= 60 && <StatusBadge status="pending" label={`${ins}d`} />}
         </Stat>
         <Stat label="Permit">
           {fmtDate(v.permit_expiry)}{" "}
-          {per !== null && per <= 60 && <Badge className={badgeClass("pending")}>{per}d</Badge>}
+          {per !== null && per <= 60 && <StatusBadge status="pending" label={`${per}d`} />}
         </Stat>
         <Stat label="Fuel spend (all-time)">{money(fuelTotal)}</Stat>
         <Stat label="Maintenance (all-time)">{money(maintTotal)}</Stat>
@@ -224,7 +224,7 @@ function Page() {
             <div className="text-xs text-muted-foreground">Fuel efficiency (avg)</div>
             <div className="text-2xl font-semibold">{avgEff.toFixed(2)} km/L</div>
           </div>
-          {declining && <Badge className="bg-red-100 text-red-800 border-0">Declining trend</Badge>}
+          {declining && <StatusBadge tone="danger" label="Declining trend" />}
         </Card>
       )}
 
@@ -292,7 +292,7 @@ function Page() {
                         <td className="p-3">
                           {fmtDate(m.next_due_date)}{" "}
                           {overdue && (
-                            <Badge className="bg-red-100 text-red-800 border-0">Overdue</Badge>
+                            <StatusBadge tone="danger" label="Overdue" />
                           )}
                         </td>
                       </tr>

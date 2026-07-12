@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtDate, money, todayISO } from "@/lib/module-util";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -115,12 +115,7 @@ function Page() {
                         <td className="p-3">{money(m.cost)}</td>
                         <td className="p-3">
                           {fmtDate(m.next_due_date)}{" "}
-                          {od && (
-                            <Badge className="bg-red-100 text-red-800 border-0">
-                              <AlertTriangle className="size-3 inline mr-0.5" />
-                              Overdue
-                            </Badge>
-                          )}
+                          {od && <StatusBadge tone="danger" label="Overdue" />}
                         </td>
                       </tr>
                     );

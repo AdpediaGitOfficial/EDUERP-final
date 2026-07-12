@@ -4,6 +4,7 @@ import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -98,7 +99,7 @@ function Page() {
         <Stat label="Experience">{d.years_experience} yrs</Stat>
         <Stat label="License expires">
           {fmtDate(d.license_expiry)}{" "}
-          {days !== null && days <= 60 && <Badge className={badgeClass("pending")}>{days}d</Badge>}
+          {days !== null && days <= 60 && <StatusBadge status="pending" label={`${days}d`} />}
         </Stat>
         <Stat label="Current vehicle">
           {veh ? <span className="font-mono text-xs">{veh.registration_no}</span> : "—"}

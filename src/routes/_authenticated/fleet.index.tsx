@@ -4,7 +4,7 @@ import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { QueryError, StatCardsSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Select,
   SelectContent,
@@ -154,9 +154,7 @@ function Page() {
         <Card className="rounded-2xl p-4 min-w-0">
           <div className="flex items-center justify-between mb-3">
             <div className="font-medium">Renewals due — urgent (≤15 days)</div>
-            <Badge className="bg-red-100 text-red-800 border-0">
-              {groupedRenewals.urgent.length}
-            </Badge>
+            <StatusBadge tone="danger" label={String(groupedRenewals.urgent.length)} />
           </div>
           {groupedRenewals.urgent.length === 0 ? (
             <div className="text-sm text-muted-foreground">Nothing urgent.</div>
@@ -182,9 +180,7 @@ function Page() {
         <Card className="rounded-2xl p-4 min-w-0">
           <div className="flex items-center justify-between mb-3">
             <div className="font-medium">Renewals due — upcoming (16–60 days)</div>
-            <Badge className="bg-amber-100 text-amber-800 border-0">
-              {groupedRenewals.soon.length}
-            </Badge>
+            <StatusBadge tone="warning" label={String(groupedRenewals.soon.length)} />
           </div>
           {groupedRenewals.soon.length === 0 ? (
             <div className="text-sm text-muted-foreground">Nothing upcoming.</div>
