@@ -66,6 +66,10 @@ function Page() {
     queryKey: ["desigs-simple"],
     queryFn: () => apiGet<any[]>("/hr/designations"),
   });
+  const { data: employmentTypes } = useQuery({
+    queryKey: ["hr-employment-types"],
+    queryFn: () => apiGet<{ id: string; name: string; code: string }[]>("/hr/employment-types"),
+  });
 
   const filtered = (data ?? []).filter((s: any) => {
     if (deptFilter !== "all" && s.department !== deptFilter) return false;
@@ -368,10 +372,11 @@ function Page() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="full_time">Full time</SelectItem>
-                  <SelectItem value="part_time">Part time</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
-                  <SelectItem value="intern">Intern</SelectItem>
+                  {(employmentTypes ?? []).map((t) => (
+                    <SelectItem key={t.id} value={t.code}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
