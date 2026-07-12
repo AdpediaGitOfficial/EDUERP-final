@@ -2,9 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
-import { EmptyRow } from "@/components/empty-state";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { DataTable, type Column } from "@/components/data-table";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { badgeClass, daysUntil, fmtDate } from "@/lib/module-util";
+import { daysUntil, fmtDate } from "@/lib/module-util";
 import { Plus, Pencil, ChevronRight } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -60,6 +59,71 @@ function Page() {
       d.license_no?.toLowerCase().includes(q.toLowerCase()),
   );
 
+  const columns: Column<any>[] = [
+    {
+      id: "full_name",
+      header: "Name",
+      sortValue: (d) => d.full_name ?? "",
+      cell: (d) => <span className="font-medium">{d.full_name}</span>,
+    },
+    {
+      id: "license_no",
+      header: "License",
+      sortValue: (d) => d.license_no ?? "",
+      cell: (d) => <span className="font-mono text-xs">{d.license_no}</span>,
+    },
+    {
+      id: "license_expiry",
+      header: "Expiry",
+      sortValue: (d) => d.license_expiry ?? "",
+      cell: (d) => {
+        const days = daysUntil(d.license_expiry);
+        return (
+          <span className="whitespace-nowrap">
+            {fmtDate(d.license_expiry)}{" "}
+            {days !== null && days <= 60 && <StatusBadge status="pending" label={`${days}d`} />}
+          </span>
+        );
+      },
+    },
+    { id: "phone", header: "Phone", cell: (d) => d.phone ?? "—" },
+    {
+      id: "years_experience",
+      header: "Experience",
+      align: "right",
+      sortValue: (d) => Number(d.years_experience) || 0,
+      cell: (d) => `${d.years_experience} yrs`,
+    },
+    {
+      id: "vehicle",
+      header: "Vehicle",
+      cell: (d) => (
+        <span className="font-mono text-xs">{d.fleet_vehicles?.registration_no ?? "—"}</span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (d) => (
+        <span className="whitespace-nowrap" data-no-nav onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Edit driver"
+            onClick={() => {
+              setEditing(d);
+              setOpen(true);
+            }}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+          <ChevronRight className="inline size-4 text-muted-foreground" />
+        </span>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -83,72 +147,16 @@ function Page() {
         onChange={(e) => setQ(e.target.value)}
         className="mb-3 max-w-xs"
       />
-      <Card className="rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead className="bg-muted/40">
-              <tr className="text-left">
-                <th className="p-3">Name</th>
-                <th className="p-3">License</th>
-                <th className="p-3">Expiry</th>
-                <th className="p-3">Phone</th>
-                <th className="p-3">Experience</th>
-                <th className="p-3">Vehicle</th>
-                <th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((d: any) => {
-                const days = daysUntil(d.license_expiry);
-                return (
-                  <tr
-                    key={d.id}
-                    className="border-t hover:bg-muted/30 cursor-pointer"
-                    onClick={() =>
-                      nav({ to: "/fleet/drivers/$driverId", params: { driverId: d.id } })
-                    }
-                  >
-                    <td className="p-3 font-medium">{d.full_name}</td>
-                    <td className="p-3 font-mono text-xs">{d.license_no}</td>
-                    <td className="p-3 whitespace-nowrap">
-                      {fmtDate(d.license_expiry)}{" "}
-                      {days !== null && days <= 60 && (
-                        <Badge className={badgeClass("pending")}>{days}d</Badge>
-                      )}
-                    </td>
-                    <td className="p-3">{d.phone ?? "—"}</td>
-                    <td className="p-3">{d.years_experience} yrs</td>
-                    <td className="p-3 font-mono text-xs">
-                      {d.fleet_vehicles?.registration_no ?? "—"}
-                    </td>
-                    <td className="p-3 text-right whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditing(d);
-                          setOpen(true);
-                        }}
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <ChevronRight className="inline size-4 text-muted-foreground" />
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <EmptyRow
-                  colSpan={7}
-                  title="No drivers found"
-                  hint="Add a driver and assign them to a vehicle."
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <DataTable
+        rows={data === undefined ? undefined : filtered}
+        columns={columns}
+        getRowId={(d) => d.id}
+        loading={data === undefined}
+        onRowClick={(d) => nav({ to: "/fleet/drivers/$driverId", params: { driverId: d.id } })}
+        initialSort={{ id: "full_name", dir: "asc" }}
+        emptyTitle="No drivers found"
+        emptyHint="Add a driver and assign them to a vehicle."
+      />
       <DriverDialog
         open={open}
         onOpenChange={setOpen}
