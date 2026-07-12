@@ -1,8 +1,8 @@
-import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
-import { EmptyRow } from "@/components/empty-state";
+import { DataTable, type Column } from "@/components/data-table";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +39,7 @@ export const Route = createFileRoute("/_authenticated/assets/registry")({
 
 function Registry() {
   const search = useSearch({ from: "/_authenticated/assets/registry" });
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>(search.status ?? "all");
@@ -127,6 +128,54 @@ function Registry() {
     setOpen(false);
     qc.invalidateQueries({ queryKey: ["assets-registry"] });
   };
+
+  const columns: Column<any>[] = [
+    {
+      id: "asset_code",
+      header: "ID",
+      sortValue: (a) => a.asset_code ?? "",
+      cell: (a) => <span className="font-mono text-xs text-primary">{a.asset_code}</span>,
+    },
+    {
+      id: "name",
+      header: "Name",
+      sortValue: (a) => a.name ?? "",
+      cell: (a) => <span className="font-medium">{a.name}</span>,
+    },
+    {
+      id: "category",
+      header: "Category",
+      sortValue: (a) => a.categoryName ?? "",
+      cell: (a) => a.categoryName ?? "—",
+    },
+    {
+      id: "status",
+      header: "Status",
+      sortValue: (a) => a.status ?? "",
+      cell: (a) => <StatusBadge status={a.status} label={STATUS_LABEL[a.status]} />,
+    },
+    {
+      id: "location",
+      header: "Assigned / Location",
+      cell: (a) => a.assigned_to_label || a.location || "—",
+    },
+    {
+      id: "purchase",
+      header: "Purchase",
+      sortValue: (a) => a.purchase_date ?? "",
+      cell: (a) => (a.purchase_date ? new Date(a.purchase_date).toLocaleDateString() : "—"),
+    },
+    {
+      id: "value",
+      header: "Current value",
+      align: "right",
+      sortValue: (a) => a.current_value ?? 0,
+      cell: (a) => formatMoney(a.current_value),
+    },
+  ];
+
+  const openAsset = (a: any) =>
+    navigate({ to: "/assets/detail/$assetId", params: { assetId: a.id } });
 
   return (
     <>
@@ -278,88 +327,38 @@ function Registry() {
         </Select>
       </Card>
 
-      <Card className="rounded-2xl overflow-hidden">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="p-3">ID</th>
-                <th className="p-3">Name</th>
-                <th className="p-3">Category</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Assigned / Location</th>
-                <th className="p-3">Purchase</th>
-                <th className="p-3 text-right">Current value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((a: any) => (
-                <tr key={a.id} className="border-t hover:bg-muted/40">
-                  <td className="p-3 font-mono text-xs">
-                    <Link
-                      to="/assets/detail/$assetId"
-                      params={{ assetId: a.id }}
-                      className="text-primary hover:underline"
-                    >
-                      {a.asset_code}
-                    </Link>
-                  </td>
-                  <td className="p-3 font-medium">{a.name}</td>
-                  <td className="p-3">{a.categoryName ?? "—"}</td>
-                  <td className="p-3">
-                    <StatusBadge status={a.status} label={STATUS_LABEL[a.status]} />
-                  </td>
-                  <td className="p-3">{a.assigned_to_label || a.location || "—"}</td>
-                  <td className="p-3">
-                    {a.purchase_date ? new Date(a.purchase_date).toLocaleDateString() : "—"}
-                  </td>
-                  <td className="p-3 text-right">{formatMoney(a.current_value)}</td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <EmptyRow
-                  colSpan={7}
-                  icon={Package}
-                  title="No assets match"
-                  hint="Try a different search, category, or status filter."
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
-        {/* Mobile stacked */}
-        <div className="md:hidden divide-y">
-          {filtered.map((a: any) => (
-            <Link
-              key={a.id}
-              to="/assets/detail/$assetId"
-              params={{ assetId: a.id }}
-              className="block p-4 hover:bg-muted/40"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{a.name}</div>
-                  <div className="text-xs text-muted-foreground font-mono">{a.asset_code}</div>
-                </div>
-                <StatusBadge
-                  status={a.status}
-                  label={STATUS_LABEL[a.status]}
-                  className="shrink-0"
-                />
+      <DataTable
+        rows={assets === undefined ? undefined : filtered}
+        columns={columns}
+        getRowId={(a) => a.id}
+        loading={assets === undefined}
+        onRowClick={openAsset}
+        initialSort={{ id: "name", dir: "asc" }}
+        emptyIcon={Package}
+        emptyTitle="No assets match"
+        emptyHint="Try a different search, category, or status filter."
+        renderMobileCard={(a) => (
+          <button
+            type="button"
+            onClick={() => openAsset(a)}
+            className="block w-full text-left p-4 hover:bg-muted/40"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium truncate">{a.name}</div>
+                <div className="text-xs text-muted-foreground font-mono">{a.asset_code}</div>
               </div>
-              <div className="mt-2 text-xs text-muted-foreground flex items-center justify-between">
-                <span>
-                  {a.categoryName ?? "—"} · {a.assigned_to_label || a.location || "—"}
-                </span>
-                <span>{formatMoney(a.current_value)}</span>
-              </div>
-            </Link>
-          ))}
-          {filtered.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground">No assets match.</div>
-          )}
-        </div>
-      </Card>
+              <StatusBadge status={a.status} label={STATUS_LABEL[a.status]} className="shrink-0" />
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground flex items-center justify-between">
+              <span>
+                {a.categoryName ?? "—"} · {a.assigned_to_label || a.location || "—"}
+              </span>
+              <span>{formatMoney(a.current_value)}</span>
+            </div>
+          </button>
+        )}
+      />
     </>
   );
 }
