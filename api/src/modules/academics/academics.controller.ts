@@ -69,6 +69,20 @@ class SubjectActiveDto {
   @IsBoolean() is_active: boolean;
 }
 
+class ElectiveOfferingDto {
+  @IsString() @MinLength(1) name: string;
+  @IsOptional() @IsString() code?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() session?: string;
+  @IsOptional() @IsString() grade_level?: string;
+  @IsOptional() @IsInt() @Min(1) seat_capacity?: number;
+  @IsOptional() @IsUUID() subject_id?: string;
+  @IsOptional() @IsBoolean() is_active?: boolean;
+}
+class EnrollElectiveDto {
+  @IsUUID() student_id: string;
+}
+
 class TimetableSlotDto {
   @IsUUID() class_id: string;
   @IsOptional() @IsUUID() subject_id?: string;
@@ -206,6 +220,49 @@ export class AcademicsController {
   @Get("classes/:id")
   getClass(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.academics.getClass(actor, id);
+  }
+
+  @Get("academics/electives")
+  listElectiveOfferings(@CurrentUser() actor: AuthUser, @Query("session") session?: string) {
+    return this.academics.listElectiveOfferings(actor, session);
+  }
+
+  @Post("academics/electives")
+  createElectiveOffering(@CurrentUser() actor: AuthUser, @Body() dto: ElectiveOfferingDto) {
+    return this.academics.createElectiveOffering(actor, dto);
+  }
+
+  @Patch("academics/electives/:id")
+  updateElectiveOffering(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: ElectiveOfferingDto,
+  ) {
+    return this.academics.updateElectiveOffering(actor, id, dto);
+  }
+
+  @Delete("academics/electives/:id")
+  deleteElectiveOffering(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.academics.deleteElectiveOffering(actor, id);
+  }
+
+  @Get("academics/electives/:id/enrollments")
+  listElectiveEnrollments(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.academics.listElectiveEnrollments(actor, id);
+  }
+
+  @Post("academics/electives/:id/enroll")
+  enrollElective(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: EnrollElectiveDto,
+  ) {
+    return this.academics.enrollElective(actor, id, dto.student_id);
+  }
+
+  @Delete("academics/elective-enrollments/:id")
+  dropElective(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.academics.dropElective(actor, id);
   }
 
   @Get("academics/teacher-subjects")

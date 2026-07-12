@@ -10,6 +10,16 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
+export interface ElectiveOfferingInput {
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  session?: string | null;
+  grade_level?: string | null;
+  seat_capacity?: number;
+  subject_id?: string | null;
+  is_active?: boolean;
+}
 export interface TimetableSlotInput {
   class_id: string;
   subject_id?: string | null;
@@ -1169,6 +1179,160 @@ export class AcademicsService {
       );
     await this.prisma.classrooms.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // ── Elective offerings + enrolment (seats + waitlist) ───────────────────────
+
+  async listElectiveOfferings(actor: AuthUser, session?: string) {
+    this.requireAcademicAdmin(actor);
+    const where = session && session !== "all" ? { session } : {};
+    const [offerings, counts] = await Promise.all([
+      this.prisma.elective_offerings.findMany({ where, orderBy: { name: "asc" } }),
+      this.prisma.elective_enrollments.groupBy({ by: ["offering_id", "status"], _count: { _all: true } }),
+    ]);
+    const byOffering = new Map<string, { enrolled: number; waitlisted: number }>();
+    for (const c of counts) {
+      const cur = byOffering.get(c.offering_id) ?? { enrolled: 0, waitlisted: 0 };
+      if (c.status === "enrolled") cur.enrolled += c._count._all;
+      if (c.status === "waitlisted") cur.waitlisted += c._count._all;
+      byOffering.set(c.offering_id, cur);
+    }
+    return offerings.map((o) => {
+      const c = byOffering.get(o.id) ?? { enrolled: 0, waitlisted: 0 };
+      return {
+        ...o,
+        enrolled: c.enrolled,
+        waitlisted: c.waitlisted,
+        seatsLeft: Math.max(0, o.seat_capacity - c.enrolled),
+      };
+    });
+  }
+
+  async createElectiveOffering(actor: AuthUser, input: ElectiveOfferingInput) {
+    this.requireAcademicAdmin(actor);
+    if (input.subject_id) {
+      const s = await this.prisma.subjects.findUnique({ where: { id: input.subject_id } });
+      if (!s) throw new NotFoundException("Subject not found");
+    }
+    const row = await this.prisma.elective_offerings.create({
+      data: {
+        name: input.name,
+        code: input.code || null,
+        description: input.description || null,
+        session: input.session || (await this.currentYear()),
+        grade_level: input.grade_level || null,
+        seat_capacity: input.seat_capacity ?? 30,
+        subject_id: input.subject_id || null,
+      },
+    });
+    return { id: row.id };
+  }
+
+  async updateElectiveOffering(actor: AuthUser, id: string, input: ElectiveOfferingInput) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.elective_offerings.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Elective not found");
+    await this.prisma.elective_offerings.update({
+      where: { id },
+      data: {
+        name: input.name,
+        code: input.code || null,
+        description: input.description || null,
+        session: input.session || existing.session,
+        grade_level: input.grade_level || null,
+        seat_capacity: input.seat_capacity ?? existing.seat_capacity,
+        subject_id: input.subject_id || null,
+        ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
+        updated_at: new Date(),
+      },
+    });
+    return { ok: true };
+  }
+
+  async deleteElectiveOffering(actor: AuthUser, id: string) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.elective_offerings.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Elective not found");
+    await this.prisma.elective_offerings.delete({ where: { id } }); // cascades enrolments
+    return { ok: true };
+  }
+
+  async listElectiveEnrollments(actor: AuthUser, offeringId: string) {
+    this.requireAcademicAdmin(actor);
+    const rows = await this.prisma.elective_enrollments.findMany({
+      where: { offering_id: offeringId },
+      orderBy: { enrolled_at: "asc" },
+    });
+    const students = await this.prisma.students.findMany({
+      where: { id: { in: rows.map((r) => r.student_id) } },
+      select: { id: true, admission_no: true, roll_no: true, profiles: { select: { full_name: true } } },
+    });
+    const sn = new Map(students.map((s) => [s.id, s]));
+    return rows.map((r) => {
+      const s = sn.get(r.student_id);
+      return {
+        id: r.id,
+        studentId: r.student_id,
+        studentName: s?.profiles?.full_name ?? "—",
+        admissionNo: s?.admission_no ?? null,
+        rollNo: s?.roll_no ?? null,
+        status: r.status,
+        enrolledAt: r.enrolled_at,
+      };
+    });
+  }
+
+  /** Enrol a student — takes a seat if available, else joins the waitlist. */
+  async enrollElective(actor: AuthUser, offeringId: string, studentId: string) {
+    this.requireAcademicAdmin(actor);
+    const offering = await this.prisma.elective_offerings.findUnique({ where: { id: offeringId } });
+    if (!offering) throw new NotFoundException("Elective not found");
+    const student = await this.prisma.students.findUnique({ where: { id: studentId } });
+    if (!student) throw new NotFoundException("Student not found");
+    const existing = await this.prisma.elective_enrollments.findUnique({
+      where: { offering_id_student_id: { offering_id: offeringId, student_id: studentId } },
+    });
+    if (existing && existing.status !== "dropped")
+      throw new ConflictException("That student is already enrolled or waitlisted.");
+    const enrolledCount = await this.prisma.elective_enrollments.count({
+      where: { offering_id: offeringId, status: "enrolled" },
+    });
+    const status = enrolledCount < offering.seat_capacity ? "enrolled" : "waitlisted";
+    if (existing) {
+      await this.prisma.elective_enrollments.update({
+        where: { id: existing.id },
+        data: { status, enrolled_at: new Date() },
+      });
+    } else {
+      await this.prisma.elective_enrollments.create({
+        data: { offering_id: offeringId, student_id: studentId, status },
+      });
+    }
+    return { ok: true, status };
+  }
+
+  /** Drop an enrolment; if it freed a seat, auto-promote the oldest waitlisted student. */
+  async dropElective(actor: AuthUser, enrollmentId: string) {
+    this.requireAcademicAdmin(actor);
+    const enrollment = await this.prisma.elective_enrollments.findUnique({ where: { id: enrollmentId } });
+    if (!enrollment) throw new NotFoundException("Enrolment not found");
+    const wasEnrolled = enrollment.status === "enrolled";
+    await this.prisma.elective_enrollments.delete({ where: { id: enrollmentId } });
+    let promoted: string | null = null;
+    if (wasEnrolled) {
+      const next = await this.prisma.elective_enrollments.findFirst({
+        where: { offering_id: enrollment.offering_id, status: "waitlisted" },
+        orderBy: { enrolled_at: "asc" },
+      });
+      if (next) {
+        await this.prisma.elective_enrollments.update({
+          where: { id: next.id },
+          data: { status: "enrolled" },
+        });
+        promoted = next.student_id;
+      }
+    }
+    return { ok: true, promoted };
   }
 
   // ── Timetable builder + conflict detection ──────────────────────────────────

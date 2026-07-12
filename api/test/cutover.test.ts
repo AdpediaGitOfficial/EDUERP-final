@@ -3204,3 +3204,54 @@ describe("Academics: timetable builder + conflict detection", () => {
     for (const id of created) expect((await del6(`/timetable/${id}`, "admin")).status).toBe(200);
   });
 });
+
+describe("Academics: elective enrolment (seats + waitlist)", () => {
+  const del7 = (p: string, r: keyof typeof ACCOUNTS) =>
+    request(http).delete(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`);
+
+  it("seats fill then waitlist; dropping an enrolled student promotes the waitlist", async () => {
+    // three distinct students
+    const search = await get("/students/search?limit=3", "admin");
+    const ids = (search.body.rows as any[]).map((r) => r.id);
+    expect(ids.length).toBeGreaterThanOrEqual(3);
+
+    const off = await post("/academics/electives", "admin", {
+      name: `Jest Elective ${Date.now()}`,
+      seat_capacity: 2,
+    });
+    expect(off.status).toBe(201);
+    const offId = off.body.id;
+
+    const e1 = await post(`/academics/electives/${offId}/enroll`, "admin", { student_id: ids[0] });
+    const e2 = await post(`/academics/electives/${offId}/enroll`, "admin", { student_id: ids[1] });
+    const e3 = await post(`/academics/electives/${offId}/enroll`, "admin", { student_id: ids[2] });
+    expect(e1.body.status).toBe("enrolled");
+    expect(e2.body.status).toBe("enrolled");
+    expect(e3.body.status).toBe("waitlisted"); // capacity 2 reached
+
+    // duplicate enrol -> 409
+    expect((await post(`/academics/electives/${offId}/enroll`, "admin", { student_id: ids[0] })).status).toBe(409);
+
+    // offering listing reflects the counts
+    const listed = (await get("/academics/electives", "admin")).body.find((o: any) => o.id === offId);
+    expect(listed.enrolled).toBe(2);
+    expect(listed.waitlisted).toBe(1);
+    expect(listed.seatsLeft).toBe(0);
+
+    // teacher cannot enrol
+    expect((await post(`/academics/electives/${offId}/enroll`, "teacher", { student_id: ids[0] })).status).toBe(403);
+
+    // drop an enrolled student -> the waitlisted one is auto-promoted
+    const enrolls = (await get(`/academics/electives/${offId}/enrollments`, "admin")).body as any[];
+    const enrolledRow = enrolls.find((e) => e.status === "enrolled");
+    const dropRes = await del7(`/academics/elective-enrollments/${enrolledRow.id}`, "admin");
+    expect(dropRes.status).toBe(200);
+    expect(dropRes.body.promoted).toBeTruthy();
+    const after = (await get(`/academics/electives/${offId}/enrollments`, "admin")).body as any[];
+    expect(after.filter((e) => e.status === "enrolled").length).toBe(2);
+    expect(after.filter((e) => e.status === "waitlisted").length).toBe(0);
+
+    // cleanup: deleting the offering cascades enrolments
+    expect((await del7(`/academics/electives/${offId}`, "admin")).status).toBe(200);
+  });
+});
