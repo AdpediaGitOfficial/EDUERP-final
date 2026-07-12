@@ -60,6 +60,7 @@ import { Route as AuthenticatedClassesIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedChildrenIndexRouteImport } from './routes/_authenticated/children.index'
 import { Route as AuthenticatedAssetsIndexRouteImport } from './routes/_authenticated/assets.index'
 import { Route as AuthenticatedAdmissionsIndexRouteImport } from './routes/_authenticated/admissions.index'
+import { Route as AuthenticatedAcademicsIndexRouteImport } from './routes/_authenticated/academics.index'
 import { Route as AuthenticatedTeachersTeacherIdRouteImport } from './routes/_authenticated/teachers.$teacherId'
 import { Route as AuthenticatedStudentsStudentIdRouteImport } from './routes/_authenticated/students.$studentId'
 import { Route as AuthenticatedReceptionVisitorsRouteImport } from './routes/_authenticated/reception.visitors'
@@ -112,6 +113,7 @@ import { Route as AuthenticatedAssetsCategoriesRouteImport } from './routes/_aut
 import { Route as AuthenticatedAssetsAllocationRouteImport } from './routes/_authenticated/assets.allocation'
 import { Route as AuthenticatedAdmissionsNewRouteImport } from './routes/_authenticated/admissions.new'
 import { Route as AuthenticatedAdmissionsAdmissionIdRouteImport } from './routes/_authenticated/admissions.$admissionId'
+import { Route as AuthenticatedAcademicsSessionsRouteImport } from './routes/_authenticated/academics.sessions'
 import { Route as AuthenticatedStudentsStudentIdIndexRouteImport } from './routes/_authenticated/students.$studentId.index'
 import { Route as AuthenticatedHrStaffIndexRouteImport } from './routes/_authenticated/hr.staff.index'
 import { Route as AuthenticatedFleetVehiclesIndexRouteImport } from './routes/_authenticated/fleet.vehicles.index'
@@ -397,6 +399,12 @@ const AuthenticatedAdmissionsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedAdmissionsRoute,
+  } as any)
+const AuthenticatedAcademicsIndexRoute =
+  AuthenticatedAcademicsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAcademicsRoute,
   } as any)
 const AuthenticatedTeachersTeacherIdRoute =
   AuthenticatedTeachersTeacherIdRouteImport.update({
@@ -694,6 +702,12 @@ const AuthenticatedAdmissionsAdmissionIdRoute =
     path: '/$admissionId',
     getParentRoute: () => AuthenticatedAdmissionsRoute,
   } as any)
+const AuthenticatedAcademicsSessionsRoute =
+  AuthenticatedAcademicsSessionsRouteImport.update({
+    id: '/sessions',
+    path: '/sessions',
+    getParentRoute: () => AuthenticatedAcademicsRoute,
+  } as any)
 const AuthenticatedStudentsStudentIdIndexRoute =
   AuthenticatedStudentsStudentIdIndexRouteImport.update({
     id: '/',
@@ -771,7 +785,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/academics': typeof AuthenticatedAcademicsRoute
+  '/academics': typeof AuthenticatedAcademicsRouteWithChildren
   '/admissions': typeof AuthenticatedAdmissionsRouteWithChildren
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
@@ -806,6 +820,7 @@ export interface FileRoutesByFullPath {
   '/teachers': typeof AuthenticatedTeachersRouteWithChildren
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -858,6 +873,7 @@ export interface FileRoutesByFullPath {
   '/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
   '/students/$studentId': typeof AuthenticatedStudentsStudentIdRouteWithChildren
   '/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
+  '/academics/': typeof AuthenticatedAcademicsIndexRoute
   '/admissions/': typeof AuthenticatedAdmissionsIndexRoute
   '/assets/': typeof AuthenticatedAssetsIndexRoute
   '/children/': typeof AuthenticatedChildrenIndexRoute
@@ -887,7 +903,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/academics': typeof AuthenticatedAcademicsRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
   '/assignments': typeof AuthenticatedAssignmentsRoute
@@ -911,6 +926,7 @@ export interface FileRoutesByTo {
   '/student-categories': typeof AuthenticatedStudentCategoriesRoute
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -962,6 +978,7 @@ export interface FileRoutesByTo {
   '/reception/transport': typeof AuthenticatedReceptionTransportRoute
   '/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
   '/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
+  '/academics': typeof AuthenticatedAcademicsIndexRoute
   '/admissions': typeof AuthenticatedAdmissionsIndexRoute
   '/assets': typeof AuthenticatedAssetsIndexRoute
   '/children': typeof AuthenticatedChildrenIndexRoute
@@ -993,7 +1010,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/_authenticated/academics': typeof AuthenticatedAcademicsRoute
+  '/_authenticated/academics': typeof AuthenticatedAcademicsRouteWithChildren
   '/_authenticated/admissions': typeof AuthenticatedAdmissionsRouteWithChildren
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/announcements': typeof AuthenticatedAnnouncementsRoute
@@ -1028,6 +1045,7 @@ export interface FileRoutesById {
   '/_authenticated/teachers': typeof AuthenticatedTeachersRouteWithChildren
   '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
+  '/_authenticated/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/_authenticated/admissions/$admissionId': typeof AuthenticatedAdmissionsAdmissionIdRoute
   '/_authenticated/admissions/new': typeof AuthenticatedAdmissionsNewRoute
   '/_authenticated/assets/allocation': typeof AuthenticatedAssetsAllocationRoute
@@ -1080,6 +1098,7 @@ export interface FileRoutesById {
   '/_authenticated/reception/visitors': typeof AuthenticatedReceptionVisitorsRoute
   '/_authenticated/students/$studentId': typeof AuthenticatedStudentsStudentIdRouteWithChildren
   '/_authenticated/teachers/$teacherId': typeof AuthenticatedTeachersTeacherIdRoute
+  '/_authenticated/academics/': typeof AuthenticatedAcademicsIndexRoute
   '/_authenticated/admissions/': typeof AuthenticatedAdmissionsIndexRoute
   '/_authenticated/assets/': typeof AuthenticatedAssetsIndexRoute
   '/_authenticated/children/': typeof AuthenticatedChildrenIndexRoute
@@ -1146,6 +1165,7 @@ export interface FileRouteTypes {
     | '/teachers'
     | '/timetable'
     | '/users'
+    | '/academics/sessions'
     | '/admissions/$admissionId'
     | '/admissions/new'
     | '/assets/allocation'
@@ -1198,6 +1218,7 @@ export interface FileRouteTypes {
     | '/reception/visitors'
     | '/students/$studentId'
     | '/teachers/$teacherId'
+    | '/academics/'
     | '/admissions/'
     | '/assets/'
     | '/children/'
@@ -1227,7 +1248,6 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
-    | '/academics'
     | '/analytics'
     | '/announcements'
     | '/assignments'
@@ -1251,6 +1271,7 @@ export interface FileRouteTypes {
     | '/student-categories'
     | '/timetable'
     | '/users'
+    | '/academics/sessions'
     | '/admissions/$admissionId'
     | '/admissions/new'
     | '/assets/allocation'
@@ -1302,6 +1323,7 @@ export interface FileRouteTypes {
     | '/reception/transport'
     | '/reception/visitors'
     | '/teachers/$teacherId'
+    | '/academics'
     | '/admissions'
     | '/assets'
     | '/children'
@@ -1367,6 +1389,7 @@ export interface FileRouteTypes {
     | '/_authenticated/teachers'
     | '/_authenticated/timetable'
     | '/_authenticated/users'
+    | '/_authenticated/academics/sessions'
     | '/_authenticated/admissions/$admissionId'
     | '/_authenticated/admissions/new'
     | '/_authenticated/assets/allocation'
@@ -1419,6 +1442,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reception/visitors'
     | '/_authenticated/students/$studentId'
     | '/_authenticated/teachers/$teacherId'
+    | '/_authenticated/academics/'
     | '/_authenticated/admissions/'
     | '/_authenticated/assets/'
     | '/_authenticated/children/'
@@ -1811,6 +1835,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdmissionsIndexRouteImport
       parentRoute: typeof AuthenticatedAdmissionsRoute
     }
+    '/_authenticated/academics/': {
+      id: '/_authenticated/academics/'
+      path: '/'
+      fullPath: '/academics/'
+      preLoaderRoute: typeof AuthenticatedAcademicsIndexRouteImport
+      parentRoute: typeof AuthenticatedAcademicsRoute
+    }
     '/_authenticated/teachers/$teacherId': {
       id: '/_authenticated/teachers/$teacherId'
       path: '/$teacherId'
@@ -2175,6 +2206,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdmissionsAdmissionIdRouteImport
       parentRoute: typeof AuthenticatedAdmissionsRoute
     }
+    '/_authenticated/academics/sessions': {
+      id: '/_authenticated/academics/sessions'
+      path: '/sessions'
+      fullPath: '/academics/sessions'
+      preLoaderRoute: typeof AuthenticatedAcademicsSessionsRouteImport
+      parentRoute: typeof AuthenticatedAcademicsRoute
+    }
     '/_authenticated/students/$studentId/': {
       id: '/_authenticated/students/$studentId/'
       path: '/'
@@ -2261,6 +2299,22 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AuthenticatedAcademicsRouteChildren {
+  AuthenticatedAcademicsSessionsRoute: typeof AuthenticatedAcademicsSessionsRoute
+  AuthenticatedAcademicsIndexRoute: typeof AuthenticatedAcademicsIndexRoute
+}
+
+const AuthenticatedAcademicsRouteChildren: AuthenticatedAcademicsRouteChildren =
+  {
+    AuthenticatedAcademicsSessionsRoute: AuthenticatedAcademicsSessionsRoute,
+    AuthenticatedAcademicsIndexRoute: AuthenticatedAcademicsIndexRoute,
+  }
+
+const AuthenticatedAcademicsRouteWithChildren =
+  AuthenticatedAcademicsRoute._addFileChildren(
+    AuthenticatedAcademicsRouteChildren,
+  )
 
 interface AuthenticatedAdmissionsRouteChildren {
   AuthenticatedAdmissionsAdmissionIdRoute: typeof AuthenticatedAdmissionsAdmissionIdRoute
@@ -2544,7 +2598,7 @@ const AuthenticatedTeachersRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAcademicsRoute: typeof AuthenticatedAcademicsRoute
+  AuthenticatedAcademicsRoute: typeof AuthenticatedAcademicsRouteWithChildren
   AuthenticatedAdmissionsRoute: typeof AuthenticatedAdmissionsRouteWithChildren
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAnnouncementsRoute: typeof AuthenticatedAnnouncementsRoute
@@ -2584,7 +2638,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAcademicsRoute: AuthenticatedAcademicsRoute,
+  AuthenticatedAcademicsRoute: AuthenticatedAcademicsRouteWithChildren,
   AuthenticatedAdmissionsRoute: AuthenticatedAdmissionsRouteWithChildren,
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAnnouncementsRoute: AuthenticatedAnnouncementsRoute,

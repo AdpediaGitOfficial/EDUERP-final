@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
@@ -431,11 +433,17 @@ export class AcademicsService {
   }
 
   /**
-   * The "current" session. There is no sessions entity yet (Phase 2), so we resolve
-   * it as the academic_year whose classes hold the most active students — the live
-   * session in practice — falling back to the latest year string when none enrol.
+   * The "current" session — authoritative from academic_sessions.is_current.
+   * Falls back to the academic_year with the most active students (then the
+   * latest year string) when no session is flagged, so pre-migration data and
+   * fresh imports still resolve sensibly.
    */
   private async currentYear(): Promise<string | null> {
+    const flagged = await this.prisma.academic_sessions.findFirst({
+      where: { is_current: true },
+      select: { name: true },
+    });
+    if (flagged) return flagged.name;
     const byYear = await this.prisma.$queryRaw<{ academic_year: string; n: bigint }[]>`
       SELECT c.academic_year, COUNT(s.id)::bigint AS n
       FROM public.classes c
@@ -769,5 +777,191 @@ export class AcademicsService {
       issueCount: checks.filter((c) => !c.ok).length,
       checks,
     };
+  }
+
+  // ── Academic sessions ───────────────────────────────────────────────────────
+
+  /** All sessions with live enrolled-student counts (via classes.academic_year). */
+  async listSessions(actor: AuthUser) {
+    this.requireAcademicAdmin(actor);
+    const [sessions, counts] = await Promise.all([
+      this.prisma.academic_sessions.findMany({ orderBy: { name: "desc" } }),
+      this.prisma.$queryRaw<{ academic_year: string; students: bigint; sections: bigint }[]>`
+        SELECT c.academic_year,
+               COUNT(DISTINCT s.id)::bigint AS students,
+               COUNT(DISTINCT c.id)::bigint AS sections
+        FROM public.classes c
+        LEFT JOIN public.students s ON s.class_id = c.id AND s.status = 'active'
+        WHERE c.academic_year IS NOT NULL
+        GROUP BY c.academic_year`,
+    ]);
+    const byYear = new Map(
+      counts.map((c) => [c.academic_year, { students: Number(c.students), sections: Number(c.sections) }]),
+    );
+    return sessions.map((s) => ({
+      ...s,
+      students: byYear.get(s.name)?.students ?? 0,
+      sections: byYear.get(s.name)?.sections ?? 0,
+    }));
+  }
+
+  async createSession(
+    actor: AuthUser,
+    input: {
+      name: string;
+      start_date?: string | null;
+      end_date?: string | null;
+      status?: string;
+      board?: string | null;
+      curriculum?: string | null;
+    },
+  ) {
+    this.requireAcademicAdmin(actor);
+    try {
+      const row = await this.prisma.academic_sessions.create({
+        data: {
+          name: input.name,
+          start_date: input.start_date ? new Date(input.start_date) : null,
+          end_date: input.end_date ? new Date(input.end_date) : null,
+          status: input.status || "upcoming",
+          board: input.board || null,
+          curriculum: input.curriculum || null,
+        },
+      });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("A session with that name already exists.");
+      throw e;
+    }
+  }
+
+  async updateSession(
+    actor: AuthUser,
+    id: string,
+    input: {
+      name?: string;
+      start_date?: string | null;
+      end_date?: string | null;
+      status?: string;
+      board?: string | null;
+      curriculum?: string | null;
+      promotion_locked?: boolean;
+    },
+  ) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.academic_sessions.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Session not found");
+    try {
+      await this.prisma.academic_sessions.update({
+        where: { id },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.start_date !== undefined
+            ? { start_date: input.start_date ? new Date(input.start_date) : null }
+            : {}),
+          ...(input.end_date !== undefined
+            ? { end_date: input.end_date ? new Date(input.end_date) : null }
+            : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.board !== undefined ? { board: input.board || null } : {}),
+          ...(input.curriculum !== undefined ? { curriculum: input.curriculum || null } : {}),
+          ...(input.promotion_locked !== undefined
+            ? { promotion_locked: input.promotion_locked }
+            : {}),
+          updated_at: new Date(),
+        },
+      });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("A session with that name already exists.");
+      throw e;
+    }
+  }
+
+  /** Flip which session is current — exactly one row keeps is_current. */
+  async setCurrentSession(actor: AuthUser, id: string) {
+    this.requireAcademicAdmin(actor);
+    const target = await this.prisma.academic_sessions.findUnique({ where: { id } });
+    if (!target) throw new NotFoundException("Session not found");
+    if (target.status === "archived")
+      throw new BadRequestException("Archived sessions cannot be made current.");
+    await this.prisma.$transaction([
+      this.prisma.academic_sessions.updateMany({
+        where: { is_current: true },
+        data: { is_current: false, updated_at: new Date() },
+      }),
+      this.prisma.academic_sessions.update({
+        where: { id },
+        data: { is_current: true, status: "active", updated_at: new Date() },
+      }),
+    ]);
+    return { ok: true };
+  }
+
+  async setSessionStatus(actor: AuthUser, id: string, status: string) {
+    this.requireAcademicAdmin(actor);
+    if (!["active", "upcoming", "archived", "locked"].includes(status))
+      throw new BadRequestException("Invalid session status");
+    const existing = await this.prisma.academic_sessions.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Session not found");
+    if (status === "archived" && existing.is_current)
+      throw new BadRequestException("The current session cannot be archived. Set another current first.");
+    await this.prisma.academic_sessions.update({
+      where: { id },
+      data: { status, updated_at: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Clone a session into a new academic year — copies the session's board/
+   * curriculum and replicates its class-sections (name/section/capacity/room,
+   * no students) so the new year is ready for enrolment. Additive: refuses if
+   * the target already has classes.
+   */
+  async cloneSession(actor: AuthUser, id: string, newName: string) {
+    this.requireAcademicAdmin(actor);
+    const source = await this.prisma.academic_sessions.findUnique({ where: { id } });
+    if (!source) throw new NotFoundException("Session not found");
+    const existingTarget = await this.prisma.academic_sessions.findUnique({
+      where: { name: newName },
+    });
+    if (existingTarget) throw new ConflictException("A session with that name already exists.");
+    const targetHasClasses = await this.prisma.classes.count({
+      where: { academic_year: newName },
+    });
+    if (targetHasClasses > 0)
+      throw new ConflictException("The target year already has classes; clone aborted.");
+
+    const sourceClasses = await this.prisma.classes.findMany({
+      where: { academic_year: source.name },
+      select: { name: true, section: true, capacity: true, room: true, class_teacher_id: true },
+    });
+    const created = await this.prisma.$transaction(async (tx) => {
+      const session = await tx.academic_sessions.create({
+        data: {
+          name: newName,
+          status: "upcoming",
+          board: source.board,
+          curriculum: source.curriculum,
+        },
+      });
+      if (sourceClasses.length) {
+        await tx.classes.createMany({
+          data: sourceClasses.map((c) => ({
+            name: c.name,
+            section: c.section,
+            academic_year: newName,
+            capacity: c.capacity,
+            room: c.room,
+            class_teacher_id: c.class_teacher_id,
+          })),
+        });
+      }
+      return session;
+    });
+    return { id: created.id, clonedClasses: sourceClasses.length };
   }
 }

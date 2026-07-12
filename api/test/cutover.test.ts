@@ -2856,3 +2856,76 @@ describe("Academics: command-centre dashboard + integrity audit", () => {
     expect(dup.ok).toBe(true);
   });
 });
+
+describe("Academics: sessions entity", () => {
+  const patch2 = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
+    request(http).patch(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
+
+  it("lists sessions with live student counts; a current session is resolved", async () => {
+    const res = await get("/academics/sessions", "admin");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+    const current = res.body.filter((s: any) => s.is_current);
+    expect(current.length).toBe(1); // exactly one current
+    expect(current[0]).toHaveProperty("students");
+    // dashboard's session equals the flagged current session
+    const dash = await get("/academics/dashboard", "admin");
+    expect(dash.body.session).toBe(current[0].name);
+    expect((await get("/academics/sessions", "teacher")).status).toBe(403);
+  });
+
+  it("create (dup name 409), set-current moves the flag, archive guard on current", async () => {
+    const name = `JEST-${Date.now()}`;
+    const created = await post("/academics/sessions", "admin", {
+      name,
+      start_date: "2030-04-01",
+      end_date: "2031-03-31",
+      board: "CBSE",
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+
+    // duplicate name -> 409
+    expect((await post("/academics/sessions", "admin", { name })).status).toBe(409);
+
+    // the created session is not current; set it current
+    const before = await get("/academics/sessions", "admin");
+    const prevCurrent = before.body.find((s: any) => s.is_current);
+    expect((await post(`/academics/sessions/${id}/set-current`, "admin", {})).status).toBe(201);
+    const after = await get("/academics/sessions", "admin");
+    const nowCurrent = after.body.filter((s: any) => s.is_current);
+    expect(nowCurrent.length).toBe(1);
+    expect(nowCurrent[0].id).toBe(id);
+
+    // the current session cannot be archived
+    expect((await patch2(`/academics/sessions/${id}/status`, "admin", { status: "archived" })).status).toBe(400);
+
+    // restore the previous current so we don't disturb other tests
+    if (prevCurrent) {
+      await post(`/academics/sessions/${prevCurrent.id}/set-current`, "admin", {});
+    }
+    // now the JEST session (no longer current) can be archived
+    expect((await patch2(`/academics/sessions/${id}/status`, "admin", { status: "archived" })).status).toBe(200);
+    // teacher cannot write
+    expect((await post("/academics/sessions", "teacher", { name: "X-nope-1234" })).status).toBe(403);
+  });
+
+  it("clone copies class-sections into a new upcoming year", async () => {
+    const sessions = (await get("/academics/sessions", "admin")).body as any[];
+    const source = sessions.find((s) => s.sections > 0);
+    if (!source) return; // seed guard
+    const newName = `CLONE-${Date.now()}`;
+    const res = await post(`/academics/sessions/${source.id}/clone`, "admin", { name: newName });
+    expect(res.status).toBe(201);
+    expect(res.body.clonedClasses).toBe(source.sections);
+    // the clone shows the same section count, zero students, upcoming status
+    const after = (await get("/academics/sessions", "admin")).body as any[];
+    const clone = after.find((s) => s.name === newName);
+    expect(clone.sections).toBe(source.sections);
+    expect(clone.students).toBe(0);
+    expect(clone.status).toBe("upcoming");
+    // cloning onto an existing year is refused
+    expect((await post(`/academics/sessions/${source.id}/clone`, "admin", { name: newName })).status).toBe(409);
+  });
+});
