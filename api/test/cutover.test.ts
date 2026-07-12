@@ -3364,3 +3364,36 @@ describe("Academics: academic calendar", () => {
     expect((await get("/academics/calendar", "admin")).body.some((e: any) => e.id === id)).toBe(false);
   });
 });
+
+describe("Academics: reports & analytics", () => {
+  it("lists the report catalogue and generates each report shape; RBAC + unknown 400", async () => {
+    const cat = await get("/academics/reports", "admin");
+    expect(cat.status).toBe(200);
+    expect(cat.body.length).toBeGreaterThanOrEqual(8);
+
+    for (const r of cat.body) {
+      const rep = await get(`/academics/reports/${r.key}`, "admin");
+      expect(rep.status).toBe(200);
+      expect(rep.body).toHaveProperty("title");
+      expect(Array.isArray(rep.body.columns)).toBe(true);
+      expect(rep.body.columns.length).toBeGreaterThan(0);
+      expect(Array.isArray(rep.body.rows)).toBe(true);
+      // every row exposes every declared column key
+      if (rep.body.rows.length) {
+        for (const c of rep.body.columns) {
+          expect(rep.body.rows[0]).toHaveProperty(c.key);
+        }
+      }
+    }
+
+    // class-strength totals reconcile with the dashboard
+    const strength = await get("/academics/reports/class_strength", "admin");
+    const dash = await get("/academics/dashboard", "admin");
+    const totalStudents = strength.body.rows.reduce((a: number, r: any) => a + Number(r.students), 0);
+    expect(totalStudents).toBe(dash.body.stats.totalStudents);
+
+    // unknown type -> 400; teacher -> 403
+    expect((await get("/academics/reports/nope", "admin")).status).toBe(400);
+    expect((await get("/academics/reports/class_strength", "teacher")).status).toBe(403);
+  });
+});

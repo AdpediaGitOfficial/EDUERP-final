@@ -1190,6 +1190,205 @@ export class AcademicsService {
     return { ok: true };
   }
 
+  // ── Reports & analytics ─────────────────────────────────────────────────────
+
+  /** The report catalogue the Reports tab offers. */
+  reportCatalogue() {
+    return [
+      { key: "class_strength", label: "Class Strength" },
+      { key: "vacant_seats", label: "Vacant Seats" },
+      { key: "subject_allocation", label: "Subject Allocation" },
+      { key: "teacher_allocation", label: "Teacher Allocation" },
+      { key: "teacher_workload", label: "Teacher Workload" },
+      { key: "room_utilization", label: "Room Utilisation" },
+      { key: "elective_report", label: "Elective Report" },
+      { key: "promotion_register", label: "Promotion Register" },
+      { key: "academic_summary", label: "Academic Summary" },
+    ];
+  }
+
+  /** Generate a report as { title, columns, rows } — ready for table / CSV / print. */
+  async academicReport(actor: AuthUser, type: string, year?: string) {
+    this.requireAcademicAdmin(actor);
+    const session = year && year !== "all" ? year : ((await this.currentYear()) ?? "");
+    const col = (key: string, label: string) => ({ key, label });
+
+    switch (type) {
+      case "class_strength": {
+        const classes = await this.prisma.classes.findMany({
+          where: session ? { academic_year: session } : {},
+          include: { _count: { select: { students: true } } },
+          orderBy: [{ name: "asc" }, { section: "asc" }],
+        });
+        return {
+          title: `Class Strength — ${session}`,
+          columns: [col("class", "Class"), col("section", "Section"), col("capacity", "Capacity"), col("students", "Students"), col("utilisation", "Utilisation %")],
+          rows: classes.map((c) => ({
+            class: c.name,
+            section: c.section ?? "—",
+            capacity: c.capacity ?? "—",
+            students: c._count.students,
+            utilisation: c.capacity ? Math.round((c._count.students / c.capacity) * 100) : "—",
+          })),
+        };
+      }
+      case "vacant_seats": {
+        const classes = await this.prisma.classes.findMany({
+          where: session ? { academic_year: session } : {},
+          include: { _count: { select: { students: true } } },
+          orderBy: [{ name: "asc" }, { section: "asc" }],
+        });
+        return {
+          title: `Vacant Seats — ${session}`,
+          columns: [col("class", "Class"), col("section", "Section"), col("capacity", "Capacity"), col("students", "Filled"), col("vacant", "Vacant")],
+          rows: classes
+            .filter((c) => c.capacity)
+            .map((c) => ({
+              class: c.name,
+              section: c.section ?? "—",
+              capacity: c.capacity,
+              students: c._count.students,
+              vacant: Math.max(0, (c.capacity ?? 0) - c._count.students),
+            })),
+        };
+      }
+      case "subject_allocation": {
+        const classes = await this.prisma.classes.findMany({
+          where: session ? { academic_year: session } : {},
+          select: { id: true, name: true, section: true },
+        });
+        const classIds = classes.map((c) => c.id);
+        const cn = new Map(classes.map((c) => [c.id, `${c.name} ${c.section ?? ""}`.trim()]));
+        const [subjects, assignments, teachers] = await Promise.all([
+          this.prisma.subjects.findMany({ where: { class_id: { in: classIds } }, orderBy: { name: "asc" } }),
+          this.prisma.teacher_subjects.findMany({ where: { class_id: { in: classIds } } }),
+          this.prisma.profiles.findMany({ select: { id: true, full_name: true } }),
+        ]);
+        const tn = new Map(teachers.map((t) => [t.id, t.full_name]));
+        const bySubject = new Map<string, string[]>();
+        for (const a of assignments) {
+          const arr = bySubject.get(a.subject_id) ?? [];
+          arr.push(tn.get(a.teacher_id) ?? "—");
+          bySubject.set(a.subject_id, arr);
+        }
+        return {
+          title: `Subject Allocation — ${session}`,
+          columns: [col("class", "Class"), col("subject", "Subject"), col("code", "Code"), col("type", "Type"), col("periods", "Periods/wk"), col("teachers", "Teachers")],
+          rows: subjects.map((s) => ({
+            class: s.class_id ? (cn.get(s.class_id) ?? "—") : "—",
+            subject: s.name,
+            code: s.code ?? "—",
+            type: s.subject_type,
+            periods: s.weekly_periods,
+            teachers: (bySubject.get(s.id) ?? []).join(", ") || "Unassigned",
+          })),
+        };
+      }
+      case "teacher_allocation": {
+        const rows = await this.listTeacherSubjects(actor);
+        const byTeacher = new Map<string, { name: string; subjects: Set<string>; classes: Set<string> }>();
+        for (const r of rows) {
+          const t = byTeacher.get(r.teacherId) ?? { name: r.teacherName, subjects: new Set(), classes: new Set() };
+          t.subjects.add(r.subjectName);
+          t.classes.add(r.className);
+          byTeacher.set(r.teacherId, t);
+        }
+        return {
+          title: `Teacher Allocation — ${session}`,
+          columns: [col("teacher", "Teacher"), col("subjects", "# Subjects"), col("classes", "# Classes"), col("subjectList", "Subjects")],
+          rows: [...byTeacher.values()].map((t) => ({
+            teacher: t.name,
+            subjects: t.subjects.size,
+            classes: t.classes.size,
+            subjectList: [...t.subjects].join(", "),
+          })),
+        };
+      }
+      case "teacher_workload": {
+        const w = await this.teacherWorkload(actor, year);
+        return {
+          title: `Teacher Workload — ${w.session}`,
+          columns: [col("teacher", "Teacher"), col("assignments", "Assignments"), col("plannedPeriods", "Planned"), col("scheduledPeriods", "Scheduled"), col("remaining", "Remaining")],
+          rows: w.teachers.map((t) => ({
+            teacher: t.teacherName,
+            assignments: t.assignments,
+            plannedPeriods: t.plannedPeriods,
+            scheduledPeriods: t.scheduledPeriods,
+            remaining: t.remaining,
+          })),
+        };
+      }
+      case "room_utilization": {
+        const rooms = await this.listRooms(actor);
+        return {
+          title: "Room Utilisation",
+          columns: [col("room", "Room"), col("type", "Type"), col("capacity", "Capacity"), col("assignedClasses", "Classes"), col("weeklySlots", "Weekly slots")],
+          rows: rooms.map((r) => ({
+            room: r.room_number,
+            type: r.room_type,
+            capacity: r.capacity,
+            assignedClasses: r.assignedClasses,
+            weeklySlots: r.weeklySlots,
+          })),
+        };
+      }
+      case "elective_report": {
+        const offerings = await this.listElectiveOfferings(actor);
+        return {
+          title: "Elective Report",
+          columns: [col("elective", "Elective"), col("capacity", "Capacity"), col("enrolled", "Enrolled"), col("waitlisted", "Waitlisted"), col("seatsLeft", "Seats left")],
+          rows: offerings.map((o) => ({
+            elective: o.name,
+            capacity: o.seat_capacity,
+            enrolled: o.enrolled,
+            waitlisted: o.waitlisted,
+            seatsLeft: o.seatsLeft,
+          })),
+        };
+      }
+      case "promotion_register": {
+        const batches = await this.promotionRegister(actor, year);
+        const rows = batches.flatMap((b) =>
+          b.rows.map((r: any) => ({
+            date: b.date,
+            student: r.studentName,
+            from: r.fromClass,
+            to: r.toClass,
+            result: r.result,
+          })),
+        );
+        return {
+          title: `Promotion Register — ${session}`,
+          columns: [col("date", "Date"), col("student", "Student"), col("from", "From"), col("to", "To"), col("result", "Result")],
+          rows,
+        };
+      }
+      case "academic_summary": {
+        const d = await this.academicDashboard(actor, year);
+        const s = d.stats;
+        const rows = [
+          { metric: "Classes", value: s.totalClasses },
+          { metric: "Sections", value: s.totalSections },
+          { metric: "Students", value: s.totalStudents },
+          { metric: "Teachers", value: s.totalTeachers },
+          { metric: "Student-teacher ratio", value: `1:${s.studentTeacherRatio}` },
+          { metric: "Active subjects", value: s.activeSubjects },
+          { metric: "Timetable completion", value: `${s.timetableCompletion}%` },
+          { metric: "Classes without class teacher", value: s.classesWithoutClassTeacher },
+          { metric: "Classes without timetable", value: s.classesWithoutTimetable },
+          { metric: "Unassigned students", value: s.unassignedStudents },
+        ];
+        return {
+          title: `Academic Summary — ${d.session}`,
+          columns: [col("metric", "Metric"), col("value", "Value")],
+          rows,
+        };
+      }
+      default:
+        throw new BadRequestException("Unknown report type");
+    }
+  }
+
   // ── Academic calendar ───────────────────────────────────────────────────────
 
   /** Calendar events for a session, folding in the holidays table (read-only). */

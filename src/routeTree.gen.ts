@@ -118,6 +118,7 @@ import { Route as AuthenticatedAcademicsTeachersRouteImport } from './routes/_au
 import { Route as AuthenticatedAcademicsSubjectsRouteImport } from './routes/_authenticated/academics.subjects'
 import { Route as AuthenticatedAcademicsSessionsRouteImport } from './routes/_authenticated/academics.sessions'
 import { Route as AuthenticatedAcademicsRoomsRouteImport } from './routes/_authenticated/academics.rooms'
+import { Route as AuthenticatedAcademicsReportsRouteImport } from './routes/_authenticated/academics.reports'
 import { Route as AuthenticatedAcademicsPromoteRouteImport } from './routes/_authenticated/academics.promote'
 import { Route as AuthenticatedAcademicsElectivesRouteImport } from './routes/_authenticated/academics.electives'
 import { Route as AuthenticatedAcademicsCalendarRouteImport } from './routes/_authenticated/academics.calendar'
@@ -739,6 +740,12 @@ const AuthenticatedAcademicsRoomsRoute =
     path: '/rooms',
     getParentRoute: () => AuthenticatedAcademicsRoute,
   } as any)
+const AuthenticatedAcademicsReportsRoute =
+  AuthenticatedAcademicsReportsRouteImport.update({
+    id: '/reports',
+    path: '/reports',
+    getParentRoute: () => AuthenticatedAcademicsRoute,
+  } as any)
 const AuthenticatedAcademicsPromoteRoute =
   AuthenticatedAcademicsPromoteRouteImport.update({
     id: '/promote',
@@ -872,6 +879,7 @@ export interface FileRoutesByFullPath {
   '/academics/calendar': typeof AuthenticatedAcademicsCalendarRoute
   '/academics/electives': typeof AuthenticatedAcademicsElectivesRoute
   '/academics/promote': typeof AuthenticatedAcademicsPromoteRoute
+  '/academics/reports': typeof AuthenticatedAcademicsReportsRoute
   '/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
   '/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
@@ -985,6 +993,7 @@ export interface FileRoutesByTo {
   '/academics/calendar': typeof AuthenticatedAcademicsCalendarRoute
   '/academics/electives': typeof AuthenticatedAcademicsElectivesRoute
   '/academics/promote': typeof AuthenticatedAcademicsPromoteRoute
+  '/academics/reports': typeof AuthenticatedAcademicsReportsRoute
   '/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
   '/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
@@ -1111,6 +1120,7 @@ export interface FileRoutesById {
   '/_authenticated/academics/calendar': typeof AuthenticatedAcademicsCalendarRoute
   '/_authenticated/academics/electives': typeof AuthenticatedAcademicsElectivesRoute
   '/_authenticated/academics/promote': typeof AuthenticatedAcademicsPromoteRoute
+  '/_authenticated/academics/reports': typeof AuthenticatedAcademicsReportsRoute
   '/_authenticated/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
   '/_authenticated/academics/sessions': typeof AuthenticatedAcademicsSessionsRoute
   '/_authenticated/academics/subjects': typeof AuthenticatedAcademicsSubjectsRoute
@@ -1238,6 +1248,7 @@ export interface FileRouteTypes {
     | '/academics/calendar'
     | '/academics/electives'
     | '/academics/promote'
+    | '/academics/reports'
     | '/academics/rooms'
     | '/academics/sessions'
     | '/academics/subjects'
@@ -1351,6 +1362,7 @@ export interface FileRouteTypes {
     | '/academics/calendar'
     | '/academics/electives'
     | '/academics/promote'
+    | '/academics/reports'
     | '/academics/rooms'
     | '/academics/sessions'
     | '/academics/subjects'
@@ -1476,6 +1488,7 @@ export interface FileRouteTypes {
     | '/_authenticated/academics/calendar'
     | '/_authenticated/academics/electives'
     | '/_authenticated/academics/promote'
+    | '/_authenticated/academics/reports'
     | '/_authenticated/academics/rooms'
     | '/_authenticated/academics/sessions'
     | '/_authenticated/academics/subjects'
@@ -2332,6 +2345,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAcademicsRoomsRouteImport
       parentRoute: typeof AuthenticatedAcademicsRoute
     }
+    '/_authenticated/academics/reports': {
+      id: '/_authenticated/academics/reports'
+      path: '/reports'
+      fullPath: '/academics/reports'
+      preLoaderRoute: typeof AuthenticatedAcademicsReportsRouteImport
+      parentRoute: typeof AuthenticatedAcademicsRoute
+    }
     '/_authenticated/academics/promote': {
       id: '/_authenticated/academics/promote'
       path: '/promote'
@@ -2444,6 +2464,7 @@ interface AuthenticatedAcademicsRouteChildren {
   AuthenticatedAcademicsCalendarRoute: typeof AuthenticatedAcademicsCalendarRoute
   AuthenticatedAcademicsElectivesRoute: typeof AuthenticatedAcademicsElectivesRoute
   AuthenticatedAcademicsPromoteRoute: typeof AuthenticatedAcademicsPromoteRoute
+  AuthenticatedAcademicsReportsRoute: typeof AuthenticatedAcademicsReportsRoute
   AuthenticatedAcademicsRoomsRoute: typeof AuthenticatedAcademicsRoomsRoute
   AuthenticatedAcademicsSessionsRoute: typeof AuthenticatedAcademicsSessionsRoute
   AuthenticatedAcademicsSubjectsRoute: typeof AuthenticatedAcademicsSubjectsRoute
@@ -2457,6 +2478,7 @@ const AuthenticatedAcademicsRouteChildren: AuthenticatedAcademicsRouteChildren =
     AuthenticatedAcademicsCalendarRoute: AuthenticatedAcademicsCalendarRoute,
     AuthenticatedAcademicsElectivesRoute: AuthenticatedAcademicsElectivesRoute,
     AuthenticatedAcademicsPromoteRoute: AuthenticatedAcademicsPromoteRoute,
+    AuthenticatedAcademicsReportsRoute: AuthenticatedAcademicsReportsRoute,
     AuthenticatedAcademicsRoomsRoute: AuthenticatedAcademicsRoomsRoute,
     AuthenticatedAcademicsSessionsRoute: AuthenticatedAcademicsSessionsRoute,
     AuthenticatedAcademicsSubjectsRoute: AuthenticatedAcademicsSubjectsRoute,

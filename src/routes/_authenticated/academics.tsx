@@ -24,6 +24,7 @@ const TABS = [
   { to: "/academics/timetable", label: "Timetable" },
   { to: "/academics/calendar", label: "Calendar" },
   { to: "/academics/promote", label: "Promote" },
+  { to: "/academics/reports", label: "Reports" },
 ];
 
 function AcademicsWorkspace() {

@@ -249,6 +249,20 @@ export class AcademicsController {
     return this.academics.getClass(actor, id);
   }
 
+  @Get("academics/reports")
+  reportCatalogue() {
+    return this.academics.reportCatalogue();
+  }
+
+  @Get("academics/reports/:type")
+  academicReport(
+    @CurrentUser() actor: AuthUser,
+    @Param("type") type: string,
+    @Query("year") year?: string,
+  ) {
+    return this.academics.academicReport(actor, type, year);
+  }
+
   @Get("academics/calendar")
   listCalendar(@CurrentUser() actor: AuthUser, @Query("session") session?: string) {
     return this.academics.listCalendar(actor, session);
