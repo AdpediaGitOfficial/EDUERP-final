@@ -291,6 +291,10 @@ function NewAdmissionWizard() {
   const submit = async () => {
     if (!f.classId) return toast.error("Select a class and section.");
     if (!f.firstName.trim()) return toast.error("First name is required.");
+    if (f.admissionNo.trim() && !/^ADM-\d{4}-\d{5}$/.test(f.admissionNo.trim()))
+      return toast.error(
+        "Admission number must look like ADM-2026-00001 — use the wand to auto-generate, or leave it blank.",
+      );
     if (f.parentMode === "existing" && !f.existingParentId)
       return toast.error("Select an existing parent.");
     if (f.parentMode === "new" && !f.parentLoginEmail.trim())
@@ -347,9 +351,9 @@ function NewAdmissionWizard() {
       <Card className="rounded-2xl p-6">
         {step === 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="Admission No" hint="Editable · click the wand to auto-generate, or leave blank">
+            <Field label="Admission No" hint="Format ADM-YYYY-NNNNN · use the wand to auto-generate, or leave blank">
               <div className="flex gap-2">
-                <Input value={f.admissionNo} onChange={txt("admissionNo")} placeholder="Auto" />
+                <Input value={f.admissionNo} onChange={txt("admissionNo")} placeholder="ADM-2026-00001" />
                 <Button
                   type="button"
                   variant="outline"

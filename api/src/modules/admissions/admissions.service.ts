@@ -513,6 +513,13 @@ export class AdmissionsService {
     const first = (dto.firstName ?? "").trim();
     if (!first) throw new BadRequestException("First name is required");
     if (!dto.classId) throw new BadRequestException("Class is required");
+    // Admission numbers are format-constrained at the DB level; validate a
+    // hand-typed one up-front so the user gets a clear message, not a raw error.
+    if (dto.admissionNo?.trim() && !/^ADM-\d{4}-\d{5}$/.test(dto.admissionNo.trim())) {
+      throw new BadRequestException(
+        "Admission number must look like ADM-2026-00001. Leave it blank or use the Auto button to generate one.",
+      );
+    }
     const fullName = [dto.firstName, dto.middleName, dto.lastName]
       .map((s) => (s ?? "").trim())
       .filter(Boolean)
@@ -525,12 +532,10 @@ export class AdmissionsService {
         SELECT public.next_admission_no() AS next_admission_no`;
       admissionNo = r[0]?.next_admission_no ?? null;
     }
-    let rollNo = dto.rollNo?.trim() || null;
-    if (!rollNo) {
-      const r = await this.prisma.$queryRaw<{ next_roll_no: string }[]>`
-        SELECT public.next_roll_no(${dto.classId}::uuid) AS next_roll_no`;
-      rollNo = r[0]?.next_roll_no ?? null;
-    }
+    // A manually-entered roll is honoured verbatim (and may legitimately 409 on
+    // a duplicate); an auto roll is assigned *inside* the transaction under a
+    // per-class advisory lock so concurrent admits can never collide.
+    const manualRoll = dto.rollNo?.trim() || null;
 
     // ---- resolve the parent (existing link or a new deduped account) --------
     let parentId: string | null = null;
@@ -581,14 +586,24 @@ export class AdmissionsService {
       phone: dto.studentPhone ?? null,
     });
 
-    try {
-      const studentId = await this.prisma.$transaction(async (tx) => {
+    const runTx = () =>
+      this.prisma.$transaction(async (tx) => {
+        // Serialize auto-roll assignment per class: the xact-scoped advisory
+        // lock is held until commit, so a concurrent admit to the same class
+        // waits and then sees this student's roll when it computes its own.
+        let roll = manualRoll;
+        if (!manualRoll) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${dto.classId}))`;
+          const r = await tx.$queryRaw<{ n: string }[]>`
+            SELECT public.next_roll_no(${dto.classId}::uuid) AS n`;
+          roll = r[0]?.n ?? null;
+        }
         const student = await tx.students.create({
           data: {
             profile_id: userId,
             class_id: dto.classId,
             admission_no: admissionNo,
-            roll_no: rollNo,
+            roll_no: roll,
             gender: dto.gender ?? null,
             status: "active",
             ...(dto.admissionDate ? { admission_date: new Date(dto.admissionDate) } : {}),
@@ -710,8 +725,11 @@ export class AdmissionsService {
           },
         });
 
-        return student.id;
+        return { id: student.id, roll };
       });
+
+    try {
+      const { id: studentId, roll: rollNo } = await runTx();
 
       // Secondary guardian (the other parent block) — a guardian record so
       // "multiple guardians per student" holds, without a second login.
