@@ -3127,3 +3127,80 @@ describe("Academics: teacher-subject assignment & workload", () => {
     expect((await get("/academics/teacher-workload", "teacher")).status).toBe(403);
   });
 });
+
+describe("Academics: timetable builder + conflict detection", () => {
+  const patch6 = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
+    request(http).patch(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
+  const del6 = (p: string, r: keyof typeof ACCOUNTS) =>
+    request(http).delete(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`);
+
+  // pick a class + a free day/time to avoid the seeded timetable
+  let classId = "";
+  let created: string[] = [];
+
+  it("creates a slot, detects class/room/teacher conflicts, and blocks overlaps", async () => {
+    classId = (await get("/classes", "admin")).body[0].id;
+    // Use Sunday (day 0) at a late hour — unlikely to be seeded
+    const base = { class_id: classId, day_of_week: 0, start_time: "18:00", end_time: "19:00", room: "TT-JEST" };
+
+    const c1 = await post("/timetable", "admin", base);
+    expect(c1.status).toBe(201);
+    created.push(c1.body.id);
+
+    // same class overlapping -> 409
+    expect(
+      (await post("/timetable", "admin", { class_id: classId, day_of_week: 0, start_time: "18:30", end_time: "19:30" }))
+        .status,
+    ).toBe(409);
+
+    // same room overlapping in a different class -> 409 (room conflict)
+    const otherClass = (await get("/classes", "admin")).body.find((c: any) => c.id !== classId);
+    if (otherClass) {
+      expect(
+        (await post("/timetable", "admin", {
+          class_id: otherClass.id,
+          day_of_week: 0,
+          start_time: "18:15",
+          end_time: "18:45",
+          room: "TT-JEST",
+        })).status,
+      ).toBe(409);
+    }
+
+    // adjacent, non-overlapping in the same class -> 201
+    const c2 = await post("/timetable", "admin", { class_id: classId, day_of_week: 0, start_time: "19:00", end_time: "20:00" });
+    expect(c2.status).toBe(201);
+    created.push(c2.body.id);
+
+    // end before start -> 400
+    expect(
+      (await post("/timetable", "admin", { class_id: classId, day_of_week: 0, start_time: "20:00", end_time: "19:00" }))
+        .status,
+    ).toBe(400);
+
+    // check-conflicts endpoint agrees
+    const chk = await post("/timetable/check-conflicts", "admin", {
+      class_id: classId,
+      day_of_week: 0,
+      start_time: "18:10",
+      end_time: "18:40",
+    });
+    expect(chk.body.hasConflict).toBe(true);
+    expect(chk.body.conflicts.class.length).toBeGreaterThan(0);
+
+    // teacher cannot write
+    expect((await post("/timetable", "teacher", base)).status).toBe(403);
+  });
+
+  it("updates a slot (self excluded from conflict) and deletes it", async () => {
+    // move the first slot to a clearly free window; its own row must not self-conflict
+    const upd = await patch6(`/timetable/${created[0]}`, "admin", {
+      class_id: classId,
+      day_of_week: 0,
+      start_time: "17:00",
+      end_time: "17:45",
+    });
+    expect(upd.status).toBe(200);
+    for (const id of created) expect((await del6(`/timetable/${id}`, "admin")).status).toBe(200);
+  });
+});

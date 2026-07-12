@@ -69,6 +69,16 @@ class SubjectActiveDto {
   @IsBoolean() is_active: boolean;
 }
 
+class TimetableSlotDto {
+  @IsUUID() class_id: string;
+  @IsOptional() @IsUUID() subject_id?: string;
+  @IsOptional() @IsUUID() teacher_id?: string;
+  @IsInt() @Min(0) day_of_week: number;
+  @IsString() start_time: string;
+  @IsString() end_time: string;
+  @IsOptional() @IsString() room?: string;
+}
+
 class AssignTeacherSubjectDto {
   @IsUUID() teacher_id: string;
   @IsUUID() class_id: string;
@@ -274,6 +284,30 @@ export class AcademicsController {
   @Get("timetable/mine")
   myTimetable(@CurrentUser() actor: AuthUser) {
     return this.academics.myTimetable(actor);
+  }
+
+  @Post("timetable/check-conflicts")
+  checkTimetableConflicts(@CurrentUser() actor: AuthUser, @Body() dto: TimetableSlotDto) {
+    return this.academics.checkTimetableConflicts(actor, dto);
+  }
+
+  @Post("timetable")
+  createTimetableSlot(@CurrentUser() actor: AuthUser, @Body() dto: TimetableSlotDto) {
+    return this.academics.createTimetableSlot(actor, dto);
+  }
+
+  @Patch("timetable/:id")
+  updateTimetableSlot(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: TimetableSlotDto,
+  ) {
+    return this.academics.updateTimetableSlot(actor, id, dto);
+  }
+
+  @Delete("timetable/:id")
+  deleteTimetableSlot(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.academics.deleteTimetableSlot(actor, id);
   }
 
   @Get("timetable")

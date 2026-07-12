@@ -20,7 +20,7 @@ const TABS = [
   { to: "/academics/subjects", label: "Subjects" },
   { to: "/academics/rooms", label: "Rooms" },
   { to: "/academics/teachers", label: "Assign Teacher" },
-  { to: "/timetable", label: "Timetable" },
+  { to: "/academics/timetable", label: "Timetable" },
 ];
 
 function AcademicsWorkspace() {

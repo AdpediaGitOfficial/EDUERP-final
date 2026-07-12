@@ -10,6 +10,15 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
+export interface TimetableSlotInput {
+  class_id: string;
+  subject_id?: string | null;
+  teacher_id?: string | null;
+  day_of_week: number;
+  start_time: string; // "HH:MM"
+  end_time: string; // "HH:MM"
+  room?: string | null;
+}
 export interface RoomInput {
   room_number: string;
   name?: string | null;
@@ -1159,6 +1168,134 @@ export class AcademicsService {
         "This room is still assigned to classes or timetable slots; disable it instead.",
       );
     await this.prisma.classrooms.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  // ── Timetable builder + conflict detection ──────────────────────────────────
+
+  /**
+   * Find scheduling conflicts for a proposed slot: same day + overlapping time
+   * where the teacher, the room, or the class is already booked. Excludes the
+   * row being edited. Returns a per-type conflict summary with samples.
+   */
+  private async findTimetableConflicts(
+    input: { day_of_week: number; start_time: string; end_time: string; teacher_id?: string | null; room?: string | null; class_id: string },
+    excludeId?: string,
+  ) {
+    const teacher = input.teacher_id ?? null;
+    const room = input.room && input.room.trim() ? input.room : null;
+    const exclude = excludeId ?? null;
+    const rows = await this.prisma.$queryRaw<
+      { id: string; kind: string; label: string }[]
+    >`
+      SELECT t.id,
+             CASE
+               WHEN ${teacher}::uuid IS NOT NULL AND t.teacher_id = ${teacher}::uuid THEN 'teacher'
+               WHEN ${room}::text IS NOT NULL AND t.room = ${room}::text THEN 'room'
+               ELSE 'class'
+             END AS kind,
+             (c.name || ' ' || COALESCE(c.section, '') || ' · ' ||
+              to_char(t.start_time, 'HH24:MI') || '-' || to_char(t.end_time, 'HH24:MI')) AS label
+      FROM public.timetable t
+      JOIN public.classes c ON c.id = t.class_id
+      WHERE t.day_of_week = ${input.day_of_week}
+        AND t.start_time < ${input.end_time}::time
+        AND t.end_time > ${input.start_time}::time
+        AND (${exclude}::uuid IS NULL OR t.id <> ${exclude}::uuid)
+        AND (
+          (${teacher}::uuid IS NOT NULL AND t.teacher_id = ${teacher}::uuid)
+          OR (${room}::text IS NOT NULL AND t.room = ${room}::text)
+          OR t.class_id = ${input.class_id}::uuid
+        )`;
+    const byKind = { teacher: [] as string[], room: [] as string[], class: [] as string[] };
+    for (const r of rows) (byKind as any)[r.kind].push(r.label);
+    return byKind;
+  }
+
+  async checkTimetableConflicts(actor: AuthUser, input: TimetableSlotInput, excludeId?: string) {
+    this.requireAcademicAdmin(actor);
+    const c = await this.findTimetableConflicts(input, excludeId);
+    return {
+      hasConflict: c.teacher.length + c.room.length + c.class.length > 0,
+      conflicts: c,
+    };
+  }
+
+  private conflictMessage(c: { teacher: string[]; room: string[]; class: string[] }) {
+    const parts: string[] = [];
+    if (c.teacher.length) parts.push(`Teacher busy (${c.teacher[0]})`);
+    if (c.room.length) parts.push(`Room busy (${c.room[0]})`);
+    if (c.class.length) parts.push(`Class busy (${c.class[0]})`);
+    return parts.join("; ");
+  }
+
+  private async validateSlot(input: TimetableSlotInput) {
+    if (input.day_of_week < 0 || input.day_of_week > 6)
+      throw new BadRequestException("day_of_week must be 0–6");
+    if (!(input.start_time < input.end_time))
+      throw new BadRequestException("End time must be after start time");
+    const cls = await this.prisma.classes.findUnique({ where: { id: input.class_id } });
+    if (!cls) throw new NotFoundException("Class not found");
+    if (input.subject_id) {
+      const s = await this.prisma.subjects.findUnique({ where: { id: input.subject_id } });
+      if (!s) throw new NotFoundException("Subject not found");
+      if (s.class_id !== input.class_id)
+        throw new BadRequestException("That subject does not belong to the class.");
+    }
+    if (input.teacher_id) {
+      const t = await this.prisma.profiles.findUnique({ where: { id: input.teacher_id } });
+      if (!t) throw new NotFoundException("Teacher not found");
+    }
+  }
+
+  async createTimetableSlot(actor: AuthUser, input: TimetableSlotInput) {
+    this.requireAcademicAdmin(actor);
+    await this.validateSlot(input);
+    const conflicts = await this.findTimetableConflicts(input);
+    if (conflicts.teacher.length + conflicts.room.length + conflicts.class.length > 0)
+      throw new ConflictException(this.conflictMessage(conflicts));
+    const row = await this.prisma.timetable.create({
+      data: {
+        class_id: input.class_id,
+        subject_id: input.subject_id || null,
+        teacher_id: input.teacher_id || null,
+        day_of_week: input.day_of_week,
+        start_time: new Date(`1970-01-01T${input.start_time}:00Z`),
+        end_time: new Date(`1970-01-01T${input.end_time}:00Z`),
+        room: input.room || null,
+      },
+    });
+    return { id: row.id };
+  }
+
+  async updateTimetableSlot(actor: AuthUser, id: string, input: TimetableSlotInput) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.timetable.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Slot not found");
+    await this.validateSlot(input);
+    const conflicts = await this.findTimetableConflicts(input, id);
+    if (conflicts.teacher.length + conflicts.room.length + conflicts.class.length > 0)
+      throw new ConflictException(this.conflictMessage(conflicts));
+    await this.prisma.timetable.update({
+      where: { id },
+      data: {
+        class_id: input.class_id,
+        subject_id: input.subject_id || null,
+        teacher_id: input.teacher_id || null,
+        day_of_week: input.day_of_week,
+        start_time: new Date(`1970-01-01T${input.start_time}:00Z`),
+        end_time: new Date(`1970-01-01T${input.end_time}:00Z`),
+        room: input.room || null,
+      },
+    });
+    return { ok: true };
+  }
+
+  async deleteTimetableSlot(actor: AuthUser, id: string) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.timetable.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Slot not found");
+    await this.prisma.timetable.delete({ where: { id } });
     return { ok: true };
   }
 
