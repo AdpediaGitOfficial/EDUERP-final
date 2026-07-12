@@ -43,6 +43,9 @@ import {
   GraduationCap,
   AlertTriangle,
   Plus,
+  Star,
+  Columns3,
+  Upload,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Badge } from "@/components/ui/badge";
@@ -575,6 +578,19 @@ function AdminStudentsList() {
 type SortKey = "name" | "admission_no" | "class" | "admission_date";
 type SortDir = "asc" | "desc";
 
+// Toggleable columns for the admin students table (Student + Class stay fixed).
+const COL_DEFS = [
+  { key: "admission_no", label: "Admission #" },
+  { key: "gender", label: "Gender" },
+  { key: "status", label: "Status" },
+  { key: "attendance", label: "Attendance" },
+  { key: "fee", label: "Fee" },
+  { key: "admitted", label: "Admitted" },
+] as const;
+const DEFAULT_COLS: Record<string, boolean> = Object.fromEntries(
+  COL_DEFS.map((c) => [c.key, true]),
+);
+
 function AdminStudentsView() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -595,6 +611,63 @@ function AdminStudentsView() {
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
   const [dupOpen, setDupOpen] = useState(false);
+  const [colsOpen, setColsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  // Column visibility (persisted).
+  const [cols, setCols] = useState<Record<string, boolean>>(() => {
+    try {
+      const s = localStorage.getItem("students-cols");
+      if (s) return { ...DEFAULT_COLS, ...JSON.parse(s) };
+    } catch {
+      /* ignore */
+    }
+    return { ...DEFAULT_COLS };
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("students-cols", JSON.stringify(cols));
+    } catch {
+      /* ignore */
+    }
+  }, [cols]);
+
+  // Saved filter presets (persisted).
+  const [savedFilters, setSavedFilters] = useState<{ name: string; f: any }[]>(() => {
+    try {
+      const s = localStorage.getItem("students-saved-filters");
+      if (s) return JSON.parse(s);
+    } catch {
+      /* ignore */
+    }
+    return [];
+  });
+  const persistSaved = (next: { name: string; f: any }[]) => {
+    setSavedFilters(next);
+    try {
+      localStorage.setItem("students-saved-filters", JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+  const applyFilter = (f: any) => {
+    setQ(f.q ?? "");
+    setGrade(f.grade ?? "all");
+    setSection(f.section ?? "all");
+    setGender(f.gender ?? "all");
+    setStatus(f.status ?? "active");
+    setFromDate(f.fromDate ?? "");
+    setToDate(f.toDate ?? "");
+    setSort(f.sort ?? "admission_date");
+    setDir(f.dir ?? "desc");
+  };
+  const saveCurrentFilter = () => {
+    const name = window.prompt("Save this filter set as:");
+    if (!name?.trim()) return;
+    const f = { q, grade, section, gender, status, fromDate, toDate, sort, dir };
+    persistSaved([...savedFilters.filter((s) => s.name !== name.trim()), { name: name.trim(), f }]);
+    toast.success(`Saved filter "${name.trim()}"`);
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setQDebounced(q.trim()), 300);
@@ -969,7 +1042,36 @@ function AdminStudentsView() {
               </>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {savedFilters.length > 0 && (
+              <Select
+                value=""
+                onValueChange={(name) => {
+                  const found = savedFilters.find((s) => s.name === name);
+                  if (found) applyFilter(found.f);
+                }}
+              >
+                <SelectTrigger className="w-[150px] h-9">
+                  <SelectValue placeholder="Saved filters" />
+                </SelectTrigger>
+                <SelectContent>
+                  {savedFilters.map((s) => (
+                    <SelectItem key={s.name} value={s.name}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button size="sm" variant="outline" onClick={saveCurrentFilter}>
+              <Star className="size-4" /> Save filter
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setColsOpen(true)}>
+              <Columns3 className="size-4" /> Columns
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="size-4" /> Import
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setDupOpen(true)}>
               <AlertTriangle className="size-4" /> Duplicates
             </Button>
@@ -1036,14 +1138,16 @@ function AdminStudentsView() {
                     Student {sortIcon("name")}
                   </button>
                 </th>
-                <th className="p-3 font-medium">
-                  <button
-                    className="inline-flex items-center gap-1"
-                    onClick={() => toggleSort("admission_no")}
-                  >
-                    Admission # {sortIcon("admission_no")}
-                  </button>
-                </th>
+                {cols.admission_no && (
+                  <th className="p-3 font-medium">
+                    <button
+                      className="inline-flex items-center gap-1"
+                      onClick={() => toggleSort("admission_no")}
+                    >
+                      Admission # {sortIcon("admission_no")}
+                    </button>
+                  </th>
+                )}
                 <th className="p-3 font-medium">
                   <button
                     className="inline-flex items-center gap-1"
@@ -1052,18 +1156,20 @@ function AdminStudentsView() {
                     Class {sortIcon("class")}
                   </button>
                 </th>
-                <th className="p-3 font-medium">Gender</th>
-                <th className="p-3 font-medium">Status</th>
-                <th className="p-3 font-medium">Attendance</th>
-                <th className="p-3 font-medium">Fee</th>
-                <th className="p-3 font-medium">
-                  <button
-                    className="inline-flex items-center gap-1"
-                    onClick={() => toggleSort("admission_date")}
-                  >
-                    Admitted {sortIcon("admission_date")}
-                  </button>
-                </th>
+                {cols.gender && <th className="p-3 font-medium">Gender</th>}
+                {cols.status && <th className="p-3 font-medium">Status</th>}
+                {cols.attendance && <th className="p-3 font-medium">Attendance</th>}
+                {cols.fee && <th className="p-3 font-medium">Fee</th>}
+                {cols.admitted && (
+                  <th className="p-3 font-medium">
+                    <button
+                      className="inline-flex items-center gap-1"
+                      onClick={() => toggleSort("admission_date")}
+                    >
+                      Admitted {sortIcon("admission_date")}
+                    </button>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -1102,34 +1208,42 @@ function AdminStudentsView() {
                         </div>
                       </div>
                     </td>
-                    <td className="p-3 font-mono text-xs">{r.admission_no}</td>
+                    {cols.admission_no && (
+                      <td className="p-3 font-mono text-xs">{r.admission_no}</td>
+                    )}
                     <td className="p-3">
                       {r.class_name ?? "—"}
                       {r.class_section && ` · ${r.class_section}`}
                     </td>
-                    <td className="p-3 capitalize text-muted-foreground">{r.gender ?? "—"}</td>
-                    <td className="p-3">{statusBadge(r.status)}</td>
-                    <td className="p-3">
-                      {attPct == null ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <span
-                          className={
-                            attPct >= 90
-                              ? "text-emerald-600 font-medium"
-                              : attPct >= 75
-                                ? "text-amber-600 font-medium"
-                                : "text-red-600 font-medium"
-                          }
-                        >
-                          {attPct}%
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3">{feeBadge(extras?.feeMap[r.id])}</td>
-                    <td className="p-3 text-muted-foreground">
-                      {new Date(r.admission_date).toLocaleDateString()}
-                    </td>
+                    {cols.gender && (
+                      <td className="p-3 capitalize text-muted-foreground">{r.gender ?? "—"}</td>
+                    )}
+                    {cols.status && <td className="p-3">{statusBadge(r.status)}</td>}
+                    {cols.attendance && (
+                      <td className="p-3">
+                        {attPct == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span
+                            className={
+                              attPct >= 90
+                                ? "text-emerald-600 font-medium"
+                                : attPct >= 75
+                                  ? "text-amber-600 font-medium"
+                                  : "text-red-600 font-medium"
+                            }
+                          >
+                            {attPct}%
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {cols.fee && <td className="p-3">{feeBadge(extras?.feeMap[r.id])}</td>}
+                    {cols.admitted && (
+                      <td className="p-3 text-muted-foreground">
+                        {new Date(r.admission_date).toLocaleDateString()}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -1215,7 +1329,242 @@ function AdminStudentsView() {
         }}
       />
       <DuplicatesDialog open={dupOpen} onOpenChange={setDupOpen} />
+
+      {/* Column visibility */}
+      <Dialog open={colsOpen} onOpenChange={setColsOpen}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Columns</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {COL_DEFS.map((c) => (
+              <label key={c.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={cols[c.key]}
+                  onCheckedChange={(v) => setCols((prev) => ({ ...prev, [c.key]: !!v }))}
+                />
+                {c.label}
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCols({ ...DEFAULT_COLS })}>
+              Reset
+            </Button>
+            <Button onClick={() => setColsOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ImportStudentsDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        classes={classes ?? []}
+        onDone={() => qc.invalidateQueries({ queryKey: ["admin-students"] })}
+      />
     </div>
+  );
+}
+
+/** Parse a simple CSV (comma-separated, optional double-quoted fields). */
+function parseCsv(text: string): Record<string, string>[] {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length);
+  if (!lines.length) return [];
+  const splitLine = (line: string) => {
+    const out: string[] = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQ) {
+        if (ch === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else if (ch === '"') inQ = false;
+        else cur += ch;
+      } else if (ch === '"') inQ = true;
+      else if (ch === ",") {
+        out.push(cur);
+        cur = "";
+      } else cur += ch;
+    }
+    out.push(cur);
+    return out.map((s) => s.trim());
+  };
+  const headers = splitLine(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  return lines.slice(1).map((line) => {
+    const cells = splitLine(line);
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => (row[h] = cells[i] ?? ""));
+    return row;
+  });
+}
+
+const IMPORT_TEMPLATE =
+  "firstName,lastName,className,section,gender,dob,guardianName,guardianPhone,guardianEmail\n" +
+  "Aarav,Sharma,Grade 1,A,male,2019-05-12,Rakesh Sharma,+91 90000 00001,rakesh.sharma@example.com\n";
+
+function ImportStudentsDialog({
+  open,
+  onOpenChange,
+  classes,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  classes: { id: string; name: string; section?: string | null }[];
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<{
+    ok: number;
+    failed: { row: number; name: string; error: string }[];
+  } | null>(null);
+
+  const downloadTemplate = () => {
+    const blob = new Blob([IMPORT_TEMPLATE], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "students-import-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const resolveClass = (name: string, section: string) => {
+    const n = name.trim().toLowerCase();
+    const s = section.trim().toLowerCase();
+    return (
+      classes.find(
+        (c) => c.name.toLowerCase() === n && (c.section ?? "").toLowerCase() === s,
+      ) ?? classes.find((c) => c.name.toLowerCase() === n)
+    );
+  };
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    setResults(null);
+    try {
+      const rows = parseCsv(await file.text());
+      if (!rows.length) {
+        toast.error("The CSV has no data rows.");
+        return;
+      }
+      let ok = 0;
+      const failed: { row: number; name: string; error: string }[] = [];
+      const stamp = Date.now();
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const first = r.firstname || r.first || "";
+        const name = `${first} ${r.lastname ?? ""}`.trim();
+        const cls = resolveClass(r.classname || r.class || "", r.section || "");
+        if (!first) {
+          failed.push({ row: i + 2, name: name || "(blank)", error: "Missing first name" });
+          continue;
+        }
+        if (!cls) {
+          failed.push({
+            row: i + 2,
+            name,
+            error: `Unknown class "${r.classname || r.class || ""} ${r.section || ""}"`.trim(),
+          });
+          continue;
+        }
+        const email =
+          r.guardianemail?.trim() ||
+          `import.${stamp}.${i}@parent.greenwood.test`;
+        try {
+          await apiPost("/admissions/admit", {
+            classId: cls.id,
+            firstName: first,
+            lastName: r.lastname || undefined,
+            gender: ["male", "female", "other"].includes((r.gender || "").toLowerCase())
+              ? (r.gender || "").toLowerCase()
+              : undefined,
+            dob: r.dob || undefined,
+            parentMode: "new",
+            primaryGuardian: "father",
+            father: { name: r.guardianname || `${name} (Guardian)`, phone: r.guardianphone || undefined },
+            parentLoginEmail: email,
+          });
+          ok += 1;
+        } catch (err) {
+          failed.push({ row: i + 2, name, error: err instanceof Error ? err.message : "Failed" });
+        }
+      }
+      setResults({ ok, failed });
+      if (ok) {
+        toast.success(`Imported ${ok} student${ok === 1 ? "" : "s"}.`);
+        onDone();
+      }
+      if (!ok && failed.length) toast.error("No rows imported — see the errors below.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Import students from CSV</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            Upload a CSV with columns{" "}
+            <code className="text-xs">
+              firstName, lastName, className, section, gender, dob, guardianName, guardianPhone,
+              guardianEmail
+            </code>
+            . Each row creates a student (and a new parent account) via the standard admission flow,
+            so admission and roll numbers are assigned automatically.
+          </p>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={downloadTemplate}>
+              <Download className="size-4" /> Download template
+            </Button>
+            <label>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={onFile}
+                disabled={busy}
+              />
+              <Button size="sm" asChild disabled={busy}>
+                <span>
+                  <Upload className="size-4" /> {busy ? "Importing…" : "Choose CSV"}
+                </span>
+              </Button>
+            </label>
+          </div>
+          {results && (
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="font-medium">
+                {results.ok} imported · {results.failed.length} failed
+              </div>
+              {results.failed.length > 0 && (
+                <div className="max-h-48 overflow-y-auto text-xs space-y-1">
+                  {results.failed.map((f, i) => (
+                    <div key={i} className="text-red-600">
+                      Row {f.row} ({f.name}): {f.error}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
