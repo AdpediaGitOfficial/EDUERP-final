@@ -21,6 +21,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local object storage — runtime uploads (avatars, documents), not source
+/storage/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
