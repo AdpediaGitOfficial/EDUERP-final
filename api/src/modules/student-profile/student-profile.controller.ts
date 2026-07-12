@@ -77,6 +77,10 @@ class DocumentDto {
   @IsOptional() @IsBoolean() verified?: boolean;
 }
 
+class SendPassDto {
+  @IsIn(["student", "parent"]) target: "student" | "parent";
+}
+
 class DocumentUpdateDto {
   @IsOptional() @IsString() @MaxLength(60) docType?: string;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(200) title?: string;
@@ -99,6 +103,23 @@ export class StudentProfileController {
     @Param("studentId", new ParseUUIDPipe()) studentId: string,
   ) {
     return this.svc.getProfile(actor, studentId);
+  }
+
+  @Get("sis")
+  sisProfile(
+    @CurrentUser() actor: AuthUser,
+    @Param("studentId", new ParseUUIDPipe()) studentId: string,
+  ) {
+    return this.svc.sisProfile(actor, studentId);
+  }
+
+  @Post("send-pass")
+  sendPass(
+    @CurrentUser() actor: AuthUser,
+    @Param("studentId", new ParseUUIDPipe()) studentId: string,
+    @Body() dto: SendPassDto,
+  ) {
+    return this.svc.sendPass(actor, studentId, dto.target);
   }
 
   @Put("medical")

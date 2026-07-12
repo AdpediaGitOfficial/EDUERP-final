@@ -57,8 +57,13 @@ import {
   ActivityTab,
   ClassTimetableTab,
   NoticesTab,
-  AdmissionDetailsCard,
+  SisProfilePanel,
+  ProfileInfoTab,
+  SiblingsTab,
+  CredentialsTab,
+  BehaviorTab,
 } from "@/components/student-profile-extras";
+import { UserCircle, Star, IdCard } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/children/$studentId/")({
   component: ChildDetailPage,
@@ -414,58 +419,19 @@ function ChildDetailPage() {
         </div>
       </Card>
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <Card className="rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <ClipboardCheck className="size-3.5" />
-            Attendance (last 120d)
-          </div>
-          <div className="font-display text-2xl font-semibold mt-1">
-            {attStats.pct == null ? "—" : `${attStats.pct}%`}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {attStats.present}/{attStats.total} present
-          </div>
-        </Card>
-        <Card className="rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <TrendingUp className="size-3.5" />
-            Overall performance
-          </div>
-          <div className="font-display text-2xl font-semibold mt-1">
-            {perfStats.pct == null ? "—" : `${perfStats.pct}% · ${perfStats.grade}`}
-          </div>
-          <div className="text-xs text-muted-foreground">{perfStats.count} exam(s)</div>
-        </Card>
-        <Card className="rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Wallet className="size-3.5" />
-            Fees paid
-          </div>
-          <div className="font-display text-2xl font-semibold mt-1">
-            ₹{feeStats.paid.toLocaleString("en-IN")}
-          </div>
-          <Progress value={feeStats.pct} className="mt-2 h-1.5" />
-        </Card>
-        <Card className="rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <CalendarClock className="size-3.5" />
-            Outstanding
-          </div>
-          <div className="font-display text-2xl font-semibold mt-1">
-            ₹{feeStats.outstanding.toLocaleString("en-IN")}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            of ₹{feeStats.due.toLocaleString("en-IN")}
-          </div>
-        </Card>
-      </div>
+      {/* SIS stat strip (Total Fees / Paid / Balance / Behavior) + QR + actions */}
+      <SisProfilePanel studentId={studentId} />
 
-      <AdmissionDetailsCard studentId={studentId} />
-
-      <Tabs defaultValue="attendance">
+      <Tabs defaultValue="profile">
         <TabsList>
+          <TabsTrigger value="profile">
+            <UserCircle className="size-4 mr-1" />
+            Profile
+          </TabsTrigger>
+          <TabsTrigger value="siblings">
+            <Users className="size-4 mr-1" />
+            Siblings
+          </TabsTrigger>
           <TabsTrigger value="attendance">
             <ClipboardCheck className="size-4 mr-1" />
             Attendance
@@ -514,11 +480,32 @@ function ChildDetailPage() {
             <FileText className="size-4 mr-1" />
             Documents
           </TabsTrigger>
+          <TabsTrigger value="behavior">
+            <Star className="size-4 mr-1" />
+            Behavior
+          </TabsTrigger>
+          <TabsTrigger value="credentials">
+            <IdCard className="size-4 mr-1" />
+            Credentials
+          </TabsTrigger>
           <TabsTrigger value="activity">
             <History className="size-4 mr-1" />
             Activity
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="profile">
+          <ProfileInfoTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="siblings">
+          <SiblingsTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="behavior">
+          <BehaviorTab studentId={studentId} />
+        </TabsContent>
+        <TabsContent value="credentials">
+          <CredentialsTab studentId={studentId} />
+        </TabsContent>
 
         <TabsContent value="attendance">
           <Card className="rounded-2xl overflow-hidden mb-4">

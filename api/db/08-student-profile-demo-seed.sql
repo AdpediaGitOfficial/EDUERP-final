@@ -136,3 +136,23 @@ BEGIN
 
   RAISE NOTICE 'Parent-portal demo notices seeded.';
 END $$;
+
+-- Behavior notes for Liam so the Behavior tab/score renders (score = +1:
+-- two positive, one needs_improvement). Idempotent by note text.
+DO $$
+DECLARE
+  teacher uuid := (SELECT id FROM public.profiles WHERE email = 'teacher@greenwood.test' LIMIT 1);
+  liam uuid := 'de000000-0000-4000-8000-000000000001';
+BEGIN
+  IF teacher IS NULL OR NOT EXISTS (SELECT 1 FROM public.students WHERE id = liam) THEN RETURN; END IF;
+  INSERT INTO public.progress_notes (student_id, teacher_id, note, tone, note_date)
+  SELECT liam, teacher, v.note, v.tone, CURRENT_DATE - v.ago
+  FROM (VALUES
+    ('Helped a classmate with reading. Excellent teamwork.', 'positive', 5),
+    ('Top score in the spelling bee.', 'positive', 12),
+    ('Did not complete homework twice this week.', 'needs_improvement', 3)
+  ) AS v(note, tone, ago)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.progress_notes p WHERE p.student_id = liam AND p.note = v.note
+  );
+END $$;

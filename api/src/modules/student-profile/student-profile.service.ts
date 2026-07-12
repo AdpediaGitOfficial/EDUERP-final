@@ -1,11 +1,15 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { randomBytes } from "node:crypto";
 import { PrismaService } from "../../infra/database/prisma.service";
+import { AuthService } from "../auth/auth.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
 /**
@@ -19,7 +23,11 @@ import type { AuthUser } from "../../common/decorators/current-user.decorator";
  */
 @Injectable()
 export class StudentProfileService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+  ) {}
 
   private isDesk(actor: AuthUser) {
     return actor.roles.some((r) => r === "admin" || r === "reception");
@@ -406,5 +414,262 @@ export class StudentProfileService {
     await this.prisma.student_documents.delete({ where: { id } });
     await this.log(studentId, actor, "document_removed", "Document removed", { id });
     return this.getProfile(actor, studentId);
+  }
+
+  // ------------------------------------------------ SIS profile page ---
+
+  /**
+   * The consolidated SIS profile: header + fee summary + behavior score,
+   * rich personal/bank details, guardians (father/mother), siblings, and the
+   * portal usernames. One round trip for the profile page's stat strip, sidebar
+   * and Profile/Siblings/Credentials/Behavior tabs.
+   *
+   * Behavior score formula (stated on the tab): each positive note = +1, each
+   * concern note = −1, neutral = 0; the score is their sum.
+   */
+  async sisProfile(actor: AuthUser, studentId: string) {
+    await this.assertReadable(actor, studentId);
+    const canEdit = this.isDesk(actor);
+
+    const student = await this.prisma.students.findUnique({
+      where: { id: studentId },
+      include: {
+        profiles: { select: { id: true, full_name: true, email: true, phone: true } },
+        classes: { select: { name: true, section: true, academic_year: true } },
+        student_details: { include: { student_categories: { select: { name: true } } } },
+        student_medical: true,
+      },
+    });
+    if (!student) throw new NotFoundException("Student not found");
+
+    const [links, notes, fees] = await Promise.all([
+      this.prisma.parent_student.findMany({
+        where: { student_id: studentId },
+        orderBy: [{ is_primary: "desc" }],
+        include: {
+          profiles: {
+            select: {
+              id: true,
+              full_name: true,
+              email: true,
+              phone: true,
+              occupation: true,
+              qualification: true,
+              national_id: true,
+              annual_income: true,
+            },
+          },
+        },
+      }),
+      this.prisma.progress_notes.findMany({
+        where: { student_id: studentId },
+        orderBy: { note_date: "desc" },
+      }),
+      this.prisma.fee_assignments.findMany({
+        where: { student_id: studentId },
+        select: { amount_due: true, amount_paid: true },
+      }),
+    ]);
+
+    // Siblings: other students sharing any of this student's linked parents.
+    const parentIds = links.map((l) => l.parent_id);
+    let siblings: any[] = [];
+    if (parentIds.length) {
+      const sibLinks = await this.prisma.parent_student.findMany({
+        where: { parent_id: { in: parentIds }, student_id: { not: studentId } },
+        include: {
+          students: {
+            select: {
+              id: true,
+              admission_no: true,
+              roll_no: true,
+              gender: true,
+              status: true,
+              profiles: { select: { full_name: true } },
+              classes: { select: { name: true, section: true } },
+            },
+          },
+        },
+      });
+      const seen = new Set<string>();
+      for (const l of sibLinks) {
+        const s = l.students;
+        if (!s || seen.has(s.id)) continue;
+        seen.add(s.id);
+        siblings.push({
+          studentId: s.id,
+          name: s.profiles?.full_name ?? null,
+          admissionNo: s.admission_no,
+          rollNo: s.roll_no,
+          gender: s.gender,
+          status: s.status,
+          className: s.classes
+            ? `${s.classes.name}${s.classes.section ? ` (${s.classes.section})` : ""}`
+            : null,
+        });
+      }
+    }
+
+    const num = (v: unknown) => (v == null ? 0 : Number(v));
+    const total = fees.reduce((a, f) => a + num(f.amount_due), 0);
+    const paid = fees.reduce((a, f) => a + num(f.amount_paid), 0);
+
+    const behavior = this.behaviorFromNotes(notes);
+    const teacherNames = await this.teacherNameMap(notes.map((n) => n.teacher_id));
+
+    const d = (v: Date | null | undefined) => (v ? v.toISOString().slice(0, 10) : null);
+    const det = student.student_details;
+    const primary = links.find((l) => l.is_primary) ?? links[0];
+
+    return {
+      canEdit,
+      header: {
+        studentId: student.id,
+        fullName: student.profiles?.full_name ?? null,
+        className: student.classes
+          ? `${student.classes.name}${student.classes.section ? ` — ${student.classes.section}` : ""}`
+          : null,
+        academicYear: student.classes?.academic_year ?? null,
+        admissionNo: student.admission_no,
+        rollNo: student.roll_no,
+        gender: student.gender,
+        house: det?.house ?? null,
+        bloodGroup: student.student_medical?.blood_group ?? null,
+        photoUrl: det?.photo_url ?? null,
+        status: student.status,
+        admissionDate: d(student.admission_date),
+      },
+      feeSummary: { total, paid, balance: Math.max(total - paid, 0) },
+      behavior: { ...behavior, notes: notes.slice(0, 50).map((n) => ({
+        id: n.id,
+        note: n.note,
+        tone: n.tone,
+        date: d(n.note_date),
+        teacher: teacherNames.get(n.teacher_id) ?? null,
+      })) },
+      details: det
+        ? {
+            firstName: det.first_name,
+            middleName: det.middle_name,
+            lastName: det.last_name,
+            dob: d(det.dob),
+            category: det.student_categories?.name ?? null,
+            religion: det.religion,
+            caste: det.caste,
+            subCaste: det.sub_caste,
+            motherTongue: det.mother_tongue,
+            placeOfBirth: det.place_of_birth,
+            nationality: det.nationality,
+            aadhaarNo: det.aadhaar_no,
+            penSssmId: det.pen_sssm_id,
+            bpl: det.bpl,
+            rte: det.rte,
+            biometricId: det.biometric_id,
+            previousSchool: det.previous_school,
+            openingDueBalance: num(det.opening_due_balance),
+            bankName: det.bank_name,
+            bankAccount: det.bank_account,
+            bankIfsc: det.bank_ifsc,
+            studentPhone: det.student_phone,
+            studentEmail: det.student_email,
+            currentAddress: det.current_address,
+            permanentAddress: det.permanent_address,
+            custom: det.custom,
+          }
+        : null,
+      medical: student.student_medical
+        ? {
+            bloodGroup: student.student_medical.blood_group,
+            heightCm: num(student.student_medical.height_cm) || null,
+            weightKg: num(student.student_medical.weight_kg) || null,
+            allergies: student.student_medical.allergies,
+            emergencyContactName: student.student_medical.emergency_contact_name,
+            emergencyContactPhone: student.student_medical.emergency_contact_phone,
+          }
+        : null,
+      guardians: links.map((l) => ({
+        parentId: l.parent_id,
+        name: l.profiles?.full_name ?? null,
+        relationship: l.relationship_type,
+        isPrimary: l.is_primary,
+        phone: l.profiles?.phone ?? null,
+        email: l.profiles?.email ?? null,
+        occupation: l.profiles?.occupation ?? null,
+        qualification: l.profiles?.qualification ?? null,
+        aadhaar: l.profiles?.national_id ?? null,
+        annualIncome: l.profiles?.annual_income != null ? Number(l.profiles.annual_income) : null,
+      })),
+      siblings,
+      credentials: {
+        studentUserId: student.profiles?.id ?? null,
+        studentUsername: student.profiles?.email ?? student.admission_no ?? null,
+        parentUserId: primary?.parent_id ?? null,
+        parentUsername: primary?.profiles?.email ?? null,
+      },
+    };
+  }
+
+  private behaviorFromNotes(notes: { tone: string }[]) {
+    let positive = 0,
+      neutral = 0,
+      concern = 0;
+    for (const n of notes) {
+      if (n.tone === "positive") positive += 1;
+      // The tone column stores "needs_improvement"; "concern" is the UI synonym.
+      else if (n.tone === "needs_improvement" || n.tone === "concern") concern += 1;
+      else neutral += 1;
+    }
+    return { score: positive - concern, positive, neutral, concern };
+  }
+
+  private async teacherNameMap(ids: string[]) {
+    const uniq = Array.from(new Set(ids));
+    if (!uniq.length) return new Map<string, string>();
+    const rows = await this.prisma.profiles.findMany({
+      where: { id: { in: uniq } },
+      select: { id: true, full_name: true },
+    });
+    return new Map(rows.map((r) => [r.id, r.full_name]));
+  }
+
+  /**
+   * Regenerate a portal password (student or the primary parent) and deliver it
+   * as a notification "pass". Desk-only. Returns the one-time password so the UI
+   * can also show it once — it is never stored.
+   */
+  async sendPass(actor: AuthUser, studentId: string, target: "student" | "parent") {
+    this.requireDesk(actor);
+    await this.assertReadable(actor, studentId);
+    const student = await this.prisma.students.findUnique({
+      where: { id: studentId },
+      select: { profile_id: true, profiles: { select: { full_name: true } } },
+    });
+    if (!student) throw new NotFoundException("Student not found");
+
+    let userId = student.profile_id;
+    let label = "student";
+    if (target === "parent") {
+      const primary = await this.prisma.parent_student.findFirst({
+        where: { student_id: studentId },
+        orderBy: [{ is_primary: "desc" }],
+        select: { parent_id: true },
+      });
+      if (!primary) throw new BadRequestException("No parent linked to this student");
+      userId = primary.parent_id;
+      label = "parent";
+    }
+
+    const tempPassword = `Pass-${randomBytes(4).toString("hex")}!`;
+    await this.auth.adminSetPassword(userId, tempPassword);
+    await this.notifications
+      .notify({
+        senderId: actor.id,
+        userIds: [userId],
+        subject: "Your portal login pass",
+        body: `A new ${label} portal password has been set for ${student.profiles?.full_name ?? "the student"}. Please sign in and change it.`,
+      })
+      .catch(() => undefined);
+    await this.log(studentId, actor, "pass_sent", `${label} portal pass regenerated and sent`);
+    return { ok: true, target, userId, tempPassword };
   }
 }

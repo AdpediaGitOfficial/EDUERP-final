@@ -25,6 +25,7 @@ import {
 import { useConfirm } from "@/components/confirm-dialog";
 import { toast } from "sonner";
 import {
+  Users,
   HeartPulse,
   BedDouble,
   ShieldAlert,
@@ -39,8 +40,18 @@ import {
   CalendarDays,
   Megaphone,
   Clock,
+  Wallet,
+  Star,
+  Printer,
+  KeyRound,
+  Mail,
+  IdCard,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { QRCodeSVG } from "qrcode.react";
+import Barcode from "react-barcode";
 
 // ---------------------------------------------------------------- types ---
 
@@ -62,6 +73,16 @@ export function useStudentProfile(studentId: string) {
     queryFn: () => apiGet<StudentProfile>(`/students/${studentId}/profile`),
   });
 }
+
+/** Consolidated SIS profile (header, fees, behavior, siblings, credentials). */
+export function useSisProfile(studentId: string) {
+  return useQuery({
+    queryKey: ["sis-profile", studentId],
+    queryFn: () => apiGet<any>(`/students/${studentId}/profile/sis`),
+  });
+}
+
+const inr = (n: number) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
 
 function useProfileMutation(studentId: string) {
   const qc = useQueryClient();
@@ -999,6 +1020,551 @@ function noticeBadge(audience: string, className: string | null) {
   if (audience === "parents")
     return <Badge className="bg-emerald-100 text-emerald-700 border-0">Parents</Badge>;
   return <Badge className="bg-sky-100 text-sky-700 border-0">School-wide</Badge>;
+}
+
+// ============================================ SIS STAT STRIP + SIDEBAR ===
+
+/** The reference header: 4 stat cards + QR/barcode + action buttons. */
+export function SisProfilePanel({ studentId }: { studentId: string }) {
+  const { data } = useSisProfile(studentId);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [pass, setPass] = useState<{ label: string; value: string } | null>(null);
+  if (!data) return null;
+  const fee = data.feeSummary ?? { total: 0, paid: 0, balance: 0 };
+  const behavior = data.behavior ?? { score: 0 };
+  const admissionNo = data.header?.admissionNo ?? "";
+
+  const sendPass = async (target: "student" | "parent") => {
+    setBusy(target);
+    try {
+      const res = await apiPost<any>(`/students/${studentId}/profile/send-pass`, { target });
+      setPass({ label: `${target === "student" ? "Student" : "Parent"} temp password`, value: res.tempPassword });
+      toast.success(`${target === "student" ? "Student" : "Parent"} pass sent.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <StatCard tone="indigo" icon={<Wallet className="size-4" />} label="Total Fees" value={inr(fee.total)} />
+        <StatCard tone="emerald" icon={<CheckCircle2 className="size-4" />} label="Amount Paid" value={inr(fee.paid)} />
+        <StatCard
+          tone={fee.balance > 0 ? "red" : "emerald"}
+          icon={<Wallet className="size-4" />}
+          label="Balance Due"
+          value={inr(fee.balance)}
+        />
+        <StatCard
+          tone={behavior.score < 0 ? "red" : "amber"}
+          icon={<Star className="size-4" />}
+          label="Behavior Score"
+          value={`${behavior.score > 0 ? "+" : ""}${behavior.score}`}
+        />
+      </div>
+
+      {admissionNo && (
+        <Card className="rounded-2xl p-4 mb-4">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="text-center">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">QR</div>
+                <QRCodeSVG value={admissionNo} size={92} />
+              </div>
+              <div className="text-center">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Barcode</div>
+                <Barcode value={admissionNo} height={48} width={1.4} fontSize={11} />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => window.print()}>
+                <Printer className="size-4" /> Print Profile
+              </Button>
+              {data.canEdit && (
+                <>
+                  <Button size="sm" variant="outline" disabled={busy === "student"} onClick={() => sendPass("student")}>
+                    <KeyRound className="size-4" /> Send Student Pass
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busy === "parent"} onClick={() => sendPass("parent")}>
+                    <Mail className="size-4" /> Send Parent Pass
+                  </Button>
+                </>
+              )}
+              <Button asChild size="sm">
+                <Link to="/fees">
+                  <Wallet className="size-4" /> Collect Fees
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <Dialog open={!!pass} onOpenChange={(o) => !o && setPass(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pass sent</DialogTitle>
+          </DialogHeader>
+          {pass && (
+            <div className="space-y-2 text-sm">
+              <p className="text-muted-foreground">
+                Delivered to the portal inbox. The one-time password is shown here once — it is not
+                stored.
+              </p>
+              <div className="flex items-center justify-between rounded-lg bg-muted/50 p-2.5">
+                <div>
+                  <div className="text-xs text-muted-foreground">{pass.label}</div>
+                  <div className="font-mono">{pass.value}</div>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(pass.value);
+                    toast.success("Copied");
+                  }}
+                  aria-label="Copy password"
+                >
+                  <ExternalLink className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setPass(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function StatCard({
+  tone,
+  icon,
+  label,
+  value,
+}: {
+  tone: "indigo" | "emerald" | "red" | "amber";
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  const tones: Record<string, string> = {
+    indigo: "from-indigo-500 to-indigo-600",
+    emerald: "from-emerald-500 to-emerald-600",
+    red: "from-rose-500 to-red-600",
+    amber: "from-amber-500 to-orange-600",
+  };
+  return (
+    <div className={`rounded-2xl p-4 text-white bg-gradient-to-br ${tones[tone]}`}>
+      <div className="flex items-center gap-1.5 text-xs opacity-90">
+        {icon}
+        {label}
+      </div>
+      <div className="font-display text-2xl font-semibold mt-1">{value}</div>
+    </div>
+  );
+}
+
+// ========================================================= PROFILE TAB ===
+
+/** Grouped Profile tab: academic, personal, contact, parents, health, bank, address. */
+export function ProfileInfoTab({ studentId }: { studentId: string }) {
+  const { data } = useSisProfile(studentId);
+  if (!data) return <Card className="rounded-2xl p-6 text-sm text-muted-foreground">Loading…</Card>;
+  const h = data.header ?? {};
+  const d = data.details ?? {};
+  const m = data.medical ?? {};
+  const guardians = data.guardians ?? [];
+  const father = guardians.find((g: any) => g.relationship === "father");
+  const mother = guardians.find((g: any) => g.relationship === "mother");
+
+  return (
+    <div className="space-y-4">
+      <Section title="Academic Information">
+        <DL
+          items={[
+            ["Admission No", h.admissionNo],
+            ["Roll Number", h.rollNo],
+            ["Class", h.className],
+            ["Admission Date", fmtDate(h.admissionDate)],
+            ["Biometric ID", d.biometricId],
+            ["Category", d.category],
+            ["House", h.house],
+            ["Academic Year", h.academicYear],
+          ]}
+        />
+      </Section>
+      <Section title="Personal Details">
+        <DL
+          items={[
+            ["Date of Birth", fmtDate(d.dob)],
+            ["Gender", h.gender],
+            ["Nationality", d.nationality],
+            ["Religion", d.religion],
+            ["Caste", d.caste],
+            ["Sub-Caste", d.subCaste],
+            ["Mother Tongue", d.motherTongue],
+            ["Place of Birth", d.placeOfBirth],
+            ["Blood Group", h.bloodGroup],
+            ["BPL", d.bpl ? "Yes" : "No"],
+            ["RTE", d.rte ? "Yes" : "No"],
+          ]}
+        />
+      </Section>
+      <Section title="Contact & Identity">
+        <DL
+          items={[
+            ["Student Email", d.studentEmail],
+            ["Student Phone", d.studentPhone],
+            ["Aadhaar / National ID", d.aadhaarNo],
+            ["PEN / SSSM ID", d.penSssmId],
+          ]}
+        />
+      </Section>
+      <Section title="Parent & Guardian Details">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <GuardianCard title="Father Details" g={father} color="text-blue-600" />
+          <GuardianCard title="Mother Details" g={mother} color="text-pink-600" />
+        </div>
+        {guardians.length === 0 && (
+          <p className="text-sm text-muted-foreground">No guardians linked.</p>
+        )}
+      </Section>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Section title="Health & Medical">
+          <DL
+            items={[
+              ["Height", m.heightCm ? `${m.heightCm} cm` : null],
+              ["Weight", m.weightKg ? `${m.weightKg} kg` : null],
+              ["Allergies / History", m.allergies],
+              ["Emergency Contact", m.emergencyContactName],
+              ["Emergency Phone", m.emergencyContactPhone],
+            ]}
+          />
+        </Section>
+        <Section title="Bank Details">
+          <DL
+            items={[
+              ["Bank Name", d.bankName],
+              ["Account Number", d.bankAccount],
+              ["IFSC Code", d.bankIfsc],
+              ["Opening Due Balance", d.openingDueBalance != null ? inr(d.openingDueBalance) : null],
+            ]}
+          />
+        </Section>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Section title="Address">
+          <DL
+            items={[
+              ["Current", d.currentAddress],
+              ["Permanent", d.permanentAddress],
+            ]}
+          />
+        </Section>
+        <Section title="Previous School">
+          <p className="text-sm">{d.previousSchool || "—"}</p>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Card className="rounded-2xl p-5">
+      <div className="font-display font-semibold mb-3">{title}</div>
+      {children}
+    </Card>
+  );
+}
+
+function GuardianCard({ title, g, color }: { title: string; g: any; color: string }) {
+  return (
+    <div className="rounded-xl border p-4">
+      <div className={`font-medium mb-2 ${color}`}>{title}</div>
+      {g ? (
+        <DL
+          items={[
+            ["Name", g.name],
+            ["Phone", g.phone],
+            ["Occupation", g.occupation],
+            ["Qualification", g.qualification],
+            ["Aadhaar", g.aadhaar],
+            ["Annual Income", g.annualIncome != null ? inr(g.annualIncome) : null],
+          ]}
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">Not recorded.</p>
+      )}
+    </div>
+  );
+}
+
+// ======================================================== SIBLINGS TAB ===
+
+export function SiblingsTab({ studentId }: { studentId: string }) {
+  const { data } = useSisProfile(studentId);
+  const siblings = data?.siblings ?? [];
+  return (
+    <Card className="rounded-2xl p-6">
+      <div className="flex items-center gap-2 font-display font-semibold mb-4">
+        <Users className="size-4 text-primary" /> Sibling Information
+        {siblings.length > 0 && <Badge className="bg-primary/10 text-primary">{siblings.length}</Badge>}
+      </div>
+      {siblings.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No siblings found for this student's guardians.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {siblings.map((s: any) => (
+            <Card key={s.studentId} className="rounded-2xl overflow-hidden">
+              <div className="p-4 bg-muted/40 flex items-center gap-3">
+                <div className="size-11 rounded-full bg-primary/10 text-primary grid place-items-center font-semibold">
+                  {(s.name ?? "?")
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((x: string) => x[0]?.toUpperCase())
+                    .join("")}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{s.name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">{s.className ?? "—"}</div>
+                </div>
+              </div>
+              <div className="p-4 space-y-1.5 text-sm">
+                <Row k="Admission No" v={s.admissionNo} />
+                <Row k="Roll No" v={s.rollNo} />
+                <Row k="Gender" v={s.gender} />
+                <Row
+                  k="Status"
+                  v={
+                    <Badge className={s.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}>
+                      {s.status}
+                    </Badge>
+                  }
+                />
+              </div>
+              <div className="p-4 pt-0">
+                <Button asChild size="sm" className="w-full">
+                  <Link to="/children/$studentId" params={{ studentId: s.studentId }}>
+                    <ExternalLink className="size-3.5" /> View Profile
+                  </Link>
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Row({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-muted-foreground">{k}</span>
+      <span className="font-medium capitalize">{v ?? "—"}</span>
+    </div>
+  );
+}
+
+// ===================================================== CREDENTIALS TAB ===
+
+export function CredentialsTab({ studentId }: { studentId: string }) {
+  const { data } = useSisProfile(studentId);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [pass, setPass] = useState<{ label: string; value: string } | null>(null);
+  const c = data?.credentials ?? {};
+  const canEdit = !!data?.canEdit;
+
+  const regen = async (target: "student" | "parent") => {
+    setBusy(target);
+    try {
+      const res = await apiPost<any>(`/students/${studentId}/profile/send-pass`, { target });
+      setPass({ label: `New ${target} password`, value: res.tempPassword });
+      toast.success("Password regenerated and sent.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card className="rounded-2xl p-6">
+      <div className="flex items-center gap-2 font-display font-semibold">
+        <IdCard className="size-4 text-primary" /> Portal Login Credentials
+      </div>
+      <p className="text-sm text-muted-foreground mt-1 mb-4">
+        Auto-generated credentials. Passwords are never stored — regenerate to set a new one.
+      </p>
+      <div className="space-y-3">
+        <CredCard
+          accent="border-l-sky-500"
+          title="Student Login"
+          username={c.studentUsername}
+          canEdit={canEdit}
+          busy={busy === "student"}
+          onRegen={() => regen("student")}
+        />
+        <CredCard
+          accent="border-l-emerald-500"
+          title="Parent Login"
+          username={c.parentUsername}
+          canEdit={canEdit}
+          busy={busy === "parent"}
+          onRegen={() => regen("parent")}
+        />
+      </div>
+
+      <Dialog open={!!pass} onOpenChange={(o) => !o && setPass(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New password</DialogTitle>
+          </DialogHeader>
+          {pass && (
+            <div className="space-y-2 text-sm">
+              <p className="text-muted-foreground">Shown once and delivered to the portal inbox.</p>
+              <div className="flex items-center justify-between rounded-lg bg-muted/50 p-2.5">
+                <div>
+                  <div className="text-xs text-muted-foreground">{pass.label}</div>
+                  <div className="font-mono">{pass.value}</div>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(pass.value);
+                    toast.success("Copied");
+                  }}
+                  aria-label="Copy password"
+                >
+                  <ExternalLink className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setPass(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+function CredCard({
+  accent,
+  title,
+  username,
+  canEdit,
+  busy,
+  onRegen,
+}: {
+  accent: string;
+  title: string;
+  username?: string | null;
+  canEdit: boolean;
+  busy: boolean;
+  onRegen: () => void;
+}) {
+  return (
+    <div className={`rounded-xl border border-l-4 ${accent} p-4`}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="font-medium">{title}</div>
+          <div className="text-sm mt-1">
+            <span className="text-muted-foreground">Username: </span>
+            <span className="font-medium">{username ?? "—"}</span>
+          </div>
+          <div className="text-xs text-destructive mt-1">
+            Password is not stored for security. Click "Regenerate" to set a new one.
+          </div>
+        </div>
+        {canEdit && username && (
+          <Button size="sm" variant="outline" onClick={onRegen} disabled={busy}>
+            <KeyRound className="size-4" /> {busy ? "…" : "Regenerate Password"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ======================================================== BEHAVIOR TAB ===
+
+export function BehaviorTab({ studentId }: { studentId: string }) {
+  const { data } = useSisProfile(studentId);
+  const b = data?.behavior ?? { score: 0, positive: 0, neutral: 0, concern: 0, notes: [] };
+  const toneBadge = (t: string) => {
+    if (t === "positive") return <Badge className="bg-emerald-100 text-emerald-700 border-0">Positive</Badge>;
+    if (t === "concern" || t === "needs_improvement")
+      return <Badge className="bg-red-100 text-red-700 border-0">Concern</Badge>;
+    return <Badge className="bg-muted text-muted-foreground border-0">Neutral</Badge>;
+  };
+  return (
+    <div className="space-y-4">
+      <Card className="rounded-2xl p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 font-display font-semibold">
+              <Star className="size-4 text-primary" /> Behavior Score
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Each positive note = +1, each concern = −1, neutral = 0.
+            </p>
+          </div>
+          <div className={`font-display text-4xl font-semibold ${b.score < 0 ? "text-red-600" : "text-emerald-600"}`}>
+            {b.score > 0 ? "+" : ""}
+            {b.score}
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-3 text-center text-sm">
+          <div className="rounded-xl bg-emerald-50 p-3">
+            <ThumbsUp className="size-4 mx-auto text-emerald-600" />
+            <div className="font-semibold text-lg text-emerald-700">{b.positive}</div>
+            <div className="text-xs text-emerald-700">Positive</div>
+          </div>
+          <div className="rounded-xl bg-muted/50 p-3">
+            <div className="font-semibold text-lg">{b.neutral}</div>
+            <div className="text-xs text-muted-foreground">Neutral</div>
+          </div>
+          <div className="rounded-xl bg-red-50 p-3">
+            <ThumbsDown className="size-4 mx-auto text-red-600" />
+            <div className="font-semibold text-lg text-red-700">{b.concern}</div>
+            <div className="text-xs text-red-700">Concern</div>
+          </div>
+        </div>
+      </Card>
+      <Card className="rounded-2xl overflow-hidden">
+        <div className="p-4 border-b font-medium text-sm">Behavior notes</div>
+        {(b.notes ?? []).length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">No behavior notes yet.</div>
+        ) : (
+          <ul className="divide-y">
+            {b.notes.map((n: any) => (
+              <li key={n.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm">{n.note}</p>
+                  {toneBadge(n.tone)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {fmtDate(n.date)}
+                  {n.teacher ? ` · ${n.teacher}` : ""}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
 }
 
 /** Per-child notices feed: school-wide + parent + this child's class notices. */
