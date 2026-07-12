@@ -42,6 +42,7 @@ import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet";
 import { NotificationsBell } from "@/components/notifications-bell";
+import { CommandPalette } from "@/components/command-palette";
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; roles: AppRole[] };
 
@@ -139,6 +140,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const role = user?.primaryRole;
   const items = role ? NAV.filter((n) => n.roles.includes(role)) : [];
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const canSearchStudents = !!role && ["admin", "teacher", "reception"].includes(role);
 
   // Close the mobile drawer when route changes.
   useEffect(() => {
@@ -238,13 +241,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               {footer}
             </SheetContent>
           </Sheet>
-          <div className="flex-1 min-w-0 max-w-xl relative">
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            className="flex-1 min-w-0 max-w-xl relative h-10 pl-10 pr-3 rounded-lg bg-secondary text-sm text-left text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 flex items-center justify-between"
+          >
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <input
-              placeholder="Search…"
-              className="w-full h-10 pl-10 pr-3 rounded-lg bg-secondary text-sm outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
+            <span className="truncate">Search pages or students…</span>
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              ⌘K
+            </kbd>
+          </button>
           <NotificationsBell />
           <div className="flex items-center gap-2 shrink-0 min-w-0">
             <div className="size-9 shrink-0 rounded-lg bg-secondary text-secondary-foreground grid place-items-center text-sm font-semibold">
@@ -262,6 +269,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="min-w-0 max-w-full">{children}</div>
         </main>
       </div>
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        items={items}
+        canSearchStudents={canSearchStudents}
+      />
     </div>
   );
 }
