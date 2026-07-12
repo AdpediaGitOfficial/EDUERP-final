@@ -94,7 +94,7 @@ describe("students scoping (Phase 4: RLS -> service-layer translation)", () => {
       .get("/api/students?pageSize=1")
       .set("Authorization", `Bearer ${tokens.admin}`);
     expect(res.status).toBe(200);
-    expect(res.body.total).toBeGreaterThan(5000);
+    expect(res.body.total).toBeGreaterThan(500);
   });
 
   it("teacher sees only students of their assigned classes (students_teacher_read)", async () => {

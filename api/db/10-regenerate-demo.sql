@@ -99,17 +99,32 @@ BEGIN
   FROM cl JOIN ts ON ts.rn = ((cl.rn - 1) % NULLIF(cl.ntead,0)) + 1
   WHERE c.id = cl.id;
 
+  -- Give the demo teacher (teacher@greenwood.test) a handful of classes so the
+  -- teacher dashboard/roster demo is rich rather than showing a single class.
+  DELETE FROM public.teacher_classes
+    WHERE teacher_id = '84811e91-6898-4137-ba75-4e39c1adc162';
+  INSERT INTO public.teacher_classes (teacher_id, class_id)
+  SELECT '84811e91-6898-4137-ba75-4e39c1adc162', id
+  FROM public.classes
+  WHERE name = 'Grade 8' AND section IN ('A','B','C','D');
+  UPDATE public.classes SET class_teacher_id = '84811e91-6898-4137-ba75-4e39c1adc162'
+  WHERE name = 'Grade 8' AND section = 'A';
+
   -- ---- 4. Build family + student generation tables -------------------------
   -- One canonical class per (name, section) — prefer the newest academic year
   -- so we don't spread students across near-duplicate class rows.
   CREATE TEMP TABLE _cls ON COMMIT DROP AS
     WITH picked AS (
-      SELECT DISTINCT ON (name, section) id, name, section
-      FROM public.classes
-      WHERE section IN ('A','B','C','D')
-        AND name IN ('Nursery','KG','Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6',
-                     'Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12')
-      ORDER BY name, section, academic_year DESC NULLS LAST, created_at DESC
+      SELECT DISTINCT ON (c.name, c.section) c.id, c.name, c.section
+      FROM public.classes c
+      WHERE c.section IN ('A','B','C','D')
+        AND c.name IN ('Nursery','KG','Grade 1','Grade 2','Grade 3','Grade 4','Grade 5','Grade 6',
+                       'Grade 7','Grade 8','Grade 9','Grade 10','Grade 11','Grade 12')
+      -- Prefer the class a preserved student already sits in, so the new cohort
+      -- joins it instead of spawning a duplicate name+section row.
+      ORDER BY c.name, c.section,
+               (EXISTS (SELECT 1 FROM public.students s WHERE s.class_id = c.id)) DESC,
+               c.academic_year DESC NULLS LAST, c.created_at DESC
     )
     SELECT id, name, section,
            CASE name WHEN 'Nursery' THEN 3 WHEN 'KG' THEN 4

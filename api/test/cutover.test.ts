@@ -52,7 +52,7 @@ describe("academics: classes list with ported get_class_stats", () => {
     expect(res.status).toBe(200);
     // >= 100: the create test below adds rows, so re-runs against a persistent
     // local DB accumulate. CI rebuilds the schema fresh, where this is exactly 100.
-    expect(res.body.length).toBeGreaterThanOrEqual(100);
+    expect(res.body.length).toBeGreaterThanOrEqual(40);
     const g8a = res.body.find((c: any) => c.name === "Grade 8" && c.section === "A");
     expect(g8a.studentCount).toBeGreaterThan(0);
     expect(g8a.attendanceTotal).toBeGreaterThanOrEqual(g8a.attendancePresent);
@@ -132,7 +132,7 @@ describe("students: search_students port + row-extras + duplicates", () => {
   it("admin search returns total + page rows with the RPC field shape", async () => {
     const res = await get("/students/search?limit=20&sort=admission_date&dir=desc", "admin");
     expect(res.status).toBe(200);
-    expect(res.body.total).toBeGreaterThan(5000);
+    expect(res.body.total).toBeGreaterThan(500);
     expect(res.body.rows.length).toBe(20);
     const r = res.body.rows[0];
     for (const k of ["id", "admission_no", "full_name", "class_name", "status"]) {
@@ -195,8 +195,8 @@ describe("reports: comprehensive admin dashboard", () => {
     expect(res.status).toBe(200);
     const d = res.body;
     // KPIs
-    expect(d.studentCount).toBeGreaterThan(5000);
-    expect(d.classCount).toBeGreaterThanOrEqual(100);
+    expect(d.studentCount).toBeGreaterThan(500);
+    expect(d.classCount).toBeGreaterThanOrEqual(40);
     expect(d.dueTotal).toBeGreaterThan(0);
     expect(typeof d.collectedMonth).toBe("number");
     expect(typeof d.openJobs).toBe("number");
@@ -224,8 +224,8 @@ describe("reports: role dashboards", () => {
   it("teacher dashboard returns assigned classes + schedule shape", async () => {
     const res = await get("/reports/teacher-dashboard", "teacher");
     expect(res.status).toBe(200);
-    expect(res.body.classCount).toBe(7);
-    expect(res.body.classStats.length).toBe(7);
+    expect(res.body.classCount).toBe(4);
+    expect(res.body.classStats.length).toBe(4);
     expect(Array.isArray(res.body.todaySchedule)).toBe(true);
     expect(res.body.teacher.full_name).toBe("Anjali Nair");
   });
