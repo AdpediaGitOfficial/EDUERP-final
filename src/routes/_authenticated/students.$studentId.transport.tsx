@@ -15,7 +15,7 @@ import {
   type SimStop,
 } from "@/lib/fleet-simulation";
 
-export const Route = createFileRoute("/_authenticated/children/$studentId/transport")({
+export const Route = createFileRoute("/_authenticated/students/$studentId/transport")({
   component: Page,
 });
 
@@ -67,7 +67,7 @@ function Page() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => nav({ to: "/children/$studentId", params: { studentId } })}
+          onClick={() => nav({ to: "/students/$studentId", params: { studentId } })}
         >
           <ArrowLeft className="size-4" /> Back to child
         </Button>

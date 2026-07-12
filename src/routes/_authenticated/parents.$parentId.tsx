@@ -195,7 +195,7 @@ function ParentProfilePage() {
                 <tr key={c.studentId} className="border-t">
                   <td className="p-3 font-medium">
                     <Link
-                      to="/children/$studentId"
+                      to="/students/$studentId"
                       params={{ studentId: c.studentId }}
                       className="hover:underline"
                     >

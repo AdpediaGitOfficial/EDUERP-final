@@ -188,7 +188,7 @@ function Page() {
                   </div>
                 </div>
                 <Link
-                  to="/children/$studentId/report"
+                  to="/students/$studentId/report"
                   params={{ studentId: s.id }}
                   className="text-xs text-primary hover:underline inline-flex items-center gap-1"
                 >
@@ -217,7 +217,7 @@ function Page() {
                     <div key={n.id} className="rounded-xl border p-3">
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <Link
-                          to="/children/$studentId/report"
+                          to="/students/$studentId/report"
                           params={{ studentId: n.student_id }}
                           className="font-medium text-sm hover:underline"
                         >

@@ -1455,7 +1455,7 @@ function ParentDashboard({ userId, fullName }: { userId: string; fullName: strin
                 </div>
               )}
               <div className="mt-4 flex flex-wrap gap-2">
-                <Link to="/children/$studentId" params={{ studentId: child.id }}>
+                <Link to="/students/$studentId" params={{ studentId: child.id }}>
                   <Badge variant="default" className="cursor-pointer">
                     Full report →
                   </Badge>
@@ -1472,7 +1472,7 @@ function ParentDashboard({ userId, fullName }: { userId: string; fullName: strin
         {children.length === 0 && (
           <Card className="p-8 rounded-2xl md:col-span-2 text-center text-muted-foreground">
             No children linked yet.{" "}
-            <Link to="/children" className="underline">
+            <Link to="/students" className="underline">
               Link a child
             </Link>{" "}
             to see fees.

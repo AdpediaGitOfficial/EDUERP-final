@@ -42,7 +42,7 @@ import {
   Legend,
 } from "recharts";
 
-export const Route = createFileRoute("/_authenticated/children/$studentId/report")({
+export const Route = createFileRoute("/_authenticated/students/$studentId/report")({
   component: StudentReportPage,
 });
 
@@ -358,7 +358,7 @@ function StudentReportPage() {
     <AppShell>
       {/* Header */}
       <div className="mb-4 flex flex-wrap items-center gap-2 sm:gap-3 print:hidden">
-        <Link to="/children/$studentId" params={{ studentId }}>
+        <Link to="/students/$studentId" params={{ studentId }}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="size-4" /> Back
           </Button>
@@ -689,7 +689,7 @@ function StudentReportPage() {
                   </span>
                 </div>
                 <div className="mt-4 print:hidden">
-                  <Link to="/children/$studentId" params={{ studentId }}>
+                  <Link to="/students/$studentId" params={{ studentId }}>
                     <Button variant="outline" size="sm">
                       View full attendance breakdown
                     </Button>
@@ -767,7 +767,7 @@ function StudentReportPage() {
               </div>
             </Card>
             <div className="mt-3 print:hidden">
-              <Link to="/children/$studentId" params={{ studentId }}>
+              <Link to="/students/$studentId" params={{ studentId }}>
                 <Button variant="outline" size="sm">
                   View full homework history
                 </Button>

@@ -849,7 +849,7 @@ export function TransportTab({ studentId }: { studentId: string }) {
           <Bus className="size-4 text-primary" /> Transport
         </div>
         <Button asChild size="sm" variant="outline">
-          <Link to="/children/$studentId/transport" params={{ studentId }}>
+          <Link to="/students/$studentId/transport" params={{ studentId }}>
             Live tracking <ExternalLink className="size-3.5" />
           </Link>
         </Button>
@@ -1352,7 +1352,7 @@ export function SiblingsTab({ studentId }: { studentId: string }) {
               </div>
               <div className="p-4 pt-0">
                 <Button asChild size="sm" className="w-full">
-                  <Link to="/children/$studentId" params={{ studentId: s.studentId }}>
+                  <Link to="/students/$studentId" params={{ studentId: s.studentId }}>
                     <ExternalLink className="size-3.5" /> View Profile
                   </Link>
                 </Button>

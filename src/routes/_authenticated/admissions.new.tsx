@@ -846,7 +846,7 @@ function NewAdmissionWizard() {
             {result?.studentId && (
               <Button
                 onClick={() =>
-                  navigate({ to: "/children/$studentId", params: { studentId: result.studentId } })
+                  navigate({ to: "/students/$studentId", params: { studentId: result.studentId } })
                 }
               >
                 Open profile

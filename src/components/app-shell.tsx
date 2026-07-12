@@ -70,7 +70,7 @@ const NAV: NavItem[] = [
   { to: "/progress-hub", label: "Progress Hub", icon: LineChart, roles: ["admin", "teacher"] },
   { to: "/gradebook", label: "Gradebook", icon: BookOpenCheck, roles: ["teacher"] },
   { to: "/assignments", label: "Assignments", icon: NotebookPen, roles: ["student"] },
-  { to: "/children", label: "My Children", icon: GraduationCap, roles: ["parent"] },
+  { to: "/students", label: "My Children", icon: GraduationCap, roles: ["parent"] },
   { to: "/fees", label: "Fees", icon: Wallet, roles: ["admin", "parent"] },
   { to: "/payments", label: "Payments", icon: Wallet, roles: ["admin", "accountant"] },
   { to: "/finance", label: "Finance", icon: Calculator, roles: ["admin", "accountant"] },

@@ -65,7 +65,7 @@ import {
 } from "@/components/student-profile-extras";
 import { UserCircle, Star, IdCard } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/children/$studentId/")({
+export const Route = createFileRoute("/_authenticated/students/$studentId/")({
   component: ChildDetailPage,
 });
 
@@ -371,7 +371,7 @@ function ChildDetailPage() {
     return (
       <AppShell>
         <PageHeader title="Student not found" subtitle="You may not have access to this student." />
-        <Link to="/children">
+        <Link to="/students">
           <Button variant="outline">
             <ArrowLeft className="size-4" /> Back to my children
           </Button>
@@ -388,7 +388,7 @@ function ChildDetailPage() {
   return (
     <AppShell>
       <div className="mb-4">
-        <Link to="/children">
+        <Link to="/students">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="size-4" /> Back
           </Button>

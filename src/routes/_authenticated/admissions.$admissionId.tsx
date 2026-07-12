@@ -167,7 +167,7 @@ function AdmissionDetail() {
           {data.convertedStudentId && (
             <div className="mt-4">
               <Button asChild size="sm" variant="outline">
-                <Link to="/children/$studentId" params={{ studentId: data.convertedStudentId }}>
+                <Link to="/students/$studentId" params={{ studentId: data.convertedStudentId }}>
                   Open student record
                 </Link>
               </Button>

@@ -235,7 +235,7 @@ function Page() {
                     </td>
                     <td className="p-3 text-right">
                       <Link
-                        to="/children/$studentId/report"
+                        to="/students/$studentId/report"
                         params={{ studentId: r.student_id }}
                         className="text-xs text-primary hover:underline"
                       >

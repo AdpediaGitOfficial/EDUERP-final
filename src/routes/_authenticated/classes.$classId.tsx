@@ -412,7 +412,7 @@ function ClassDetailPage() {
                         className="border-t hover:bg-muted/40 cursor-pointer"
                         onClick={() =>
                           navigate({
-                            to: "/children/$studentId/report",
+                            to: "/students/$studentId/report",
                             params: { studentId: s.id },
                           })
                         }
