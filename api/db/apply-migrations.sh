@@ -34,4 +34,6 @@ psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/06-ess-demo-seed.sql
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/07-student-parent-family-seed.sql
 # Student profile detail demo (medical/hostel/disciplinary/documents/activity) for that family.
 psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/08-student-profile-demo-seed.sql
+# Admission workflow demo: 15 enquiries across every pipeline stage + 3rd multi-child parent.
+psql -d "$DBNAME" -q -v ON_ERROR_STOP=1 -f api/db/09-admission-workflow-seed.sql
 echo "done."
