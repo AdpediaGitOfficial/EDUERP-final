@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { UserPlus, X, Users, GraduationCap } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/academics/teachers")({ component: Page });
@@ -55,7 +56,7 @@ function Page() {
     queryKey: ["teacher-options"],
     queryFn: () => apiGet<TeacherOption[]>("/classes/teacher-options"),
   });
-  const { data: subjects } = useQuery({
+  const { data: subjects, isLoading, isError, refetch } = useQuery({
     queryKey: ["academic-subjects", classId],
     queryFn: () => apiGet<Subject[]>(`/subjects?classId=${classId}`),
     enabled: !!classId,
@@ -130,6 +131,10 @@ function Page() {
 
         {!classId ? (
           <EmptyState icon={GraduationCap} title="Pick a class" hint="Select a class-section to assign subject teachers." />
+        ) : isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={4} />
         ) : (subjects ?? []).length === 0 ? (
           <EmptyState icon={GraduationCap} title="No subjects" hint="Add subjects to this class first." />
         ) : (

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyRow } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, Pencil, CheckCircle2, Archive, Copy, Lock } from "lucide-react";
 import { fmtDate, niceLabel, type Tone } from "@/lib/module-util";
 
@@ -53,7 +54,7 @@ const EMPTY = { name: "", start_date: "", end_date: "", board: "", curriculum: "
 
 function Page() {
   const qc = useQueryClient();
-  const { data: sessions } = useQuery({
+  const { data: sessions, isLoading, isError, refetch } = useQuery({
     queryKey: ["academic-sessions"],
     queryFn: () => apiGet<Session[]>("/academics/sessions"),
   });
@@ -157,6 +158,11 @@ function Page() {
       </div>
 
       <Card className="rounded-2xl overflow-hidden">
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={7} />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left">
@@ -172,7 +178,7 @@ function Page() {
             </thead>
             <tbody>
               {(sessions ?? []).map((s) => (
-                <tr key={s.id} className={s.is_current ? "border-t bg-emerald-50/40" : "border-t"}>
+                <tr key={s.id} className={s.is_current ? "border-t bg-emerald-50/40 dark:bg-emerald-500/10" : "border-t"}>
                   <td className="p-3">
                     <div className="font-medium flex items-center gap-2">
                       {s.name}
@@ -256,6 +262,7 @@ function Page() {
             </tbody>
           </table>
         </div>
+        )}
       </Card>
 
       {/* Add / edit dialog */}

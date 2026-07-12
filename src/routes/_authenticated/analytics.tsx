@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { apiGet } from "@/lib/api/client";
+import { CHART, CHART_PRIMARY, CHART_SUCCESS, CHART_WARNING, CHART_DANGER } from "@/lib/chart";
 import { Card } from "@/components/ui/card";
 import {
   BarChart,
@@ -27,7 +28,7 @@ export const Route = createFileRoute("/_authenticated/analytics")({
   ),
 });
 
-const COLORS = ["hsl(var(--primary))", "#f59e0b", "#10b981", "#ef4444", "#6366f1"];
+const COLORS = CHART;
 
 function Page() {
   const { data } = useQuery({
@@ -82,7 +83,7 @@ function Page() {
                 <Line
                   type="monotone"
                   dataKey="amount"
-                  stroke="hsl(var(--primary))"
+                  stroke={CHART_PRIMARY}
                   strokeWidth={2}
                   dot={false}
                 />
@@ -100,9 +101,9 @@ function Page() {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="present" stackId="a" fill="#10b981" />
-                <Bar dataKey="late" stackId="a" fill="#f59e0b" />
-                <Bar dataKey="absent" stackId="a" fill="#ef4444" />
+                <Bar dataKey="present" stackId="a" fill={CHART_SUCCESS} />
+                <Bar dataKey="late" stackId="a" fill={CHART_WARNING} />
+                <Bar dataKey="absent" stackId="a" fill={CHART_DANGER} />
               </BarChart>
             </ResponsiveContainer>
           </div>

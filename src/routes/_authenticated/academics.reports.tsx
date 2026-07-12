@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Download, Printer, FileBarChart } from "lucide-react";
 import { downloadCsv } from "@/lib/module-util";
 
@@ -31,7 +32,7 @@ function Page() {
     queryKey: ["report-catalogue"],
     queryFn: () => apiGet<Catalogue>("/academics/reports"),
   });
-  const { data: report, isFetching } = useQuery({
+  const { data: report, isFetching, isLoading, isError, refetch } = useQuery({
     queryKey: ["academic-report", type],
     queryFn: () => apiGet<Report>(`/academics/reports/${type}`),
   });
@@ -106,7 +107,11 @@ function Page() {
             <span className="text-sm text-muted-foreground ml-auto">{report.rows.length} rows</span>
           )}
         </div>
-        {report && report.rows.length === 0 && !isFetching ? (
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={4} />
+        ) : report && report.rows.length === 0 && !isFetching ? (
           <EmptyState icon={FileBarChart} title="No data" hint="This report has no rows for the current session." />
         ) : (
           <div className="overflow-x-auto">

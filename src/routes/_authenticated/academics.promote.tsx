@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { GraduationCap, ArrowRight, History } from "lucide-react";
 import { fmtDate, type Tone } from "@/lib/module-util";
 
@@ -51,7 +52,7 @@ function Page() {
     queryKey: ["academic-classes-all"],
     queryFn: () => apiGet<ClassRow[]>("/classes"),
   });
-  const { data: preview } = useQuery({
+  const { data: preview, isLoading, isError, refetch } = useQuery({
     queryKey: ["promotion-preview", fromClass],
     queryFn: () => apiGet<Preview>(`/academics/promotion/preview?fromClassId=${fromClass}`),
     enabled: !!fromClass,
@@ -150,6 +151,10 @@ function Page() {
             title="Pick a source class"
             hint="Choose the class-section to promote from, and its target for the next session."
           />
+        ) : isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={4} />
         ) : (preview?.students ?? []).length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">No active students in this class.</p>
         ) : (

@@ -19,6 +19,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { money } from "@/lib/module-util";
+import { CHART, CHART_INFO } from "@/lib/chart";
 import {
   BarChart,
   Bar,
@@ -55,7 +56,7 @@ function Page() {
   const attnPct = data?.attendancePct ?? 0;
 
   const deptData: { name: string; value: number }[] = data?.byDepartment ?? [];
-  const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6"];
+  const COLORS = CHART;
 
   if (isError) {
     return (
@@ -146,7 +147,7 @@ function Page() {
                 />
                 <YAxis fontSize={10} width={30} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="value" fill={CHART_INFO} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

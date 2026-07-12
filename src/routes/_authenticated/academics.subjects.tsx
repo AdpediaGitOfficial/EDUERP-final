@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyRow } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, Pencil, BookOpen, FlaskConical } from "lucide-react";
 import { niceLabel, type Tone } from "@/lib/module-util";
 
@@ -87,7 +88,7 @@ function Page() {
     queryKey: ["academic-classes-all"],
     queryFn: () => apiGet<ClassRow[]>("/classes"),
   });
-  const { data: subjects } = useQuery({
+  const { data: subjects, isLoading, isError, refetch } = useQuery({
     queryKey: ["academic-subjects", classFilter],
     queryFn: () =>
       apiGet<Subject[]>(`/subjects${classFilter !== "all" ? `?classId=${classFilter}` : ""}`),
@@ -218,6 +219,11 @@ function Page() {
       </div>
 
       <Card className="rounded-2xl overflow-hidden">
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={8} />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left">
@@ -279,6 +285,7 @@ function Page() {
             </tbody>
           </table>
         </div>
+        )}
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>

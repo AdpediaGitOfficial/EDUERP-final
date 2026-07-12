@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, Pencil, Trash2, CalendarDays } from "lucide-react";
 import { fmtDate, niceLabel, type Tone } from "@/lib/module-util";
 
@@ -61,7 +62,7 @@ function Page() {
   const [editing, setEditing] = useState<Event | null>(null);
   const [form, setForm] = useState<any>(EMPTY);
 
-  const { data: events } = useQuery({
+  const { data: events, isLoading, isError, refetch } = useQuery({
     queryKey: ["academic-calendar"],
     queryFn: () => apiGet<Event[]>("/academics/calendar"),
   });
@@ -158,7 +159,11 @@ function Page() {
         </Button>
       </div>
 
-      {byMonth.length === 0 ? (
+      {isError ? (
+        <Card className="rounded-2xl"><QueryError onRetry={() => refetch()} /></Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden"><TableSkeleton rows={6} cols={4} /></Card>
+      ) : byMonth.length === 0 ? (
         <EmptyState icon={CalendarDays} title="No events" hint="Add exams, PTMs, events, vacations and more." />
       ) : (
         <div className="space-y-4">

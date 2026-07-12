@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
+import { CHART, CHART_PRIMARY, GENDER_CHART } from "@/lib/chart";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyRow } from "@/components/empty-state";
+import { QueryError, TableSkeleton, StatCardsSkeleton } from "@/components/query-states";
 import {
   Select,
   SelectContent,
@@ -83,16 +85,13 @@ type Integrity = {
   checks: { key: string; label: string; count: number; ok: boolean; samples: string[] }[];
 };
 
-const GENDER_COLORS: Record<string, string> = {
-  male: "#3b82f6",
-  female: "#ec4899",
-  other: "#a855f7",
-  unknown: "#94a3b8",
-};
+// Gender palette sourced from design tokens (dark-mode aware) — see src/lib/chart.ts.
+const GENDER_COLORS = GENDER_CHART;
+const GENDER_FALLBACK = GENDER_CHART.unknown;
 
 function Dashboard() {
   const [year, setYear] = useState<string>("");
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["academic-dashboard", year],
     queryFn: () => apiGet<Dash>(`/academics/dashboard${year ? `?year=${year}` : ""}`),
   });
@@ -106,6 +105,14 @@ function Dashboard() {
     s && s.attendanceToday.total > 0
       ? Math.round((s.attendanceToday.present / s.attendanceToday.total) * 100)
       : null;
+
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <QueryError onRetry={() => refetch()} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -132,20 +139,24 @@ function Dashboard() {
       </div>
 
       {/* Primary stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Stat icon={School} label="Classes" value={s?.totalClasses} hint={`${s?.totalSections ?? 0} sections`} />
-        <Stat icon={Users} label="Students" value={s?.totalStudents} />
-        <Stat icon={GraduationCap} label="Teachers" value={s?.totalTeachers} hint={`1:${s?.studentTeacherRatio ?? 0} ratio`} />
-        <Stat icon={BookOpen} label="Active Subjects" value={s?.activeSubjects} />
-        <Stat
-          icon={CalendarCheck}
-          label="Timetable"
-          value={s != null ? `${s.timetableCompletion}%` : undefined}
-          hint={`${s?.classesWithoutTimetable ?? 0} pending`}
-          tone={s && s.timetableCompletion < 100 ? "warning" : "success"}
-        />
-        <Stat icon={GraduationCap} label="To Promote" value={s?.studentsToPromote} hint="session end" />
-      </div>
+      {isLoading ? (
+        <StatCardsSkeleton count={6} />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <Stat icon={School} label="Classes" value={s?.totalClasses} hint={`${s?.totalSections ?? 0} sections`} />
+          <Stat icon={Users} label="Students" value={s?.totalStudents} />
+          <Stat icon={GraduationCap} label="Teachers" value={s?.totalTeachers} hint={`1:${s?.studentTeacherRatio ?? 0} ratio`} />
+          <Stat icon={BookOpen} label="Active Subjects" value={s?.activeSubjects} />
+          <Stat
+            icon={CalendarCheck}
+            label="Timetable"
+            value={s != null ? `${s.timetableCompletion}%` : undefined}
+            hint={`${s?.classesWithoutTimetable ?? 0} pending`}
+            tone={s && s.timetableCompletion < 100 ? "warning" : "success"}
+          />
+          <Stat icon={GraduationCap} label="To Promote" value={s?.studentsToPromote} hint="session end" />
+        </div>
+      )}
 
       {/* Operational alerts strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -255,7 +266,7 @@ function Dashboard() {
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-30} textAnchor="end" height={60} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill={CHART_PRIMARY} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -277,7 +288,7 @@ function Dashboard() {
                   paddingAngle={2}
                 >
                   {(data?.charts.genderRatio ?? []).map((g) => (
-                    <Cell key={g.gender} fill={GENDER_COLORS[g.gender] ?? "#94a3b8"} />
+                    <Cell key={g.gender} fill={GENDER_COLORS[g.gender] ?? GENDER_FALLBACK} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -289,7 +300,7 @@ function Dashboard() {
               <span key={g.gender} className="flex items-center gap-1">
                 <span
                   className="inline-block size-2.5 rounded-full"
-                  style={{ background: GENDER_COLORS[g.gender] ?? "#94a3b8" }}
+                  style={{ background: GENDER_COLORS[g.gender] ?? GENDER_FALLBACK }}
                 />
                 {g.gender} ({g.count})
               </span>
@@ -316,7 +327,7 @@ function Dashboard() {
                   <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
                   <Tooltip />
-                  <Bar dataKey="periods" fill="#14b8a6" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="periods" fill={CHART[1]} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

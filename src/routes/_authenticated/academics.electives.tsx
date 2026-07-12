@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, Pencil, Trash2, Sparkles, UserPlus, X, ArrowLeft } from "lucide-react";
 import { fmtDate, type Tone } from "@/lib/module-util";
 
@@ -62,7 +63,7 @@ function Page() {
 
 function OfferingsList({ onOpen }: { onOpen: (id: string) => void }) {
   const qc = useQueryClient();
-  const { data: offerings } = useQuery({
+  const { data: offerings, isLoading, isError, refetch } = useQuery({
     queryKey: ["electives"],
     queryFn: () => apiGet<Offering[]>("/academics/electives"),
   });
@@ -137,6 +138,12 @@ function OfferingsList({ onOpen }: { onOpen: (id: string) => void }) {
           New elective
         </Button>
       </div>
+      {isError ? (
+        <Card className="rounded-2xl"><QueryError onRetry={() => refetch()} /></Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden"><TableSkeleton rows={6} cols={4} /></Card>
+      ) : (
+      <>
       {offerings && offerings.length === 0 && (
         <EmptyState icon={Sparkles} title="No electives yet" hint="Create an elective offering with a seat capacity." />
       )}
@@ -182,6 +189,8 @@ function OfferingsList({ onOpen }: { onOpen: (id: string) => void }) {
           );
         })}
       </div>
+      </>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">

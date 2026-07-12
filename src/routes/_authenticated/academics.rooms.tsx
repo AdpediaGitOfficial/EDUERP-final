@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyRow } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, Pencil, Trash2, DoorOpen, Projector, Sparkles } from "lucide-react";
 import { niceLabel, type Tone } from "@/lib/module-util";
 
@@ -73,7 +74,7 @@ function Page() {
   const [editing, setEditing] = useState<Room | null>(null);
   const [form, setForm] = useState<any>(EMPTY);
 
-  const { data: rooms } = useQuery({
+  const { data: rooms, isLoading, isError, refetch } = useQuery({
     queryKey: ["academic-rooms"],
     queryFn: () => apiGet<Room[]>("/academics/rooms"),
   });
@@ -185,6 +186,11 @@ function Page() {
       </div>
 
       <Card className="rounded-2xl overflow-hidden">
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={7} />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left">
@@ -251,6 +257,7 @@ function Page() {
             </tbody>
           </table>
         </div>
+        )}
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>

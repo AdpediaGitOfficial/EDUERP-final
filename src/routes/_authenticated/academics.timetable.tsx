@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, Trash2, CalendarClock, AlertTriangle } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/academics/timetable")({ component: Page });
@@ -76,7 +77,7 @@ function Page() {
     queryKey: ["academic-classes-all"],
     queryFn: () => apiGet<ClassRow[]>("/classes"),
   });
-  const { data: slots } = useQuery({
+  const { data: slots, isLoading, isError, refetch } = useQuery({
     queryKey: ["timetable", classId],
     queryFn: () => apiGet<Slot[]>(`/timetable?classId=${classId}`),
     enabled: !!classId,
@@ -195,6 +196,10 @@ function Page() {
 
       {!classId ? (
         <EmptyState icon={CalendarClock} title="Pick a class" hint="Select a class-section to build its weekly timetable." />
+      ) : isError ? (
+        <Card className="rounded-2xl"><QueryError onRetry={() => refetch()} /></Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden"><TableSkeleton rows={6} cols={4} /></Card>
       ) : (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
           {DAYS.map((d) => {
@@ -311,7 +316,7 @@ function Page() {
           </div>
 
           {conflictCheck?.hasConflict && (
-            <div className="rounded-lg bg-amber-50 border border-amber-300 p-2.5 text-sm flex items-start gap-2">
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-300 p-2.5 text-sm flex items-start gap-2">
               <AlertTriangle className="size-4 text-amber-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-medium text-amber-800">Scheduling conflict</p>

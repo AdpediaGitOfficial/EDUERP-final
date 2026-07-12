@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
+import { CHART, CHART_SUCCESS, CHART_INFO, chartColor } from "@/lib/chart";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import {
@@ -20,7 +21,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/hr/analytics")({ component: Page });
 
-const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+const COLORS = CHART;
 
 function Page() {
   const { data } = useQuery({
@@ -49,7 +50,7 @@ function Page() {
               <XAxis dataKey="name" fontSize={11} />
               <YAxis fontSize={11} />
               <Tooltip />
-              <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="count" fill={CHART_INFO} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -60,7 +61,7 @@ function Page() {
               <XAxis dataKey="month" fontSize={11} />
               <YAxis fontSize={11} />
               <Tooltip />
-              <Line dataKey="total" stroke="#10b981" strokeWidth={2} />
+              <Line dataKey="total" stroke={CHART_SUCCESS} strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </Card>
@@ -84,7 +85,7 @@ function Page() {
               <XAxis dataKey="stage" fontSize={11} />
               <YAxis fontSize={11} />
               <Tooltip />
-              <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="count" fill={chartColor(4)} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>

@@ -4,6 +4,7 @@ import { AppShell, PageHeader } from "@/components/app-shell";
 import { QueryError, StatCardsSkeleton } from "@/components/query-states";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch, apiGet } from "@/lib/api/client";
+import { CHART, CHART_SUCCESS, CHART_DANGER, CHART_INFO, chartColor } from "@/lib/chart";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -50,7 +51,8 @@ import {
 } from "recharts";
 
 const money = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-const DONUT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"];
+// Themed chart palette — resolves to --chart-1..5 and adapts to dark mode.
+const DONUT_COLORS = CHART;
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -402,7 +404,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
                 <Line
                   type="monotone"
                   dataKey="revenue"
-                  stroke="#10b981"
+                  stroke={CHART_SUCCESS}
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   name="Revenue"
@@ -410,7 +412,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
                 <Line
                   type="monotone"
                   dataKey="expenses"
-                  stroke="#ef4444"
+                  stroke={CHART_DANGER}
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   name="Expenses"
@@ -459,8 +461,8 @@ function AdminDashboard({ fullName }: { fullName: string }) {
                 />
                 <Tooltip formatter={(v: any) => money(Number(v))} />
                 <Legend />
-                <Bar dataKey="collected" stackId="a" fill="#10b981" name="Collected" />
-                <Bar dataKey="outstanding" stackId="a" fill="#ef4444" name="Outstanding" />
+                <Bar dataKey="collected" stackId="a" fill={CHART_SUCCESS} name="Collected" />
+                <Bar dataKey="outstanding" stackId="a" fill={CHART_DANGER} name="Outstanding" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -474,7 +476,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
                 <XAxis dataKey="grade" fontSize={11} />
                 <YAxis fontSize={11} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Students" />
+                <Bar dataKey="count" fill={CHART_INFO} radius={[6, 6, 0, 0]} name="Students" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -497,7 +499,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
                   label={(e: any) => `${e.name} ${e.value}`}
                 >
                   {(staffMix?.teaching ?? []).map((_, i) => (
-                    <Cell key={i} fill={DONUT_COLORS[i]} />
+                    <Cell key={i} fill={chartColor(i)} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -535,7 +537,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
                 <Line
                   type="monotone"
                   dataKey="students"
-                  stroke="#3b82f6"
+                  stroke={CHART_INFO}
                   strokeWidth={2}
                   dot={false}
                   name="Students"
@@ -543,7 +545,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
                 <Line
                   type="monotone"
                   dataKey="staff"
-                  stroke="#8b5cf6"
+                  stroke={chartColor(4)}
                   strokeWidth={2}
                   dot={false}
                   name="Staff"
