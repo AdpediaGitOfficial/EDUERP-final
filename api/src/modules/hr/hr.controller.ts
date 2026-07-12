@@ -151,6 +151,40 @@ class RepaymentDto {
   @IsOptional() @IsString() notes?: string;
 }
 
+class CriterionDto {
+  @IsString() @MinLength(1) name: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsNumber() weight?: number;
+  @IsOptional() @IsNumber() max_score?: number;
+}
+class CycleDto {
+  @IsString() @MinLength(1) name: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsDateString() period_start?: string;
+  @IsOptional() @IsDateString() period_end?: string;
+}
+class CycleStatusDto {
+  @IsIn(["draft", "active", "closed"]) status: string;
+}
+class EnrollDto {
+  @IsUUID() cycle_id: string;
+  @IsUUID() staff_id: string;
+}
+class RatingDto {
+  @IsUUID() criterion_id: string;
+  @IsNumber() score: number;
+  @IsOptional() @IsString() comments?: string;
+}
+class SaveAppraisalDto {
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RatingDto)
+  ratings?: RatingDto[];
+  @IsOptional() @IsString() self_comments?: string;
+  @IsOptional() @IsString() manager_comments?: string;
+}
+
 class AttnUpsertDto {
   @IsString() @MinLength(1) teacherId: string;
   @IsDateString() date: string;
@@ -401,6 +435,79 @@ export class HrController {
     @Body() dto: RepaymentDto,
   ) {
     return this.hr.recordRepayment(actor, id, dto);
+  }
+
+  // ---- Appraisals: criteria, cycles, scored reviews -----------------------
+  @Get("appraisal-criteria")
+  listCriteria(@CurrentUser() actor: AuthUser) {
+    return this.hr.listCriteria(actor);
+  }
+
+  @Post("appraisal-criteria")
+  createCriterion(@CurrentUser() actor: AuthUser, @Body() dto: CriterionDto) {
+    return this.hr.createCriterion(actor, dto);
+  }
+
+  @Patch("appraisal-criteria/:id")
+  updateCriterion(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: CriterionDto,
+  ) {
+    return this.hr.updateCriterion(actor, id, dto);
+  }
+
+  @Delete("appraisal-criteria/:id")
+  deleteCriterion(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.deleteCriterion(actor, id);
+  }
+
+  @Get("appraisal-cycles")
+  listCycles(@CurrentUser() actor: AuthUser) {
+    return this.hr.listCycles(actor);
+  }
+
+  @Post("appraisal-cycles")
+  createCycle(@CurrentUser() actor: AuthUser, @Body() dto: CycleDto) {
+    return this.hr.createCycle(actor, dto);
+  }
+
+  @Patch("appraisal-cycles/:id/status")
+  setCycleStatus(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: CycleStatusDto,
+  ) {
+    return this.hr.setCycleStatus(actor, id, dto.status);
+  }
+
+  @Get("appraisals")
+  listAppraisals(@CurrentUser() actor: AuthUser, @Query("cycleId") cycleId?: string) {
+    return this.hr.listAppraisals(actor, cycleId);
+  }
+
+  @Post("appraisals")
+  enrollAppraisal(@CurrentUser() actor: AuthUser, @Body() dto: EnrollDto) {
+    return this.hr.enrollAppraisal(actor, dto.cycle_id, dto.staff_id);
+  }
+
+  @Get("appraisals/:id")
+  getAppraisal(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.getAppraisal(actor, id);
+  }
+
+  @Patch("appraisals/:id")
+  saveAppraisal(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: SaveAppraisalDto,
+  ) {
+    return this.hr.saveAppraisal(actor, id, dto);
+  }
+
+  @Post("appraisals/:id/complete")
+  completeAppraisal(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.completeAppraisal(actor, id);
   }
 
   // ---- Departments --------------------------------------------------------

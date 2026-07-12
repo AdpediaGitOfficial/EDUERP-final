@@ -84,6 +84,28 @@ export interface RepaymentInput {
   installment_no?: number;
   notes?: string | null;
 }
+export interface CriterionInput {
+  name: string;
+  description?: string | null;
+  weight?: number;
+  max_score?: number;
+}
+export interface CycleInput {
+  name: string;
+  description?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+}
+export interface RatingInput {
+  criterion_id: string;
+  score: number;
+  comments?: string | null;
+}
+export interface SaveAppraisalInput {
+  ratings?: RatingInput[];
+  self_comments?: string | null;
+  manager_comments?: string | null;
+}
 
 /**
  * RLS translation (api/db/rls-policies-extracted.csv):
@@ -907,6 +929,257 @@ export class HrService {
       }),
     ]);
     return { ok: true, closed: willClose };
+  }
+
+  // ── Performance appraisals: criteria masters, cycles, scored reviews ─────────
+
+  listCriteria(actor: AuthUser) {
+    this.requireHr(actor);
+    return this.prisma.hr_appraisal_criteria.findMany({
+      where: { is_active: true },
+      orderBy: { created_at: "asc" },
+    });
+  }
+
+  async createCriterion(actor: AuthUser, input: CriterionInput) {
+    this.requireHr(actor);
+    const row = await this.prisma.hr_appraisal_criteria.create({
+      data: {
+        name: input.name,
+        description: input.description || null,
+        weight: input.weight ?? 1,
+        max_score: input.max_score ?? 5,
+      },
+    });
+    return { id: row.id };
+  }
+
+  async updateCriterion(actor: AuthUser, id: string, input: CriterionInput) {
+    this.requireHr(actor);
+    const existing = await this.prisma.hr_appraisal_criteria.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Criterion not found");
+    await this.prisma.hr_appraisal_criteria.update({
+      where: { id },
+      data: {
+        name: input.name,
+        description: input.description || null,
+        weight: input.weight ?? Number(existing.weight),
+        max_score: input.max_score ?? existing.max_score,
+      },
+    });
+    return { ok: true };
+  }
+
+  async deleteCriterion(actor: AuthUser, id: string) {
+    this.requireHr(actor);
+    const existing = await this.prisma.hr_appraisal_criteria.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Criterion not found");
+    await this.prisma.hr_appraisal_criteria.update({ where: { id }, data: { is_active: false } });
+    return { ok: true };
+  }
+
+  async listCycles(actor: AuthUser) {
+    this.requireHr(actor);
+    const cycles = await this.prisma.hr_appraisal_cycles.findMany({
+      orderBy: { created_at: "desc" },
+      include: { _count: { select: { appraisals: true } } },
+    });
+    return cycles.map((c) => ({ ...c, appraisalCount: c._count.appraisals }));
+  }
+
+  async createCycle(actor: AuthUser, input: CycleInput) {
+    this.requireHr(actor);
+    const row = await this.prisma.hr_appraisal_cycles.create({
+      data: {
+        name: input.name,
+        description: input.description || null,
+        period_start: input.period_start ? new Date(input.period_start) : null,
+        period_end: input.period_end ? new Date(input.period_end) : null,
+      },
+    });
+    return { id: row.id };
+  }
+
+  async setCycleStatus(actor: AuthUser, id: string, status: string) {
+    this.requireHr(actor);
+    if (!["draft", "active", "closed"].includes(status))
+      throw new BadRequestException("Invalid cycle status");
+    const existing = await this.prisma.hr_appraisal_cycles.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Cycle not found");
+    await this.prisma.hr_appraisal_cycles.update({
+      where: { id },
+      data: { status, updated_at: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /** Weighted, max-score-normalised overall out of 100 for a set of ratings. */
+  private scoreAppraisal(
+    criteria: { id: string; weight: unknown; max_score: number }[],
+    ratings: { criterion_id: string; score: unknown }[],
+  ) {
+    const byCriterion = new Map(ratings.map((r) => [r.criterion_id, Number(r.score)]));
+    let weighted = 0;
+    let totalWeight = 0;
+    let rated = 0;
+    for (const c of criteria) {
+      const w = Number(c.weight) || 0;
+      totalWeight += w;
+      if (byCriterion.has(c.id)) {
+        rated++;
+        const s = Math.min(Number(byCriterion.get(c.id)) || 0, c.max_score);
+        weighted += (s / (c.max_score || 1)) * w;
+      }
+    }
+    const overall = totalWeight > 0 ? Math.round((weighted / totalWeight) * 100 * 100) / 100 : 0;
+    return { overall, rated, total: criteria.length };
+  }
+
+  async listAppraisals(actor: AuthUser, cycleId?: string) {
+    this.requireHr(actor);
+    const rows = await this.prisma.hr_appraisals.findMany({
+      where: cycleId ? { cycle_id: cycleId } : {},
+      orderBy: { created_at: "desc" },
+      include: {
+        staff: { select: { full_name: true, employee_code: true, department: true } },
+        cycle: { select: { name: true, status: true } },
+      },
+    });
+    return rows;
+  }
+
+  async enrollAppraisal(actor: AuthUser, cycleId: string, staffId: string) {
+    this.requireHr(actor);
+    const [cycle, staff] = await Promise.all([
+      this.prisma.hr_appraisal_cycles.findUnique({ where: { id: cycleId } }),
+      this.prisma.staff.findUnique({ where: { id: staffId } }),
+    ]);
+    if (!cycle) throw new NotFoundException("Cycle not found");
+    if (!staff) throw new NotFoundException("Employee not found");
+    try {
+      const row = await this.prisma.hr_appraisals.create({
+        data: { cycle_id: cycleId, staff_id: staffId },
+      });
+      return { id: row.id };
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        throw new ConflictException("This employee is already enrolled in the cycle.");
+      throw e;
+    }
+  }
+
+  async getAppraisal(actor: AuthUser, id: string) {
+    const appraisal = await this.prisma.hr_appraisals.findUnique({
+      where: { id },
+      include: {
+        staff: { select: { id: true, full_name: true, employee_code: true, profile_id: true } },
+        cycle: { select: { id: true, name: true, status: true, period_start: true, period_end: true } },
+        ratings: true,
+      },
+    });
+    if (!appraisal) throw new NotFoundException("Appraisal not found");
+    if (!this.isHr(actor) && appraisal.staff.profile_id !== actor.id) throw new ForbiddenException();
+    const criteria = await this.prisma.hr_appraisal_criteria.findMany({
+      where: { is_active: true },
+      orderBy: { created_at: "asc" },
+    });
+    const ratingByCriterion = new Map(appraisal.ratings.map((r) => [r.criterion_id, r]));
+    const scored = criteria.map((c) => {
+      const r = ratingByCriterion.get(c.id);
+      return {
+        criterion_id: c.id,
+        name: c.name,
+        description: c.description,
+        weight: c.weight,
+        max_score: c.max_score,
+        score: r ? Number(r.score) : null,
+        comments: r?.comments ?? null,
+      };
+    });
+    const { overall, rated, total } = this.scoreAppraisal(criteria, appraisal.ratings);
+    return { ...appraisal, criteria: scored, overall, ratedCount: rated, criteriaCount: total };
+  }
+
+  async saveAppraisal(actor: AuthUser, id: string, input: SaveAppraisalInput) {
+    this.requireHr(actor);
+    const appraisal = await this.prisma.hr_appraisals.findUnique({ where: { id } });
+    if (!appraisal) throw new NotFoundException("Appraisal not found");
+    if (appraisal.status === "completed")
+      throw new BadRequestException("A completed appraisal can no longer be edited");
+    const criteria = await this.prisma.hr_appraisal_criteria.findMany({
+      where: { is_active: true },
+    });
+    const validIds = new Set(criteria.map((c) => c.id));
+    const maxById = new Map(criteria.map((c) => [c.id, c.max_score]));
+    const ratings = (input.ratings ?? []).filter((r) => validIds.has(r.criterion_id));
+    for (const r of ratings) {
+      const max = maxById.get(r.criterion_id) ?? 5;
+      if (r.score < 0 || r.score > max)
+        throw new BadRequestException(`Score for a criterion must be between 0 and ${max}`);
+    }
+    const reviewer = await this.prisma.staff.findFirst({ where: { profile_id: actor.id } });
+    const { overall } = this.scoreAppraisal(
+      criteria,
+      // merge existing + incoming so the score reflects a partial save too
+      [
+        ...(await this.prisma.hr_appraisal_ratings.findMany({ where: { appraisal_id: id } })).filter(
+          (er) => !ratings.some((nr) => nr.criterion_id === er.criterion_id),
+        ),
+        ...ratings.map((r) => ({ criterion_id: r.criterion_id, score: r.score })),
+      ],
+    );
+    await this.prisma.$transaction([
+      ...ratings.map((r) =>
+        this.prisma.hr_appraisal_ratings.upsert({
+          where: { appraisal_id_criterion_id: { appraisal_id: id, criterion_id: r.criterion_id } },
+          create: {
+            appraisal_id: id,
+            criterion_id: r.criterion_id,
+            score: r.score,
+            comments: r.comments || null,
+          },
+          update: { score: r.score, comments: r.comments || null },
+        }),
+      ),
+      this.prisma.hr_appraisals.update({
+        where: { id },
+        data: {
+          overall_score: overall,
+          status: appraisal.status === "pending" ? "in_review" : appraisal.status,
+          reviewer_id: appraisal.reviewer_id ?? reviewer?.id ?? null,
+          ...(input.self_comments !== undefined ? { self_comments: input.self_comments || null } : {}),
+          ...(input.manager_comments !== undefined
+            ? { manager_comments: input.manager_comments || null }
+            : {}),
+          updated_at: new Date(),
+        },
+      }),
+    ]);
+    return { ok: true, overall };
+  }
+
+  async completeAppraisal(actor: AuthUser, id: string) {
+    this.requireHr(actor);
+    const appraisal = await this.prisma.hr_appraisals.findUnique({
+      where: { id },
+      include: { ratings: true },
+    });
+    if (!appraisal) throw new NotFoundException("Appraisal not found");
+    const criteria = await this.prisma.hr_appraisal_criteria.findMany({
+      where: { is_active: true },
+    });
+    const ratedIds = new Set(appraisal.ratings.map((r) => r.criterion_id));
+    const missing = criteria.filter((c) => !ratedIds.has(c.id));
+    if (missing.length > 0)
+      throw new BadRequestException(
+        `Every criterion must be rated before completing (${missing.length} remaining).`,
+      );
+    const { overall } = this.scoreAppraisal(criteria, appraisal.ratings);
+    await this.prisma.hr_appraisals.update({
+      where: { id },
+      data: { status: "completed", overall_score: overall, updated_at: new Date() },
+    });
+    return { ok: true, overall };
   }
 
   async createDepartment(actor: AuthUser, input: DepartmentInput) {

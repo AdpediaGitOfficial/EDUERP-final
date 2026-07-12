@@ -2698,3 +2698,96 @@ describe("HR: staff loans & advances", () => {
     expect(detail.body.emi).toBeLessThan(8900);
   });
 });
+
+describe("HR: performance appraisals (criteria → cycle → scored review)", () => {
+  it("seeds weighted criteria; teacher cannot read the masters", async () => {
+    const crit = await get("/hr/appraisal-criteria", "admin");
+    expect(crit.status).toBe(200);
+    expect(crit.body.length).toBeGreaterThanOrEqual(5);
+    expect(crit.body[0]).toHaveProperty("weight");
+    expect((await get("/hr/appraisal-criteria", "teacher")).status).toBe(403);
+  });
+
+  it("runs a full cycle: create → enrol → score (weighted) → complete", async () => {
+    const stamp = Date.now();
+    // fresh criteria set is the seeded five; capture them
+    const criteria = (await get("/hr/appraisal-criteria", "admin")).body as any[];
+    const totalWeight = criteria.reduce((s, c) => s + Number(c.weight), 0);
+
+    const cycle = await post("/hr/appraisal-cycles", "admin", {
+      name: `Jest Cycle ${stamp}`,
+      period_start: "2026-01-01",
+      period_end: "2026-12-31",
+    });
+    expect(cycle.status).toBe(201);
+    const cycleId = cycle.body.id;
+
+    // activate
+    expect(
+      (await patch(`/hr/appraisal-cycles/${cycleId}/status`, "admin", { status: "active" })).status,
+    ).toBe(200);
+
+    // enrol first staff member
+    const staffId = (await get("/hr/staff", "admin")).body[0].id;
+    const enrolled = await post("/hr/appraisals", "admin", {
+      cycle_id: cycleId,
+      staff_id: staffId,
+    });
+    expect(enrolled.status).toBe(201);
+    const apprId = enrolled.body.id;
+
+    // duplicate enrolment -> 409
+    expect(
+      (await post("/hr/appraisals", "admin", { cycle_id: cycleId, staff_id: staffId })).status,
+    ).toBe(409);
+
+    // completing before scoring is blocked
+    expect((await post(`/hr/appraisals/${apprId}/complete`, "admin", {})).status).toBe(400);
+
+    // score every criterion at its max -> overall must be 100%
+    const maxRatings = criteria.map((c) => ({ criterion_id: c.id, score: c.max_score }));
+    const saved = await patch(`/hr/appraisals/${apprId}`, "admin", { ratings: maxRatings });
+    expect(saved.status).toBe(200);
+    expect(saved.body.overall).toBe(100);
+
+    // out-of-range score rejected
+    expect(
+      (
+        await patch(`/hr/appraisals/${apprId}`, "admin", {
+          ratings: [{ criterion_id: criteria[0].id, score: criteria[0].max_score + 5 }],
+        })
+      ).status,
+    ).toBe(400);
+
+    // half marks everywhere -> 50%
+    const halfRatings = criteria.map((c) => ({
+      criterion_id: c.id,
+      score: c.max_score / 2,
+    }));
+    const half = await patch(`/hr/appraisals/${apprId}`, "admin", { ratings: halfRatings });
+    expect(half.body.overall).toBe(50);
+
+    // detail reflects status in_review + rated count
+    const detail = await get(`/hr/appraisals/${apprId}`, "admin");
+    expect(detail.body.status).toBe("in_review");
+    expect(detail.body.ratedCount).toBe(criteria.length);
+    expect(detail.body.criteriaCount).toBe(criteria.length);
+    expect(totalWeight).toBeGreaterThan(0);
+
+    // complete now succeeds
+    const done = await post(`/hr/appraisals/${apprId}/complete`, "admin", {});
+    expect(done.status).toBe(201);
+    const final = await get(`/hr/appraisals/${apprId}`, "admin");
+    expect(final.body.status).toBe("completed");
+
+    // a completed appraisal can no longer be edited
+    expect(
+      (await patch(`/hr/appraisals/${apprId}`, "admin", { ratings: halfRatings })).status,
+    ).toBe(400);
+  });
+
+  it("teacher cannot manage cycles or appraisals", async () => {
+    expect((await post("/hr/appraisal-cycles", "teacher", { name: "X" })).status).toBe(403);
+    expect((await get("/hr/appraisals", "teacher")).status).toBe(403);
+  });
+});

@@ -23,6 +23,7 @@ const TABS = [
   { to: "/hr/leave", label: "Leave" },
   { to: "/hr/shifts", label: "Shifts" },
   { to: "/hr/performance", label: "Performance" },
+  { to: "/hr/appraisals", label: "Appraisals" },
   { to: "/hr/training", label: "Training" },
   { to: "/hr/documents", label: "Documents" },
   { to: "/hr/expenses", label: "Expenses" },

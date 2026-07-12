@@ -1109,6 +1109,8 @@ model staff {
   salary_structure                                       hr_salary_structures?
   loans                                                  hr_loans[]                 @relation("hr_loans_staffTostaff")
   approved_loans                                         hr_loans[]                 @relation("hr_loans_approverTostaff")
+  appraisals                                             hr_appraisals[]            @relation("hr_appraisals_staffTostaff")
+  reviewed_appraisals                                    hr_appraisals[]            @relation("hr_appraisals_reviewerTostaff")
   resignations                                           resignations[]
   profiles                                               profiles?                  @relation(fields: [profile_id], references: [id], onUpdate: NoAction)
   staff                                                  staff?                     @relation("staffTostaff", fields: [reporting_manager_id], references: [id], onUpdate: NoAction)
@@ -1848,5 +1850,68 @@ model hr_loan_repayments {
   loan           hr_loans @relation(fields: [loan_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([loan_id])
+  @@schema("public")
+}
+
+model hr_appraisal_criteria {
+  id          String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  weight      Decimal                 @default(1) @db.Decimal(6, 2)
+  max_score   Int                     @default(5)
+  is_active   Boolean                 @default(true)
+  created_at  DateTime                @default(now()) @db.Timestamptz(6)
+  ratings     hr_appraisal_ratings[]
+
+  @@schema("public")
+}
+
+model hr_appraisal_cycles {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  description  String?
+  period_start DateTime?       @db.Date
+  period_end   DateTime?       @db.Date
+  status       String          @default("draft")
+  created_at   DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime        @default(now()) @db.Timestamptz(6)
+  appraisals   hr_appraisals[]
+
+  @@schema("public")
+}
+
+model hr_appraisals {
+  id               String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cycle_id         String                 @db.Uuid
+  staff_id         String                 @db.Uuid
+  reviewer_id      String?                @db.Uuid
+  status           String                 @default("pending")
+  overall_score    Decimal?               @db.Decimal(6, 2)
+  self_comments    String?
+  manager_comments String?
+  created_at       DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime               @default(now()) @db.Timestamptz(6)
+  cycle            hr_appraisal_cycles    @relation(fields: [cycle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  staff            staff                  @relation("hr_appraisals_staffTostaff", fields: [staff_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  reviewer         staff?                 @relation("hr_appraisals_reviewerTostaff", fields: [reviewer_id], references: [id], onUpdate: NoAction)
+  ratings          hr_appraisal_ratings[]
+
+  @@unique([cycle_id, staff_id])
+  @@index([cycle_id])
+  @@index([staff_id])
+  @@schema("public")
+}
+
+model hr_appraisal_ratings {
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appraisal_id String                @db.Uuid
+  criterion_id String                @db.Uuid
+  score        Decimal               @default(0) @db.Decimal(6, 2)
+  comments     String?
+  created_at   DateTime              @default(now()) @db.Timestamptz(6)
+  appraisal    hr_appraisals         @relation(fields: [appraisal_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  criterion    hr_appraisal_criteria @relation(fields: [criterion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([appraisal_id, criterion_id])
   @@schema("public")
 }

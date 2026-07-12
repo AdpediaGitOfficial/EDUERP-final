@@ -83,6 +83,7 @@ import { Route as AuthenticatedHrExitRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedHrDocumentsRouteImport } from './routes/_authenticated/hr.documents'
 import { Route as AuthenticatedHrDepartmentsRouteImport } from './routes/_authenticated/hr.departments'
 import { Route as AuthenticatedHrAttendanceRouteImport } from './routes/_authenticated/hr.attendance'
+import { Route as AuthenticatedHrAppraisalsRouteImport } from './routes/_authenticated/hr.appraisals'
 import { Route as AuthenticatedHrAnalyticsRouteImport } from './routes/_authenticated/hr.analytics'
 import { Route as AuthenticatedFleetTrackingRouteImport } from './routes/_authenticated/fleet.tracking'
 import { Route as AuthenticatedFleetMaintenanceRouteImport } from './routes/_authenticated/fleet.maintenance'
@@ -523,6 +524,12 @@ const AuthenticatedHrAttendanceRoute =
     path: '/attendance',
     getParentRoute: () => AuthenticatedHrRoute,
   } as any)
+const AuthenticatedHrAppraisalsRoute =
+  AuthenticatedHrAppraisalsRouteImport.update({
+    id: '/appraisals',
+    path: '/appraisals',
+    getParentRoute: () => AuthenticatedHrRoute,
+  } as any)
 const AuthenticatedHrAnalyticsRoute =
   AuthenticatedHrAnalyticsRouteImport.update({
     id: '/analytics',
@@ -819,6 +826,7 @@ export interface FileRoutesByFullPath {
   '/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
   '/fleet/tracking': typeof AuthenticatedFleetTrackingRoute
   '/hr/analytics': typeof AuthenticatedHrAnalyticsRoute
+  '/hr/appraisals': typeof AuthenticatedHrAppraisalsRoute
   '/hr/attendance': typeof AuthenticatedHrAttendanceRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsRoute
   '/hr/documents': typeof AuthenticatedHrDocumentsRoute
@@ -922,6 +930,7 @@ export interface FileRoutesByTo {
   '/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
   '/fleet/tracking': typeof AuthenticatedFleetTrackingRoute
   '/hr/analytics': typeof AuthenticatedHrAnalyticsRoute
+  '/hr/appraisals': typeof AuthenticatedHrAppraisalsRoute
   '/hr/attendance': typeof AuthenticatedHrAttendanceRoute
   '/hr/departments': typeof AuthenticatedHrDepartmentsRoute
   '/hr/documents': typeof AuthenticatedHrDocumentsRoute
@@ -1037,6 +1046,7 @@ export interface FileRoutesById {
   '/_authenticated/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
   '/_authenticated/fleet/tracking': typeof AuthenticatedFleetTrackingRoute
   '/_authenticated/hr/analytics': typeof AuthenticatedHrAnalyticsRoute
+  '/_authenticated/hr/appraisals': typeof AuthenticatedHrAppraisalsRoute
   '/_authenticated/hr/attendance': typeof AuthenticatedHrAttendanceRoute
   '/_authenticated/hr/departments': typeof AuthenticatedHrDepartmentsRoute
   '/_authenticated/hr/documents': typeof AuthenticatedHrDocumentsRoute
@@ -1153,6 +1163,7 @@ export interface FileRouteTypes {
     | '/fleet/maintenance'
     | '/fleet/tracking'
     | '/hr/analytics'
+    | '/hr/appraisals'
     | '/hr/attendance'
     | '/hr/departments'
     | '/hr/documents'
@@ -1256,6 +1267,7 @@ export interface FileRouteTypes {
     | '/fleet/maintenance'
     | '/fleet/tracking'
     | '/hr/analytics'
+    | '/hr/appraisals'
     | '/hr/attendance'
     | '/hr/departments'
     | '/hr/documents'
@@ -1370,6 +1382,7 @@ export interface FileRouteTypes {
     | '/_authenticated/fleet/maintenance'
     | '/_authenticated/fleet/tracking'
     | '/_authenticated/hr/analytics'
+    | '/_authenticated/hr/appraisals'
     | '/_authenticated/hr/attendance'
     | '/_authenticated/hr/departments'
     | '/_authenticated/hr/documents'
@@ -1947,6 +1960,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHrAttendanceRouteImport
       parentRoute: typeof AuthenticatedHrRoute
     }
+    '/_authenticated/hr/appraisals': {
+      id: '/_authenticated/hr/appraisals'
+      path: '/appraisals'
+      fullPath: '/hr/appraisals'
+      preLoaderRoute: typeof AuthenticatedHrAppraisalsRouteImport
+      parentRoute: typeof AuthenticatedHrRoute
+    }
     '/_authenticated/hr/analytics': {
       id: '/_authenticated/hr/analytics'
       path: '/analytics'
@@ -2364,6 +2384,7 @@ const AuthenticatedFleetRouteWithChildren =
 
 interface AuthenticatedHrRouteChildren {
   AuthenticatedHrAnalyticsRoute: typeof AuthenticatedHrAnalyticsRoute
+  AuthenticatedHrAppraisalsRoute: typeof AuthenticatedHrAppraisalsRoute
   AuthenticatedHrAttendanceRoute: typeof AuthenticatedHrAttendanceRoute
   AuthenticatedHrDepartmentsRoute: typeof AuthenticatedHrDepartmentsRoute
   AuthenticatedHrDocumentsRoute: typeof AuthenticatedHrDocumentsRoute
@@ -2388,6 +2409,7 @@ interface AuthenticatedHrRouteChildren {
 
 const AuthenticatedHrRouteChildren: AuthenticatedHrRouteChildren = {
   AuthenticatedHrAnalyticsRoute: AuthenticatedHrAnalyticsRoute,
+  AuthenticatedHrAppraisalsRoute: AuthenticatedHrAppraisalsRoute,
   AuthenticatedHrAttendanceRoute: AuthenticatedHrAttendanceRoute,
   AuthenticatedHrDepartmentsRoute: AuthenticatedHrDepartmentsRoute,
   AuthenticatedHrDocumentsRoute: AuthenticatedHrDocumentsRoute,
