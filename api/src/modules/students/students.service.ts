@@ -128,6 +128,59 @@ export class StudentsService {
     return { moved: res.count };
   }
 
+  /**
+   * Move a single student to another class (transfer / individual promotion).
+   * Admin or reception. A fresh roll is assigned in the destination class under
+   * a per-class advisory lock so it can't collide with a concurrent transfer or
+   * admission; an explicit roll is honoured verbatim. Logs the move.
+   */
+  async transfer(
+    actor: AuthUser,
+    studentId: string,
+    toClassId: string,
+    rollNo?: string,
+  ) {
+    if (!actor.roles.some((r) => r === "admin" || r === "reception"))
+      throw new ForbiddenException("Only admins or reception can transfer students.");
+    const student = await this.prisma.students.findUnique({
+      where: { id: studentId },
+      select: { id: true, class_id: true },
+    });
+    if (!student) throw new NotFoundException("Student not found");
+    const toClass = await this.prisma.classes.findUnique({
+      where: { id: toClassId },
+      select: { id: true, name: true, section: true },
+    });
+    if (!toClass) throw new NotFoundException("Destination class not found");
+    if (student.class_id === toClassId)
+      throw new BadRequestException("Student is already in that class");
+
+    const manualRoll = rollNo?.trim() || null;
+    const finalRoll = await this.prisma.$transaction(async (tx) => {
+      let roll = manualRoll;
+      if (!manualRoll) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${toClassId}))`;
+        const r = await tx.$queryRaw<{ n: string }[]>`
+          SELECT public.next_roll_no(${toClassId}::uuid) AS n`;
+        roll = r[0]?.n ?? null;
+      }
+      await tx.students.update({
+        where: { id: studentId },
+        data: { class_id: toClassId, roll_no: roll },
+      });
+      await tx.student_activity_log.create({
+        data: {
+          student_id: studentId,
+          actor_id: actor.id,
+          event_type: "transferred",
+          description: `Transferred to ${toClass.name}${toClass.section ? " " + toClass.section : ""} (roll ${roll ?? "—"}).`,
+        },
+      });
+      return roll;
+    });
+    return { ok: true, classId: toClassId, rollNo: finalRoll };
+  }
+
   /** Bulk-assign a transport route to students (port of `bulkAssignRoute`). */
   async bulkAssignRoute(
     actor: AuthUser,
@@ -537,7 +590,15 @@ export class StudentsService {
       where: { AND: [{ id: studentId }, scope] },
       include: {
         profiles: { select: { full_name: true, email: true, phone: true } },
-        classes: { select: { id: true, name: true, section: true, academic_year: true } },
+        classes: {
+          select: {
+            id: true,
+            name: true,
+            section: true,
+            academic_year: true,
+            class_teacher_id: true,
+          },
+        },
       },
     });
     if (!student) throw new NotFoundException();
@@ -639,6 +700,32 @@ export class StudentsService {
         )
       : new Map<string, string>();
 
+    // Class teacher + the class's subject list (for the profile "Academic" card).
+    const classTeacherId = student.classes?.class_teacher_id ?? null;
+    const [classTeacherProfile, classSubjects] = await Promise.all([
+      classTeacherId
+        ? this.prisma.profiles.findUnique({
+            where: { id: classTeacherId },
+            select: { id: true, full_name: true, email: true, phone: true },
+          })
+        : Promise.resolve(null),
+      classId
+        ? this.prisma.subjects.findMany({
+            where: { class_id: classId },
+            orderBy: { name: "asc" },
+            select: { id: true, name: true, code: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const classTeacher = classTeacherProfile
+      ? {
+          id: classTeacherProfile.id,
+          name: classTeacherProfile.full_name,
+          email: classTeacherProfile.email,
+          phone: classTeacherProfile.phone,
+        }
+      : null;
+
     // Guardians (with relationship flags) for the student's Parents tab.
     const guardianRows = await this.prisma.parent_student.findMany({
       where: { student_id: studentId },
@@ -685,6 +772,8 @@ export class StudentsService {
           : null,
       },
       guardians,
+      classTeacher,
+      subjects: (classSubjects as any[]).map((s) => ({ id: s.id, name: s.name, code: s.code })),
       attendance: attendance.map((a) => ({
         date: dstr(a.date),
         status: a.status,

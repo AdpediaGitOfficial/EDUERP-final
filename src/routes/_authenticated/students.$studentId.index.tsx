@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { apiGet } from "@/lib/api/client";
+import { apiGet, apiPost } from "@/lib/api/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,8 +14,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { QRCodeSVG } from "qrcode.react";
+import Barcode from "react-barcode";
+import { toast } from "sonner";
+import { ArrowRightLeft, Printer, MessageSquare, IdCard as IdCardIcon } from "lucide-react";
 import {
   ArrowLeft,
   GraduationCap,
@@ -92,7 +103,39 @@ function ChildDetailPage() {
   const submissionsAll = (dashboard?.submissions ?? []) as any[];
   const guardians = (dashboard?.guardians ?? []) as any[];
   const { user } = useCurrentUser();
+  const qc = useQueryClient();
   const canOpenParentProfile = !!user?.roles.some((r) => r === "admin" || r === "reception");
+  const isDesk = canOpenParentProfile;
+  const classTeacher = dashboard?.classTeacher ?? null;
+  const subjects = (dashboard?.subjects ?? []) as any[];
+
+  const [tab, setTab] = useState("profile");
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [idCardOpen, setIdCardOpen] = useState(false);
+  const [toClassId, setToClassId] = useState("");
+
+  const { data: allClasses } = useQuery({
+    enabled: transferOpen,
+    queryKey: ["classes-for-transfer"],
+    queryFn: () => apiGet<any[]>("/classes"),
+  });
+
+  const primaryGuardianEmail =
+    guardians.find((g: any) => g.isPrimary && g.email)?.email ??
+    guardians.find((g: any) => g.email)?.email ??
+    null;
+
+  const transferMut = useMutation({
+    mutationFn: () => apiPost(`/students/${studentId}/transfer`, { toClassId }),
+    onSuccess: (res: any) => {
+      toast.success(`Transferred (roll ${res?.rollNo ?? "—"}).`);
+      setTransferOpen(false);
+      setToClassId("");
+      qc.invalidateQueries({ queryKey: ["child-dashboard", studentId] });
+      qc.invalidateQueries({ queryKey: ["students-list"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Transfer failed"),
+  });
 
   const [attMonth, setAttMonth] = useState(() => {
     const d = new Date();
@@ -373,7 +416,7 @@ function ChildDetailPage() {
         <PageHeader title="Student not found" subtitle="You may not have access to this student." />
         <Link to="/students">
           <Button variant="outline">
-            <ArrowLeft className="size-4" /> Back to my children
+            <ArrowLeft className="size-4" /> Back to students
           </Button>
         </Link>
       </AppShell>
@@ -414,15 +457,153 @@ function ChildDetailPage() {
               <span>Roll: {s.roll_no || "—"}</span>
               {s.gender && <span className="capitalize">{s.gender}</span>}
               <span>Admitted: {new Date(s.admission_date).toLocaleDateString()}</span>
+              {classTeacher && (
+                <span>
+                  Class teacher: <span className="text-foreground">{classTeacher.name}</span>
+                </span>
+              )}
             </div>
+            {subjects.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Subjects:</span>
+                {subjects.slice(0, 12).map((sub) => (
+                  <Badge key={sub.id} variant="secondary" className="font-normal">
+                    {sub.name}
+                  </Badge>
+                ))}
+                {subjects.length > 12 && (
+                  <span className="text-xs text-muted-foreground">+{subjects.length - 12} more</span>
+                )}
+              </div>
+            )}
           </div>
+        </div>
+      </Card>
+
+      {/* Quick actions */}
+      <Card className="rounded-2xl p-3 mb-4">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => setTab("attendance")}>
+            <ClipboardCheck className="size-4" /> View Attendance
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setTab("fees")}>
+            <Wallet className="size-4" /> View Fees
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setTab("marks")}>
+            <BookOpenCheck className="size-4" /> View Results
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setIdCardOpen(true)}>
+            <IdCardIcon className="size-4" /> Issue ID Card
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => window.print()}>
+            <Printer className="size-4" /> Print Profile
+          </Button>
+          {primaryGuardianEmail ? (
+            <Button size="sm" variant="outline" asChild>
+              <a href={`mailto:${primaryGuardianEmail}`}>
+                <MessageSquare className="size-4" /> Send Message
+              </a>
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" disabled title="No guardian email on file">
+              <MessageSquare className="size-4" /> Send Message
+            </Button>
+          )}
+          {isDesk && (
+            <Button size="sm" onClick={() => setTransferOpen(true)}>
+              <ArrowRightLeft className="size-4" /> Transfer / Promote
+            </Button>
+          )}
         </div>
       </Card>
 
       {/* SIS stat strip (Total Fees / Paid / Balance / Behavior) + QR + actions */}
       <SisProfilePanel studentId={studentId} />
 
-      <Tabs defaultValue="profile">
+      {/* Transfer modal */}
+      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer / promote {s.profiles?.full_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Move this student to another class. A fresh roll number is assigned automatically in
+              the destination class.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Destination class</label>
+              <Select value={toClassId} onValueChange={setToClassId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(allClasses ?? [])
+                    .filter((c: any) => c.id !== classId)
+                    .map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                        {c.section ? ` · ${c.section}` : ""}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={!toClassId || transferMut.isPending} onClick={() => transferMut.mutate()}>
+              {transferMut.isPending ? "Transferring…" : "Confirm transfer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ID card modal */}
+      <Dialog open={idCardOpen} onOpenChange={setIdCardOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Student ID card</DialogTitle>
+          </DialogHeader>
+          <div id="id-card-print" className="rounded-2xl border overflow-hidden">
+            <div className="bg-stat-indigo text-stat-indigo-foreground px-4 py-3 text-center font-display font-semibold">
+              Greenwood School
+            </div>
+            <div className="p-4 flex gap-4">
+              <Avatar className="size-20 rounded-xl">
+                <AvatarFallback className="text-xl rounded-xl bg-muted">
+                  {initials(s.profiles?.full_name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="text-sm space-y-0.5">
+                <div className="font-semibold text-base">{s.profiles?.full_name}</div>
+                <div className="text-muted-foreground">{cls}</div>
+                <div>Adm: {s.admission_no || "—"}</div>
+                <div>Roll: {s.roll_no || "—"}</div>
+                {s.gender && <div className="capitalize">{s.gender}</div>}
+              </div>
+            </div>
+            {s.admission_no && (
+              <div className="px-4 pb-4 flex items-center justify-between gap-3">
+                <QRCodeSVG value={s.admission_no} size={72} />
+                <Barcode value={s.admission_no} height={40} width={1.2} fontSize={10} />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIdCardOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={() => window.print()}>
+              <Printer className="size-4" /> Print
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="profile">
             <UserCircle className="size-4 mr-1" />

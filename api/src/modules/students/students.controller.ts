@@ -73,6 +73,15 @@ class PromoteDto {
   exclude?: string[];
 }
 
+class TransferDto {
+  @IsUUID()
+  toClassId: string;
+
+  @IsOptional()
+  @IsString()
+  rollNo?: string;
+}
+
 class BulkAssignRouteDto {
   @IsUUID()
   routeId: string;
@@ -178,6 +187,15 @@ export class StudentsController {
   @Post("bulk-status")
   bulkStatus(@CurrentUser() actor: AuthUser, @Body() dto: BulkStatusDto) {
     return this.students.bulkSetStatus(actor, dto.studentIds, dto.status);
+  }
+
+  @Post(":id/transfer")
+  transfer(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: TransferDto,
+  ) {
+    return this.students.transfer(actor, id, dto.toClassId, dto.rollNo);
   }
 
   @Get(":id/dashboard")
