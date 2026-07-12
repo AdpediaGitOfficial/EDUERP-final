@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, Pencil, Trash2, Wallet, X } from "lucide-react";
 import { money } from "@/lib/module-util";
 
@@ -461,7 +462,7 @@ function SetSalaryTab() {
   const [q, setQ] = useState("");
   const [staffId, setStaffId] = useState<string | null>(null);
 
-  const { data: staff } = useQuery({
+  const { data: staff, isLoading, isError, refetch } = useQuery({
     queryKey: ["hr-staff-list"],
     queryFn: () => apiGet<StaffRow[]>("/hr/staff"),
   });
@@ -562,6 +563,11 @@ function SetSalaryTab() {
           onChange={(e) => setQ(e.target.value)}
           className="mb-2"
         />
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={8} cols={1} />
+        ) : (
         <div className="max-h-[60vh] overflow-y-auto space-y-1">
           {filtered.slice(0, 100).map((s) => (
             <button
@@ -578,6 +584,7 @@ function SetSalaryTab() {
             </button>
           ))}
         </div>
+        )}
       </Card>
 
       {/* Detail */}

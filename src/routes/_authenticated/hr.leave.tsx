@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/_authenticated/hr/leave")({ component: Pa
 
 function Page() {
   const qc = useQueryClient();
-  const { data: requests } = useQuery({
+  const { data: requests, isLoading, isError, refetch } = useQuery({
     queryKey: ["hr-leave-requests"],
     queryFn: async () => {
       const res = await apiGet<{ rows: any[] }>("/hr/leave-requests?pageSize=200");
@@ -45,6 +46,11 @@ function Page() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="rounded-2xl overflow-hidden">
           <div className="p-4 border-b font-medium">Leave requests</div>
+          {isError ? (
+            <QueryError onRetry={() => refetch()} />
+          ) : isLoading ? (
+            <TableSkeleton rows={6} cols={6} />
+          ) : (
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr className="text-left">
@@ -95,6 +101,7 @@ function Page() {
               ))}
             </tbody>
           </table>
+          )}
         </Card>
         <Card className="rounded-2xl overflow-hidden">
           <div className="p-4 border-b font-medium">Leave balances</div>

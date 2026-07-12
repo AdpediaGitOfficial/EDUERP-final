@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyRow } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, HandCoins, Check, X } from "lucide-react";
 import { money, fmtDate, niceLabel, type Tone } from "@/lib/module-util";
 
@@ -84,7 +85,7 @@ function Page() {
   const [addOpen, setAddOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const { data: loans } = useQuery({
+  const { data: loans, isLoading, isError, refetch } = useQuery({
     queryKey: ["hr-loans"],
     queryFn: () => apiGet<Loan[]>("/hr/loans"),
   });
@@ -205,6 +206,11 @@ function Page() {
       </div>
 
       <Card className="rounded-2xl overflow-hidden">
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={7} />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
@@ -256,6 +262,7 @@ function Page() {
             </tbody>
           </table>
         </div>
+        )}
       </Card>
 
       {/* Create dialog */}

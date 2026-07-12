@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -89,7 +90,7 @@ function Page() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(EMPTY);
 
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["hr-staff-list"],
     queryFn: () => apiGet<any[]>("/hr/staff"),
   });
@@ -267,6 +268,11 @@ function Page() {
         </Select>
       </div>
       <Card className="rounded-2xl overflow-hidden">
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={7} />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
@@ -335,6 +341,7 @@ function Page() {
             </tbody>
           </table>
         </div>
+        )}
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState, EmptyRow } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Plus, Pencil, Trash2, ClipboardCheck, Star, ArrowLeft } from "lucide-react";
 import { niceLabel, type Tone } from "@/lib/module-util";
 
@@ -113,7 +114,7 @@ function Page() {
 // ── Cycles ────────────────────────────────────────────────────────────────────
 function CyclesTab({ onOpen }: { onOpen: (id: string) => void }) {
   const qc = useQueryClient();
-  const { data: cycles } = useQuery({
+  const { data: cycles, isLoading, isError, refetch } = useQuery({
     queryKey: ["appraisal-cycles"],
     queryFn: () => apiGet<Cycle[]>("/hr/appraisal-cycles"),
   });
@@ -165,6 +166,16 @@ function CyclesTab({ onOpen }: { onOpen: (id: string) => void }) {
           New cycle
         </Button>
       </div>
+      {isError ? (
+        <Card className="rounded-2xl">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden">
+          <TableSkeleton rows={6} cols={4} />
+        </Card>
+      ) : (
+      <>
       {cycles && cycles.length === 0 && (
         <EmptyState
           icon={ClipboardCheck}
@@ -215,6 +226,8 @@ function CyclesTab({ onOpen }: { onOpen: (id: string) => void }) {
           </Card>
         ))}
       </div>
+      </>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">

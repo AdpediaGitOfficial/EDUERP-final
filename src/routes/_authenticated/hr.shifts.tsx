@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/hr/shifts")({ component: P
 
 function Page() {
   const qc = useQueryClient();
-  const { data: shifts } = useQuery({
+  const { data: shifts, isLoading, isError, refetch } = useQuery({
     queryKey: ["shifts"],
     queryFn: () => apiGet<any[]>("/hr/shifts"),
   });
@@ -72,6 +73,15 @@ function Page() {
           </Button>
         }
       />
+      {isError ? (
+        <Card className="rounded-2xl mb-6">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden mb-6">
+          <TableSkeleton rows={6} cols={4} />
+        </Card>
+      ) : (
       <div className="grid md:grid-cols-4 gap-3 mb-6">
         {(shifts ?? []).map((s: any) => (
           <Card key={s.id} className="p-4 rounded-2xl">
@@ -91,6 +101,7 @@ function Page() {
           </Card>
         ))}
       </div>
+      )}
       <Card className="rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted/40">

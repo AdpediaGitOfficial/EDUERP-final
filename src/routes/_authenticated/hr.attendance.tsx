@@ -5,6 +5,7 @@ import { apiGet, apiFetch } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ function Page() {
   const [editing, setEditing] = useState<any | null>(null);
   const [markMissing, setMarkMissing] = useState<any | null>(null);
 
-  const { data: teachers } = useQuery({
+  const { data: teachers, isLoading, isError, refetch } = useQuery({
     queryKey: ["teachers-active"],
     queryFn: () => apiGet<any[]>("/hr/attendance/teachers"),
   });
@@ -200,6 +201,11 @@ function Page() {
 
         <TabsContent value="day" className="pt-4">
           <Card className="rounded-2xl overflow-hidden">
+            {isError ? (
+              <QueryError onRetry={() => refetch()} />
+            ) : isLoading ? (
+              <TableSkeleton rows={6} cols={8} />
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
                 <thead className="bg-muted/40">
@@ -316,6 +322,7 @@ function Page() {
                 </tbody>
               </table>
             </div>
+            )}
           </Card>
         </TabsContent>
 

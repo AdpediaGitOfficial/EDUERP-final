@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { useConfirm } from "@/components/confirm-dialog";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ const STAGES = ["applied", "screening", "interview", "offer", "joined"] as const
 function Page() {
   const qc = useQueryClient();
   const confirm = useConfirm();
-  const { data: openings } = useQuery({
+  const { data: openings, isLoading, isError, refetch } = useQuery({
     queryKey: ["job-openings"],
     queryFn: () => apiGet<any[]>("/hr/recruitment/openings"),
   });
@@ -155,6 +156,15 @@ function Page() {
           </div>
         }
       />
+      {isError ? (
+        <Card className="rounded-2xl mb-6">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden mb-6">
+          <TableSkeleton rows={6} cols={3} />
+        </Card>
+      ) : (
       <div className="grid md:grid-cols-3 gap-3 mb-6">
         {(openings ?? []).map((o: any) => (
           <Card key={o.id} className="p-4 rounded-2xl">
@@ -198,6 +208,7 @@ function Page() {
           </Card>
         ))}
       </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         {STAGES.map((stage) => (
           <Card key={stage} className="p-3 rounded-2xl bg-muted/30">

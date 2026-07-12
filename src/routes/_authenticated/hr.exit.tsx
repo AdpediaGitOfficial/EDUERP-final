@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/_authenticated/hr/exit")({ component: Pag
 
 function Page() {
   const qc = useQueryClient();
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["resignations"],
     queryFn: () => apiGet<any[]>("/hr/resignations"),
   });
@@ -50,6 +51,16 @@ function Page() {
         title="Resignation & Exit"
         subtitle="Notice period, clearances and final settlement."
       />
+      {isError ? (
+        <Card className="rounded-2xl">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden">
+          <TableSkeleton rows={6} cols={4} />
+        </Card>
+      ) : (
+      <>
       {(data ?? []).length === 0 && (
         <Card className="p-8 rounded-2xl text-center text-muted-foreground">
           No active resignations.
@@ -193,6 +204,8 @@ function Page() {
           );
         })}
       </div>
+      </>
+      )}
     </>
   );
 }

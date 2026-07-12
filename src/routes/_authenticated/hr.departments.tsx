@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
 import { useConfirm } from "@/components/confirm-dialog";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/_authenticated/hr/departments")({ compone
 function Page() {
   const qc = useQueryClient();
   const confirm = useConfirm();
-  const { data: depts } = useQuery({
+  const { data: depts, isLoading, isError, refetch } = useQuery({
     queryKey: ["depts"],
     queryFn: () => apiGet<any[]>("/hr/departments"),
   });
@@ -163,6 +164,15 @@ function Page() {
         }
       />
       <h3 className="text-sm font-semibold mb-3">Departments</h3>
+      {isError ? (
+        <Card className="rounded-2xl mb-8">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden mb-8">
+          <TableSkeleton rows={6} cols={3} />
+        </Card>
+      ) : (
       <div className="grid md:grid-cols-3 gap-3 mb-8">
         {(depts ?? []).map((d: any) => (
           <Card key={d.id} className="p-4 rounded-2xl">
@@ -226,6 +236,7 @@ function Page() {
           </Card>
         ))}
       </div>
+      )}
 
       <h3 className="text-sm font-semibold mb-3">Designations & Salary Grades</h3>
       <Card className="rounded-2xl overflow-hidden">

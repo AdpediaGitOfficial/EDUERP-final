@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "@/components/status-badge";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { money } from "@/lib/module-util";
 
 export const Route = createFileRoute("/_authenticated/hr/settings")({ component: Page });
@@ -30,7 +31,7 @@ type LeaveType = {
 };
 
 function Page() {
-  const { data: employmentTypes } = useQuery({
+  const { data: employmentTypes, isLoading, isError, refetch } = useQuery({
     queryKey: ["hr-employment-types"],
     queryFn: () => apiGet<EmploymentType[]>("/hr/employment-types"),
   });
@@ -51,6 +52,15 @@ function Page() {
       />
 
       {/* Organisation masters — governed reference data */}
+      {isError ? (
+        <Card className="rounded-2xl mb-4">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden mb-4">
+          <TableSkeleton rows={6} cols={3} />
+        </Card>
+      ) : (
       <div className="grid lg:grid-cols-3 gap-4 mb-4">
         <Card className="p-5 rounded-2xl">
           <h3 className="font-semibold mb-3">Employment types</h3>
@@ -138,6 +148,7 @@ function Page() {
           </div>
         </Card>
       </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="p-5 rounded-2xl">

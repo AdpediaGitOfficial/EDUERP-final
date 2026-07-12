@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
 import { CHART, CHART_SUCCESS, CHART_INFO, chartColor } from "@/lib/chart";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import {
   BarChart,
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/_authenticated/hr/analytics")({ component
 const COLORS = CHART;
 
 function Page() {
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["hr-analytics"],
     queryFn: () =>
       apiGet<{
@@ -42,6 +43,15 @@ function Page() {
   return (
     <>
       <PageHeader title="HR Analytics" subtitle="Trends, distributions and hiring funnel." />
+      {isError ? (
+        <Card className="rounded-2xl">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
+      ) : isLoading ? (
+        <Card className="rounded-2xl overflow-hidden">
+          <TableSkeleton rows={6} cols={4} />
+        </Card>
+      ) : (
       <div className="grid md:grid-cols-2 gap-4 mb-6">
         <Card className="p-4 rounded-2xl">
           <div className="text-sm font-semibold mb-3">Department headcount</div>
@@ -90,6 +100,7 @@ function Page() {
           </ResponsiveContainer>
         </Card>
       </div>
+      )}
     </>
   );
 }

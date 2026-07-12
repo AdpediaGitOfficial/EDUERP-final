@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { badgeClass, daysUntil, fmtDate, niceLabel } from "@/lib/module-util";
@@ -9,7 +10,7 @@ import { badgeClass, daysUntil, fmtDate, niceLabel } from "@/lib/module-util";
 export const Route = createFileRoute("/_authenticated/hr/documents")({ component: Page });
 
 function Page() {
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["hr-docs"],
     queryFn: () => apiGet<any[]>("/hr/documents"),
   });
@@ -17,6 +18,11 @@ function Page() {
     <>
       <PageHeader title="Document Vault" subtitle="Personnel documents with expiry tracking." />
       <Card className="rounded-2xl overflow-hidden">
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={5} />
+        ) : (
         <table className="w-full text-sm">
           <thead className="bg-muted/40">
             <tr className="text-left">
@@ -58,6 +64,7 @@ function Page() {
             })}
           </tbody>
         </table>
+        )}
       </Card>
     </>
   );

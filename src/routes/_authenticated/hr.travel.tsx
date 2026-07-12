@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiFetch } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/_authenticated/hr/travel")({ component: P
 
 function Page() {
   const qc = useQueryClient();
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["travel-requests"],
     queryFn: () => apiGet<any[]>("/hr/travel"),
   });
@@ -37,6 +38,11 @@ function Page() {
     <>
       <PageHeader title="Travel Requests" subtitle="Business travel approvals and settlements." />
       <Card className="rounded-2xl overflow-hidden">
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={8} />
+        ) : (
         <table className="w-full text-sm">
           <thead className="bg-muted/40">
             <tr className="text-left">
@@ -101,6 +107,7 @@ function Page() {
             ))}
           </tbody>
         </table>
+        )}
       </Card>
     </>
   );

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiGet, apiPost, apiFileObjectUrl } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ function Page() {
     if (obj) window.open(obj, "_blank", "noopener");
   };
 
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["staff-detail", staffId],
     queryFn: () =>
       apiGet<{
@@ -47,7 +48,13 @@ function Page() {
   const assets = data?.assets;
   const expenses = data?.expenses;
 
-  if (!staff) return <div className="p-8 text-sm text-muted-foreground">Loading…</div>;
+  if (isError) return <QueryError onRetry={() => refetch()} />;
+  if (isLoading || !staff)
+    return (
+      <Card className="rounded-2xl overflow-hidden">
+        <TableSkeleton rows={8} cols={3} />
+      </Card>
+    );
   return (
     <>
       <div className="mb-4">

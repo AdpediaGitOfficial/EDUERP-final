@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api/client";
 import { PageHeader } from "@/components/app-shell";
+import { QueryError, TableSkeleton } from "@/components/query-states";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
@@ -23,7 +24,7 @@ const REPORTS = [
 
 function Page() {
   const [selected, setSelected] = useState<(typeof REPORTS)[number]>(REPORTS[0]);
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["report", selected.key],
     queryFn: () => apiGet<any[]>(`/hr/reports/${selected.key}`),
   });
@@ -68,6 +69,11 @@ function Page() {
         </Button>
       </div>
       <Card className="rounded-2xl overflow-hidden">
+        {isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <TableSkeleton rows={6} cols={6} />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="bg-muted/40">
@@ -92,6 +98,7 @@ function Page() {
             </tbody>
           </table>
         </div>
+        )}
       </Card>
     </>
   );
