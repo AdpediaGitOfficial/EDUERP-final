@@ -484,6 +484,28 @@ export class HrService {
     return this.prisma.departments.findMany({ orderBy: { name: "asc" } });
   }
 
+  // ---- Org-setup masters (employment types / pay grades / leave types) ----
+  listEmploymentTypes() {
+    return this.prisma.hr_employment_types.findMany({
+      where: { is_active: true },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  listPayGrades() {
+    return this.prisma.hr_pay_grades.findMany({
+      where: { is_active: true },
+      orderBy: { level: "asc" },
+    });
+  }
+
+  listLeaveTypes() {
+    return this.prisma.hr_leave_types.findMany({
+      where: { is_active: true },
+      orderBy: { name: "asc" },
+    });
+  }
+
   async createDepartment(actor: AuthUser, input: DepartmentInput) {
     this.requireHr(actor);
     try {

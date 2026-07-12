@@ -69,40 +69,40 @@ model users {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model admission_enquiries {
-  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  student_name         String
-  parent_name          String?
-  parent_phone         String?
-  parent_email         String?
-  grade_applying       String?
-  enquiry_date         DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
-  status               String    @default("new")
-  notes                String?
-  converted_student_id String?   @db.Uuid
-  admission_no         String?
-  stage                String    @default("draft")
-  applicant_dob        DateTime? @db.Date
-  applicant_gender     String?
-  applicant_address    String?
-  previous_school      String?
-  blood_group          String?
-  transport_required   Boolean   @default(false)
-  hostel_required      Boolean   @default(false)
-  medical_notes        String?
-  academic_year        String?
-  class_id             String?   @db.Uuid
-  section              String?
-  fee_structure_id     String?   @db.Uuid
-  parent_id            String?   @db.Uuid
-  reviewer_id          String?   @db.Uuid
-  rejection_reason     String?
-  submitted_at         DateTime? @db.Timestamptz(6)
-  approved_at          DateTime? @db.Timestamptz(6)
-  admitted_at          DateTime? @db.Timestamptz(6)
-  documents            Json      @default("[]")
-  created_at           DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime  @default(now()) @db.Timestamptz(6)
-  students             students? @relation(fields: [converted_student_id], references: [id], onUpdate: NoAction)
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  student_name            String
+  parent_name             String?
+  parent_phone            String?
+  parent_email            String?
+  grade_applying          String?
+  enquiry_date            DateTime                  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  status                  String                    @default("new")
+  notes                   String?
+  converted_student_id    String?                   @db.Uuid
+  admission_no            String?
+  stage                   String                    @default("draft")
+  applicant_dob           DateTime?                 @db.Date
+  applicant_gender        String?
+  applicant_address       String?
+  previous_school         String?
+  blood_group             String?
+  transport_required      Boolean                   @default(false)
+  hostel_required         Boolean                   @default(false)
+  medical_notes           String?
+  academic_year           String?
+  class_id                String?                   @db.Uuid
+  section                 String?
+  fee_structure_id        String?                   @db.Uuid
+  parent_id               String?                   @db.Uuid
+  reviewer_id             String?                   @db.Uuid
+  rejection_reason        String?
+  submitted_at            DateTime?                 @db.Timestamptz(6)
+  approved_at             DateTime?                 @db.Timestamptz(6)
+  admitted_at             DateTime?                 @db.Timestamptz(6)
+  documents               Json                      @default("[]")
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  students                students?                 @relation(fields: [converted_student_id], references: [id], onUpdate: NoAction)
   admission_stage_history admission_stage_history[]
 
   @@schema("public")
@@ -841,7 +841,7 @@ model overtime_requests {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model parent_student {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   parent_id         String   @db.Uuid
   student_id        String   @db.Uuid
   relationship      String?  @default("parent")
@@ -852,8 +852,8 @@ model parent_student {
   emergency_contact Boolean  @default(false)
   lives_with        Boolean  @default(false)
   status            String   @default("active")
-  profiles     profiles @relation(fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  students     students @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  profiles          profiles @relation(fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  students          students @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([parent_id, student_id])
   @@index([parent_id], map: "idx_parent_student_parent")
@@ -1722,6 +1722,42 @@ enum student_status {
   active
   inactive
   alumni
+
+  @@schema("public")
+}
+
+model hr_employment_types {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  code       String   @unique
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("public")
+}
+
+model hr_pay_grades {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  code       String   @unique
+  level      Int      @default(1)
+  min_salary Decimal? @db.Decimal
+  max_salary Decimal? @db.Decimal
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("public")
+}
+
+model hr_leave_types {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  code          String   @unique
+  annual_quota  Int      @default(0)
+  is_paid       Boolean  @default(true)
+  carry_forward Boolean  @default(false)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
 
   @@schema("public")
 }

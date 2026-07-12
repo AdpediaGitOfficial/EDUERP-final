@@ -246,6 +246,22 @@ export class HrController {
     return this.hr.addStaffDocument(actor, id, dto.docType, dto.fileUrl, dto.title);
   }
 
+  // ---- Org-setup masters --------------------------------------------------
+  @Get("employment-types")
+  listEmploymentTypes() {
+    return this.hr.listEmploymentTypes();
+  }
+
+  @Get("pay-grades")
+  listPayGrades() {
+    return this.hr.listPayGrades();
+  }
+
+  @Get("leave-types")
+  listLeaveTypes() {
+    return this.hr.listLeaveTypes();
+  }
+
   // ---- Departments --------------------------------------------------------
   @Get("departments")
   listDepartments() {
