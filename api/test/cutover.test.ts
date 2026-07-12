@@ -3325,3 +3325,42 @@ describe("Academics: promotion engine", () => {
     });
   });
 });
+
+describe("Academics: academic calendar", () => {
+  const patch8 = (p: string, r: keyof typeof ACCOUNTS, body: any) =>
+    request(http).patch(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`).send(body);
+  const del8 = (p: string, r: keyof typeof ACCOUNTS) =>
+    request(http).delete(`/api${p}`).set("Authorization", `Bearer ${tokens[r]}`);
+
+  it("lists events (folding in holidays), CRUD an event, RBAC + validation", async () => {
+    const list = await get("/academics/calendar", "admin");
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body)).toBe(true);
+    // holidays are folded in as read-only calendar entries
+    expect(list.body.some((e: any) => e.source === "holiday")).toBe(true);
+    // seeded academic events present
+    expect(list.body.some((e: any) => e.eventType === "exam")).toBe(true);
+
+    // teacher cannot write; invalid type 400
+    expect((await post("/academics/calendar", "teacher", { title: "X", start_date: "2027-01-01" })).status).toBe(403);
+    expect(
+      (await post("/academics/calendar", "admin", { title: "X", start_date: "2027-01-01", event_type: "nope" })).status,
+    ).toBe(400);
+
+    const created = await post("/academics/calendar", "admin", {
+      title: "Jest Founders Day",
+      event_type: "event",
+      start_date: "2027-03-03",
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+
+    expect((await patch8(`/academics/calendar/${id}`, "admin", { title: "Jest Founders Day v2", start_date: "2027-03-04" })).status).toBe(200);
+    const after = (await get("/academics/calendar", "admin")).body.find((e: any) => e.id === id);
+    expect(after.title).toBe("Jest Founders Day v2");
+    expect(after.source).toBe("calendar");
+
+    expect((await del8(`/academics/calendar/${id}`, "admin")).status).toBe(200);
+    expect((await get("/academics/calendar", "admin")).body.some((e: any) => e.id === id)).toBe(false);
+  });
+});

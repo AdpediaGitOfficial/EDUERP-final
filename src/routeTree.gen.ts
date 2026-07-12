@@ -120,6 +120,7 @@ import { Route as AuthenticatedAcademicsSessionsRouteImport } from './routes/_au
 import { Route as AuthenticatedAcademicsRoomsRouteImport } from './routes/_authenticated/academics.rooms'
 import { Route as AuthenticatedAcademicsPromoteRouteImport } from './routes/_authenticated/academics.promote'
 import { Route as AuthenticatedAcademicsElectivesRouteImport } from './routes/_authenticated/academics.electives'
+import { Route as AuthenticatedAcademicsCalendarRouteImport } from './routes/_authenticated/academics.calendar'
 import { Route as AuthenticatedStudentsStudentIdIndexRouteImport } from './routes/_authenticated/students.$studentId.index'
 import { Route as AuthenticatedHrStaffIndexRouteImport } from './routes/_authenticated/hr.staff.index'
 import { Route as AuthenticatedFleetVehiclesIndexRouteImport } from './routes/_authenticated/fleet.vehicles.index'
@@ -750,6 +751,12 @@ const AuthenticatedAcademicsElectivesRoute =
     path: '/electives',
     getParentRoute: () => AuthenticatedAcademicsRoute,
   } as any)
+const AuthenticatedAcademicsCalendarRoute =
+  AuthenticatedAcademicsCalendarRouteImport.update({
+    id: '/calendar',
+    path: '/calendar',
+    getParentRoute: () => AuthenticatedAcademicsRoute,
+  } as any)
 const AuthenticatedStudentsStudentIdIndexRoute =
   AuthenticatedStudentsStudentIdIndexRouteImport.update({
     id: '/',
@@ -862,6 +869,7 @@ export interface FileRoutesByFullPath {
   '/teachers': typeof AuthenticatedTeachersRouteWithChildren
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/academics/calendar': typeof AuthenticatedAcademicsCalendarRoute
   '/academics/electives': typeof AuthenticatedAcademicsElectivesRoute
   '/academics/promote': typeof AuthenticatedAcademicsPromoteRoute
   '/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
@@ -974,6 +982,7 @@ export interface FileRoutesByTo {
   '/student-categories': typeof AuthenticatedStudentCategoriesRoute
   '/timetable': typeof AuthenticatedTimetableRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/academics/calendar': typeof AuthenticatedAcademicsCalendarRoute
   '/academics/electives': typeof AuthenticatedAcademicsElectivesRoute
   '/academics/promote': typeof AuthenticatedAcademicsPromoteRoute
   '/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
@@ -1099,6 +1108,7 @@ export interface FileRoutesById {
   '/_authenticated/teachers': typeof AuthenticatedTeachersRouteWithChildren
   '/_authenticated/timetable': typeof AuthenticatedTimetableRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
+  '/_authenticated/academics/calendar': typeof AuthenticatedAcademicsCalendarRoute
   '/_authenticated/academics/electives': typeof AuthenticatedAcademicsElectivesRoute
   '/_authenticated/academics/promote': typeof AuthenticatedAcademicsPromoteRoute
   '/_authenticated/academics/rooms': typeof AuthenticatedAcademicsRoomsRoute
@@ -1225,6 +1235,7 @@ export interface FileRouteTypes {
     | '/teachers'
     | '/timetable'
     | '/users'
+    | '/academics/calendar'
     | '/academics/electives'
     | '/academics/promote'
     | '/academics/rooms'
@@ -1337,6 +1348,7 @@ export interface FileRouteTypes {
     | '/student-categories'
     | '/timetable'
     | '/users'
+    | '/academics/calendar'
     | '/academics/electives'
     | '/academics/promote'
     | '/academics/rooms'
@@ -1461,6 +1473,7 @@ export interface FileRouteTypes {
     | '/_authenticated/teachers'
     | '/_authenticated/timetable'
     | '/_authenticated/users'
+    | '/_authenticated/academics/calendar'
     | '/_authenticated/academics/electives'
     | '/_authenticated/academics/promote'
     | '/_authenticated/academics/rooms'
@@ -2333,6 +2346,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAcademicsElectivesRouteImport
       parentRoute: typeof AuthenticatedAcademicsRoute
     }
+    '/_authenticated/academics/calendar': {
+      id: '/_authenticated/academics/calendar'
+      path: '/calendar'
+      fullPath: '/academics/calendar'
+      preLoaderRoute: typeof AuthenticatedAcademicsCalendarRouteImport
+      parentRoute: typeof AuthenticatedAcademicsRoute
+    }
     '/_authenticated/students/$studentId/': {
       id: '/_authenticated/students/$studentId/'
       path: '/'
@@ -2421,6 +2441,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedAcademicsRouteChildren {
+  AuthenticatedAcademicsCalendarRoute: typeof AuthenticatedAcademicsCalendarRoute
   AuthenticatedAcademicsElectivesRoute: typeof AuthenticatedAcademicsElectivesRoute
   AuthenticatedAcademicsPromoteRoute: typeof AuthenticatedAcademicsPromoteRoute
   AuthenticatedAcademicsRoomsRoute: typeof AuthenticatedAcademicsRoomsRoute
@@ -2433,6 +2454,7 @@ interface AuthenticatedAcademicsRouteChildren {
 
 const AuthenticatedAcademicsRouteChildren: AuthenticatedAcademicsRouteChildren =
   {
+    AuthenticatedAcademicsCalendarRoute: AuthenticatedAcademicsCalendarRoute,
     AuthenticatedAcademicsElectivesRoute: AuthenticatedAcademicsElectivesRoute,
     AuthenticatedAcademicsPromoteRoute: AuthenticatedAcademicsPromoteRoute,
     AuthenticatedAcademicsRoomsRoute: AuthenticatedAcademicsRoomsRoute,

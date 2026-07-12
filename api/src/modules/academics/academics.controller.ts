@@ -72,6 +72,17 @@ class SubjectActiveDto {
   @IsBoolean() is_active: boolean;
 }
 
+class CalendarEventDto {
+  @IsOptional() @IsString() session?: string;
+  @IsString() @MinLength(1) title: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional()
+  @IsIn(["exam", "event", "ptm", "sports", "annual_day", "vacation", "training", "holiday", "working_day"])
+  event_type?: string;
+  @IsDateString() start_date: string;
+  @IsOptional() @IsDateString() end_date?: string;
+}
+
 class PromotionItemDto {
   @IsUUID() student_id: string;
   @IsIn(["promoted", "detained", "passed_out"]) result: string;
@@ -236,6 +247,30 @@ export class AcademicsController {
   @Get("classes/:id")
   getClass(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.academics.getClass(actor, id);
+  }
+
+  @Get("academics/calendar")
+  listCalendar(@CurrentUser() actor: AuthUser, @Query("session") session?: string) {
+    return this.academics.listCalendar(actor, session);
+  }
+
+  @Post("academics/calendar")
+  createCalendarEvent(@CurrentUser() actor: AuthUser, @Body() dto: CalendarEventDto) {
+    return this.academics.createCalendarEvent(actor, dto);
+  }
+
+  @Patch("academics/calendar/:id")
+  updateCalendarEvent(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: CalendarEventDto,
+  ) {
+    return this.academics.updateCalendarEvent(actor, id, dto);
+  }
+
+  @Delete("academics/calendar/:id")
+  deleteCalendarEvent(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.academics.deleteCalendarEvent(actor, id);
   }
 
   @Get("academics/promotion/preview")

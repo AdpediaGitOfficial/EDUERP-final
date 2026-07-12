@@ -11,6 +11,14 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
+export interface CalendarEventInput {
+  session?: string | null;
+  title: string;
+  description?: string | null;
+  event_type?: string;
+  start_date: string;
+  end_date?: string | null;
+}
 export interface ElectiveOfferingInput {
   name: string;
   code?: string | null;
@@ -1179,6 +1187,88 @@ export class AcademicsService {
         "This room is still assigned to classes or timetable slots; disable it instead.",
       );
     await this.prisma.classrooms.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  // ── Academic calendar ───────────────────────────────────────────────────────
+
+  /** Calendar events for a session, folding in the holidays table (read-only). */
+  async listCalendar(actor: AuthUser, session?: string) {
+    this.requireAcademicAdmin(actor);
+    const resolved = session && session !== "all" ? session : ((await this.currentYear()) ?? undefined);
+    const [events, holidays] = await Promise.all([
+      this.prisma.academic_calendar.findMany({
+        where: resolved ? { session: resolved } : {},
+        orderBy: { start_date: "asc" },
+      }),
+      this.prisma.holidays.findMany({ orderBy: { start_date: "asc" } }),
+    ]);
+    const mapped = events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      description: e.description,
+      eventType: e.event_type,
+      startDate: e.start_date,
+      endDate: e.end_date,
+      session: e.session,
+      source: "calendar" as const,
+    }));
+    const holidayEvents = holidays.map((h) => ({
+      id: h.id,
+      title: h.name,
+      description: h.description,
+      eventType: "holiday" as const,
+      startDate: h.start_date,
+      endDate: h.end_date,
+      session: null,
+      source: "holiday" as const,
+    }));
+    return [...mapped, ...holidayEvents].sort(
+      (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+    );
+  }
+
+  async createCalendarEvent(actor: AuthUser, input: CalendarEventInput) {
+    this.requireAcademicAdmin(actor);
+    const staff = await this.prisma.profiles.findUnique({ where: { id: actor.id } });
+    const row = await this.prisma.academic_calendar.create({
+      data: {
+        session: input.session || (await this.currentYear()),
+        title: input.title,
+        description: input.description || null,
+        event_type: input.event_type || "event",
+        start_date: new Date(input.start_date),
+        end_date: input.end_date ? new Date(input.end_date) : null,
+        created_by: staff?.id ?? null,
+      },
+    });
+    return { id: row.id };
+  }
+
+  async updateCalendarEvent(actor: AuthUser, id: string, input: CalendarEventInput) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.academic_calendar.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Event not found");
+    await this.prisma.academic_calendar.update({
+      where: { id },
+      data: {
+        session: input.session || existing.session,
+        title: input.title,
+        description: input.description || null,
+        event_type: input.event_type || existing.event_type,
+        start_date: new Date(input.start_date),
+        end_date: input.end_date ? new Date(input.end_date) : null,
+        updated_at: new Date(),
+      },
+    });
+    return { ok: true };
+  }
+
+  async deleteCalendarEvent(actor: AuthUser, id: string) {
+    this.requireAcademicAdmin(actor);
+    const existing = await this.prisma.academic_calendar.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Event not found");
+    await this.prisma.academic_calendar.delete({ where: { id } });
     return { ok: true };
   }
 
