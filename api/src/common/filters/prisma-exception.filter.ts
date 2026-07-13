@@ -50,9 +50,19 @@ export class PrismaExceptionFilter implements ExceptionFilter {
           status = HttpStatus.BAD_REQUEST;
           message = "Invalid input";
           break;
+        case "P2021": // table does not exist in the current database
+          status = HttpStatus.INTERNAL_SERVER_ERROR;
+          message =
+            "Database schema out of date: a required table is missing. Run the migrations on this environment.";
+          break;
+        case "P2022": // column does not exist in the current database
+          status = HttpStatus.INTERNAL_SERVER_ERROR;
+          message =
+            "Database schema out of date: a required column is missing. Apply the latest migrations, then run `prisma generate`.";
+          break;
         default:
           status = HttpStatus.INTERNAL_SERVER_ERROR;
-          message = "Database error";
+          message = `Database error (${exception.code})`;
       }
     } else if (exception instanceof Prisma.PrismaClientValidationError) {
       status = HttpStatus.BAD_REQUEST;
@@ -68,7 +78,15 @@ export class PrismaExceptionFilter implements ExceptionFilter {
     }
 
     if (status >= 500) {
-      this.logger.error(exception instanceof Error ? exception.stack : String(exception));
+      // Surface the Prisma code + meta (e.g. which table/column) so schema-drift
+      // problems are diagnosable from the server log, not just a generic 500.
+      if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+        this.logger.error(
+          `Prisma ${exception.code}: ${exception.message} | meta=${JSON.stringify(exception.meta ?? {})}`,
+        );
+      } else {
+        this.logger.error(exception instanceof Error ? exception.stack : String(exception));
+      }
     }
     res.status(status).json({ statusCode: status, error: HttpStatus[status], message });
   }
