@@ -104,25 +104,27 @@ payments, staff) is untouched.
 ## (Optional) Start production with a clean, demo-free dataset
 
 Only if this server should go live **without** the demo students. This **deletes
-data** — take a backup first and be sure.
+data** — take a backup first. Use the dedicated script `api/db/cleanup-demo-data.sh`;
+it is **dry-run by default** (rolls back and just prints what it would remove).
 
-Demo accounts are identifiable by email; deleting a profile cascades to its
-student/parent rows and their fees/payments.
+```bash
+# 1) BACK UP
+pg_dump "$DATABASE_URL" -Fc -f backup_$(date +%F_%H%M).dump
 
-```sql
--- DRY RUN: see what would be removed
-SELECT count(*) FROM profiles WHERE email LIKE '%@demo.local' OR email LIKE '%@example.com';
+# 2) PREVIEW — deletes nothing, prints the counts (matched users, students,
+#    parents, and the fee/payment rows that would cascade)
+DATABASE_URL="$DATABASE_URL" api/db/cleanup-demo-data.sh
 
--- Remove demo students + parents (cascades to fees/payments/links). Review first!
-BEGIN;
-DELETE FROM profiles
- WHERE email LIKE '%@demo.local'
-    OR email LIKE '%@example.com'
-    OR email LIKE '%@parent.greenwood.test';
-COMMIT;
+# 3) APPLY once the counts look right
+DATABASE_URL="$DATABASE_URL" api/db/cleanup-demo-data.sh --commit
 ```
 
-Keep the real staff/admin logins you use to sign in. After cleanup, re-run
-`api/db/check-schema.sql` (schema is unaffected) and reload the app — the
-Students list will reflect the trimmed dataset. Adjust the email patterns to
-match how your demo data was seeded before running this.
+It removes every profile+login whose email matches the demo pattern (default
+`%@demo.local`, i.e. `seed.student.*` / `seed.parent.*`) and everything that
+cascades from it (student rows, fees, payments, attendance, medical, parent
+links). It **keeps** your real staff/admin logins, the `@greenwood.test` demo
+logins you sign in with, and any real students you admitted. Widen the match for
+other demo domains with `DEMO_LIKE='%@demo.local' DEMO_LIKE2='%@example.com' … --commit`.
+
+Deleting data does not affect the schema, so no re-migration is needed — just
+reload the app and the Students list reflects the trimmed dataset.
