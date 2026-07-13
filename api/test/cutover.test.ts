@@ -3397,3 +3397,58 @@ describe("Academics: reports & analytics", () => {
     expect((await get("/academics/reports/class_strength", "teacher")).status).toBe(403);
   });
 });
+
+describe("hr: payroll generation + pay + payslip", () => {
+  const YEAR = 2099;
+  const MONTH = 12; // a far-future month kept isolated from real data
+
+  it("a non-HR user cannot generate payroll (403)", async () => {
+    expect((await post("/hr/payroll/generate", "teacher", { year: YEAR, month: MONTH })).status).toBe(403);
+  });
+
+  it("admin generates payroll for a month", async () => {
+    const res = await post("/hr/payroll/generate", "admin", { year: YEAR, month: MONTH });
+    expect(res.status).toBe(201);
+    expect(res.body.generated).toBeGreaterThan(0);
+    expect(res.body.daysInMonth).toBe(31);
+  });
+
+  it("the month appears in the grouped list with a per-employee breakdown", async () => {
+    const months = await get("/hr/payroll/months", "admin");
+    expect(months.status).toBe(200);
+    expect(months.body.some((m: any) => new Date(m.month).getUTCFullYear() === YEAR)).toBe(true);
+
+    const detail = await get(`/hr/payroll/detail?year=${YEAR}&month=${MONTH}`, "admin");
+    expect(detail.status).toBe(200);
+    expect(detail.body.rows.length).toBeGreaterThan(0);
+    const row = detail.body.rows[0];
+    // net = gross − attendance − statutory − other
+    const net =
+      Number(row.grossSalary) -
+      Number(row.attendanceDeduction) -
+      Number(row.statutoryDeductions) -
+      Number(row.otherDeductions);
+    expect(Math.abs(net - Number(row.netSalary))).toBeLessThan(0.05);
+    expect(row.status).toBe("pending");
+  });
+
+  it("pays a run, serves its payslip PDF, and skips it on re-generate", async () => {
+    const detail = await get(`/hr/payroll/detail?year=${YEAR}&month=${MONTH}`, "admin");
+    const run = detail.body.rows[0];
+
+    const paid = await patch(`/hr/payroll/runs/${run.id}/pay`, "admin", {});
+    expect(paid.status).toBe(200);
+
+    const pdf = await get(`/hr/payroll/runs/${run.id}/payslip.pdf`, "admin");
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers["content-type"]).toContain("application/pdf");
+
+    const regen = await post("/hr/payroll/generate", "admin", { year: YEAR, month: MONTH });
+    expect(regen.status).toBe(201);
+    expect(regen.body.skippedPaid).toBeGreaterThanOrEqual(1);
+
+    // a paid run can't be edited
+    const edit = await patch(`/hr/payroll/runs/${run.id}`, "admin", { other_deductions: 10 });
+    expect(edit.status).toBe(400);
+  });
+});
