@@ -581,6 +581,7 @@ type SortDir = "asc" | "desc";
 // Toggleable columns for the admin students table (Student + Class stay fixed).
 const COL_DEFS = [
   { key: "admission_no", label: "Admission #" },
+  { key: "parent", label: "Parent" },
   { key: "gender", label: "Gender" },
   { key: "status", label: "Status" },
   { key: "attendance", label: "Attendance" },
@@ -733,8 +734,12 @@ function AdminStudentsView() {
         method: "POST",
         body: JSON.stringify({ ids: rowIds }),
       });
-      const data = res ? await res.json() : { attendance: {}, fees: {} };
-      return { attMap: data.attendance ?? {}, feeMap: data.fees ?? {} };
+      const data = res ? await res.json() : { attendance: {}, fees: {}, parent: {} };
+      return {
+        attMap: data.attendance ?? {},
+        feeMap: data.fees ?? {},
+        parentMap: data.parent ?? {},
+      };
     },
   });
 
@@ -1156,6 +1161,7 @@ function AdminStudentsView() {
                     Class {sortIcon("class")}
                   </button>
                 </th>
+                {cols.parent && <th className="p-3 font-medium">Parent</th>}
                 {cols.gender && <th className="p-3 font-medium">Gender</th>}
                 {cols.status && <th className="p-3 font-medium">Status</th>}
                 {cols.attendance && <th className="p-3 font-medium">Attendance</th>}
@@ -1215,6 +1221,24 @@ function AdminStudentsView() {
                       {r.class_name ?? "—"}
                       {r.class_section && ` · ${r.class_section}`}
                     </td>
+                    {cols.parent &&
+                      (() => {
+                        const p = extras?.parentMap[r.id];
+                        return (
+                          <td className="p-3">
+                            {p ? (
+                              <div className="min-w-0">
+                                <div className="font-medium truncate">{p.name}</div>
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {p.phone ?? p.email ?? "—"}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        );
+                      })()}
                     {cols.gender && (
                       <td className="p-3 capitalize text-muted-foreground">{r.gender ?? "—"}</td>
                     )}
@@ -1249,7 +1273,7 @@ function AdminStudentsView() {
               })}
               {(rows ?? []).length === 0 && !isFetching && (
                 <EmptyRow
-                  colSpan={9}
+                  colSpan={11}
                   icon={GraduationCap}
                   title="No students match these filters"
                   hint="Try clearing the grade or status filter, or adjust your search."
