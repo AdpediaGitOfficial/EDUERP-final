@@ -72,6 +72,10 @@ class DocumentDto {
 
 class SendPassDto {
   @IsIn(["student", "parent"]) target: "student" | "parent";
+  // Optional custom password; if omitted a strong one is generated.
+  @IsOptional() @IsString() @MinLength(6) @MaxLength(72) password?: string;
+  // When false, set/reveal the password but don't notify the user. Default true.
+  @IsOptional() @IsBoolean() send?: boolean;
 }
 
 class DocumentUpdateDto {
@@ -110,7 +114,10 @@ export class StudentProfileController {
     @Param("studentId", new ParseUUIDPipe()) studentId: string,
     @Body() dto: SendPassDto,
   ) {
-    return this.svc.sendPass(actor, studentId, dto.target);
+    return this.svc.sendPass(actor, studentId, dto.target, {
+      password: dto.password,
+      send: dto.send,
+    });
   }
 
   @Put("medical")

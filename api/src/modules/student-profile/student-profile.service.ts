@@ -642,7 +642,12 @@ export class StudentProfileService {
    * as a notification "pass". Desk-only. Returns the one-time password so the UI
    * can also show it once — it is never stored.
    */
-  async sendPass(actor: AuthUser, studentId: string, target: "student" | "parent") {
+  async sendPass(
+    actor: AuthUser,
+    studentId: string,
+    target: "student" | "parent",
+    opts?: { password?: string; send?: boolean },
+  ) {
     this.requireDesk(actor);
     await this.assertReadable(actor, studentId);
     const student = await this.prisma.students.findUnique({
@@ -653,6 +658,7 @@ export class StudentProfileService {
 
     let userId = student.profile_id;
     let label = "student";
+    let role = "student";
     if (target === "parent") {
       const primary = await this.prisma.parent_student.findFirst({
         where: { student_id: studentId },
@@ -662,19 +668,31 @@ export class StudentProfileService {
       if (!primary) throw new BadRequestException("No parent linked to this student");
       userId = primary.parent_id;
       label = "parent";
+      role = "parent";
     }
 
-    const tempPassword = `Pass-${randomBytes(4).toString("hex")}!`;
-    await this.auth.adminSetPassword(userId, tempPassword);
-    await this.notifications
-      .notify({
-        senderId: actor.id,
-        userIds: [userId],
-        subject: "Your portal login pass",
-        body: `A new ${label} portal password has been set for ${student.profiles?.full_name ?? "the student"}. Please sign in and change it.`,
-      })
-      .catch(() => undefined);
-    await this.log(studentId, actor, "pass_sent", `${label} portal pass regenerated and sent`);
-    return { ok: true, target, userId, tempPassword };
+    const tempPassword = opts?.password?.trim() || `Pass-${randomBytes(4).toString("hex")}!`;
+    // roleIfMissing lets adminSetPassword self-provision a login when the profile
+    // has no auth account yet (the source of the old "Resource not found" 404).
+    await this.auth.adminSetPassword(userId, tempPassword, { roleIfMissing: role });
+
+    const send = opts?.send !== false;
+    if (send) {
+      await this.notifications
+        .notify({
+          senderId: actor.id,
+          userIds: [userId],
+          subject: "Your portal login pass",
+          body: `A new ${label} portal password has been set for ${student.profiles?.full_name ?? "the student"}. Please sign in and change it.`,
+        })
+        .catch(() => undefined);
+    }
+    await this.log(
+      studentId,
+      actor,
+      "pass_sent",
+      `${label} portal password ${send ? "set and sent" : "set"}`,
+    );
+    return { ok: true, target, userId, tempPassword, sent: send };
   }
 }

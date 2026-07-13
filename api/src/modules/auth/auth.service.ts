@@ -1,4 +1,10 @@
-import { ConflictException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import bcrypt from "bcryptjs";
 import { createHash, randomUUID } from "node:crypto";
@@ -185,15 +191,81 @@ export class AuthService {
    * directly and clears any outstanding recovery token so old reset links die.
    * The admin shares the returned temporary password with the user out-of-band.
    */
-  async adminSetPassword(userId: string, password: string): Promise<void> {
+  async adminSetPassword(
+    userId: string,
+    password: string,
+    opts?: { roleIfMissing?: string },
+  ): Promise<void> {
+    const hash = await bcrypt.hash(password, 10);
+    const existing = await this.prisma.users.findUnique({ where: { id: userId } });
+    if (existing) {
+      await this.prisma.users.update({
+        where: { id: userId },
+        data: { encrypted_password: hash, recovery_token: "", updated_at: new Date() },
+      });
+      return;
+    }
+    // No login account yet (common for admission-created student/parent profiles
+    // that were never provisioned). Self-heal by creating one from the profile so
+    // admin "reset password" never 404s. A login requires an email address.
+    const profile = await this.prisma.profiles.findUnique({
+      where: { id: userId },
+      select: { email: true, full_name: true },
+    });
+    if (!profile) throw new BadRequestException("No profile found for this account.");
+    if (!profile.email) {
+      throw new BadRequestException(
+        "This person has no email on file — add an email before creating a login.",
+      );
+    }
+    const email = profile.email.toLowerCase();
+    // If a login already exists under this email (different id), reset that one.
+    const byEmail = await this.prisma.users.findUnique({ where: { email } });
+    if (byEmail) {
+      await this.prisma.users.update({
+        where: { id: byEmail.id },
+        data: { encrypted_password: hash, recovery_token: "", updated_at: new Date() },
+      });
+      return;
+    }
+    const name = profile.full_name?.trim() || email.split("@")[0];
+    await this.prisma.$transaction(async (tx) => {
+      await tx.users.create({
+        data: {
+          id: userId, // keep profile.id === user.id, as the app assumes everywhere
+          email,
+          encrypted_password: hash,
+          aud: "authenticated",
+          role: "authenticated",
+          email_confirmed_at: new Date(),
+          raw_app_meta_data: { provider: "email", providers: ["email"] },
+          raw_user_meta_data: { full_name: name },
+        },
+      });
+      if (opts?.roleIfMissing) {
+        await tx.$executeRaw`INSERT INTO public.user_roles (user_id, role) VALUES (${userId}::uuid, ${opts.roleIfMissing}::app_role) ON CONFLICT DO NOTHING`;
+      }
+    });
+  }
+
+  /**
+   * Self-service password change for a signed-in user. Sets a new hash directly
+   * (no current-password check, by product decision) and clears any outstanding
+   * recovery token so old reset links die.
+   */
+  async changeOwnPassword(userId: string, newPassword: string): Promise<{ ok: true }> {
+    if (!newPassword || newPassword.length < 6) {
+      throw new BadRequestException("Password must be at least 6 characters.");
+    }
     await this.prisma.users.update({
       where: { id: userId },
       data: {
-        encrypted_password: await bcrypt.hash(password, 10),
+        encrypted_password: await bcrypt.hash(newPassword, 10),
         recovery_token: "",
         updated_at: new Date(),
       },
     });
+    return { ok: true };
   }
 
   async refresh(refreshToken: string): Promise<{ user: SessionUser; tokens: TokenPair }> {

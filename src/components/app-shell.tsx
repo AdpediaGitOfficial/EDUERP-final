@@ -10,6 +10,7 @@ import {
   Palmtree,
   Settings,
   LogOut,
+  KeyRound,
   School,
   BarChart3,
   Search,
@@ -212,6 +213,12 @@ function OuterAppShell({ children }: { children: ReactNode }) {
 
   const footer = (
     <div className="p-3 border-t shrink-0">
+      <Link
+        to="/account"
+        className="w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground transition-colors"
+      >
+        <KeyRound className="size-4" /> Account &amp; password
+      </Link>
       <button
         onClick={signOut}
         className="w-full flex items-center gap-3 px-3 py-3 min-h-[44px] rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground transition-colors"

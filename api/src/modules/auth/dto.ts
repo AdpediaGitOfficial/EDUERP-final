@@ -35,3 +35,9 @@ export class ResetPasswordDto {
   @MinLength(6)
   password: string;
 }
+
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(6)
+  newPassword: string;
+}

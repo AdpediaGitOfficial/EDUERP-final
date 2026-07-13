@@ -11,7 +11,13 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
-import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from "./dto";
+import {
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+} from "./dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 
@@ -76,5 +82,12 @@ export class AuthController {
   @Get("me")
   async me(@CurrentUser() user: AuthUser) {
     return this.auth.resolveSessionUser(user.id, user.email);
+  }
+
+  // Self-service: any signed-in user changes their own password.
+  @UseGuards(JwtAuthGuard)
+  @Post("change-password")
+  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
+    return this.auth.changeOwnPassword(user.id, dto.newPassword);
   }
 }

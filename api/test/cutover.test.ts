@@ -3641,3 +3641,52 @@ describe("fees collection: filters, drill-down, collect, receipt, reminders", ()
     ).toBe(403);
   }, 30_000);
 });
+
+describe("account credentials: self-service change-password + admin set/reveal", () => {
+  const relogin = (email: string, password: string) =>
+    request(http).post("/api/auth/login").send({ email, password });
+
+  it("a signed-in user changes their own password, then restores it", async () => {
+    const temp = `Temp-${process.env.VITEST_WORKER_ID ?? "0"}-123`;
+    // change → new password works
+    const ch = await request(http)
+      .post("/api/auth/change-password")
+      .set("Authorization", `Bearer ${tokens.student}`)
+      .send({ newPassword: temp });
+    expect(ch.status).toBe(201);
+    expect((await relogin(ACCOUNTS.student, temp)).status).toBe(201);
+    // too-short is rejected
+    const bad = await request(http)
+      .post("/api/auth/change-password")
+      .set("Authorization", `Bearer ${tokens.student}`)
+      .send({ newPassword: "123" });
+    expect(bad.status).toBe(400);
+    // restore the demo password so other suites/logins keep working
+    const back = await request(http)
+      .post("/api/auth/change-password")
+      .set("Authorization", `Bearer ${tokens.student}`)
+      .send({ newPassword: PASSWORD });
+    expect(back.status).toBe(201);
+    expect((await relogin(ACCOUNTS.student, PASSWORD)).status).toBe(201);
+  });
+
+  it("admin sets & reveals a student portal password; teacher cannot", async () => {
+    const list = await get("/students?pageSize=1", "admin");
+    const studentId = list.body.rows[0].id;
+
+    const res = await post(`/students/${studentId}/profile/send-pass`, "admin", {
+      target: "student",
+      password: "SetByAdmin123",
+      send: false,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.tempPassword).toBe("SetByAdmin123");
+    expect(res.body.sent).toBe(false);
+
+    // a teacher has no business setting portal passwords (desk-gated)
+    const denied = await post(`/students/${studentId}/profile/send-pass`, "teacher", {
+      target: "student",
+    });
+    expect(denied.status).toBe(403);
+  });
+});
