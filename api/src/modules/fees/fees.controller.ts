@@ -17,7 +17,11 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import { streamReceiptPdf } from "../../common/pdf/receipt-pdf";
+import { streamCollectionReceiptPdf } from "../../common/pdf/collection-receipt-pdf";
+import { Type } from "class-transformer";
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsIn,
@@ -27,6 +31,7 @@ import {
   IsUUID,
   Min,
   MinLength,
+  ValidateNested,
 } from "class-validator";
 
 const SCHOOL_NAME = process.env.SCHOOL_NAME || "Greenwood International School";
@@ -105,8 +110,8 @@ class OnlinePaymentDto {
   @IsUUID()
   feeAssignmentId: string;
 
-  @IsIn(["upi", "card", "netbanking", "wallet"])
-  method: "upi" | "card" | "netbanking" | "wallet";
+  @IsIn(["upi", "card", "netbanking"])
+  method: "upi" | "card" | "netbanking";
 
   @IsOptional()
   @IsString()
@@ -122,10 +127,154 @@ class OnlinePaymentDto {
   simulateOutcome?: "successful" | "pending" | "failed";
 }
 
+class CollectLineDto {
+  @IsUUID()
+  feeAssignmentId: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  paying?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  discount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fine?: number;
+}
+
+class CollectPaymentsDto {
+  @IsUUID()
+  studentId: string;
+
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
+
+  @IsOptional()
+  @IsString()
+  method?: string;
+
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @IsOptional()
+  @IsString()
+  depositAccount?: string;
+
+  @IsOptional()
+  @IsString()
+  receiptNo?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @ValidateNested({ each: true })
+  @Type(() => CollectLineDto)
+  lines: CollectLineDto[];
+}
+
+class SendRemindersDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID("all", { each: true })
+  studentIds: string[];
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsIn(["sms", "whatsapp", "email", "in_app"], { each: true })
+  channels: string[];
+
+  @IsOptional()
+  @IsString()
+  message?: string;
+}
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller()
 export class FeesController {
   constructor(@Inject(FeesService) private readonly fees: FeesService) {}
+
+  // ============================ Fees Collection ============================
+
+  @Get("fees/collection/filters")
+  @Roles("admin", "accountant")
+  collectionFilters(@CurrentUser() actor: AuthUser) {
+    return this.fees.collectionFilters(actor);
+  }
+
+  @Get("fees/collection/students")
+  @Roles("admin", "accountant")
+  collectionStudents(
+    @CurrentUser() actor: AuthUser,
+    @Query("academicYear") academicYear?: string,
+    @Query("className") className?: string,
+    @Query("section") section?: string,
+    @Query("category") category?: string,
+    @Query("status") status?: string,
+    @Query("dueDate") dueDate?: string,
+    @Query("search") search?: string,
+    @Query("onlyDue") onlyDue?: string,
+    @Query("page", new ParseIntPipe({ optional: true })) page?: number,
+    @Query("pageSize", new ParseIntPipe({ optional: true })) pageSize?: number,
+  ) {
+    return this.fees.collectionStudents(actor, {
+      academicYear,
+      className,
+      section,
+      category,
+      status,
+      dueDate,
+      search,
+      onlyDue: onlyDue === "1" || onlyDue === "true",
+      page,
+      pageSize,
+    });
+  }
+
+  @Get("fees/collection/students/:id")
+  @Roles("admin", "accountant")
+  collectionStudentDetail(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.fees.collectionStudentDetail(actor, id);
+  }
+
+  @Get("fees/collection/students/:id/reminders")
+  @Roles("admin", "accountant")
+  reminderHistory(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.fees.reminderHistory(actor, id);
+  }
+
+  @Post("fees/collection/payments")
+  @Roles("admin", "accountant")
+  collect(@CurrentUser() actor: AuthUser, @Body() dto: CollectPaymentsDto) {
+    return this.fees.collectPayments(actor, dto);
+  }
+
+  @Post("fees/collection/reminders")
+  @Roles("admin", "accountant")
+  sendReminders(@CurrentUser() actor: AuthUser, @Body() dto: SendRemindersDto) {
+    return this.fees.sendReminders(actor, dto);
+  }
+
+  // Combined receipt for a collection (one or more payment ids from the batch).
+  @Get("fees/collection/receipt.pdf")
+  async collectionReceiptPdf(
+    @CurrentUser() actor: AuthUser,
+    @Query("ids") ids: string,
+    @Res() res: Response,
+  ) {
+    const paymentIds = (ids || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const data = await this.fees.collectionReceipt(actor, paymentIds);
+    streamCollectionReceiptPdf(res, { schoolName: SCHOOL_NAME, ...data });
+  }
 
   @Get("fees/assignments")
   assignments(

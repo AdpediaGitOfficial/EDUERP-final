@@ -3452,3 +3452,103 @@ describe("hr: payroll generation + pay + payslip", () => {
     expect(edit.status).toBe(400);
   });
 });
+
+describe("fees collection: filters, drill-down, collect, receipt, reminders", () => {
+  const grade8a = "4a99fe58-59b1-4503-b833-213f4e16d92b";
+  const tag = `Collect Test ${Date.now()}-${process.env.VITEST_WORKER_ID ?? "0"}`;
+
+  it("admin-only workspace drives collect + receipt + reminders end-to-end", async () => {
+    // Filter options; teacher has no finance visibility.
+    const filters = await get("/fees/collection/filters", "admin");
+    expect(filters.status).toBe(200);
+    expect(filters.body.statuses).toContain("overdue");
+    expect((await get("/fees/collection/filters", "teacher")).status).toBe(403);
+
+    // Seed a fresh, uniquely-named fee head on Grade 8 A.
+    const struct = await post("/fees/structures", "admin", { name: tag, amount: 4000, term: "Term 1" });
+    expect(struct.status).toBe(201);
+    const assigned = await post("/fees/assign", "admin", {
+      structureId: struct.body.id,
+      dueDate: "2026-10-01",
+      classId: grade8a,
+    });
+    expect(assigned.body.assigned).toBeGreaterThan(0);
+
+    // Filtered due list narrows to Grade 8 A.
+    const list = await get(
+      "/fees/collection/students?className=Grade%208&section=A&onlyDue=1&pageSize=5",
+      "admin",
+    );
+    expect(list.status).toBe(200);
+    expect(list.body.rows.length).toBeGreaterThan(0);
+    const student = list.body.rows[0];
+    expect(student.due).toBeGreaterThan(0);
+
+    // Drill-down groups by fee head; our head is present with a payable row.
+    const detail = await get(`/fees/collection/students/${student.studentId}`, "admin");
+    expect(detail.status).toBe(200);
+    const head = detail.body.heads.find((h: any) => h.title === tag);
+    expect(head).toBeTruthy();
+    const row = head.rows.find((r: any) => r.balance > 0);
+    expect(row.amount).toBe(4000);
+
+    // Collect: pay 1000, 500 concession, 100 fine → due 3600, paid 1000, partial.
+    const collect = await post("/fees/collection/payments", "admin", {
+      studentId: student.studentId,
+      method: "cash",
+      receiptNo: `RC-${process.env.VITEST_WORKER_ID ?? "0"}`,
+      note: "collection test",
+      lines: [{ feeAssignmentId: row.id, paying: 1000, discount: 500, fine: 100 }],
+    });
+    expect(collect.status).toBe(201);
+    expect(collect.body.paymentIds.length).toBe(1);
+    expect(collect.body.total).toBe(1000);
+
+    const after = await get(`/fees/collection/students/${student.studentId}`, "admin");
+    const rowAfter = after.body.heads
+      .find((h: any) => h.title === tag)
+      .rows.find((r: any) => r.id === row.id);
+    expect(rowAfter.amount).toBe(3600);
+    expect(rowAfter.paid).toBe(1000);
+    expect(rowAfter.balance).toBe(2600);
+    expect(rowAfter.status).toBe("partial");
+    expect(rowAfter.discount).toBe(500);
+    expect(rowAfter.fine).toBe(100);
+
+    // Combined receipt PDF for the collection.
+    const pdf = await get(`/fees/collection/receipt.pdf?ids=${collect.body.paymentIds[0]}`, "admin");
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers["content-type"]).toContain("pdf");
+
+    // Reminders across channels; unknown channel rejected by the DTO.
+    const remind = await post("/fees/collection/reminders", "admin", {
+      studentIds: [student.studentId],
+      channels: ["in_app"],
+    });
+    expect(remind.status).toBe(201);
+    expect(remind.body.sent).toBeGreaterThanOrEqual(1);
+    expect(
+      (
+        await post("/fees/collection/reminders", "admin", {
+          studentIds: [student.studentId],
+          channels: ["carrier_pigeon"],
+        })
+      ).status,
+    ).toBe(400);
+
+    const hist = await get(`/fees/collection/students/${student.studentId}/reminders`, "admin");
+    expect(hist.status).toBe(200);
+    expect(Array.isArray(hist.body)).toBe(true);
+    expect(hist.body.length).toBeGreaterThanOrEqual(1);
+
+    // A teacher cannot collect.
+    expect(
+      (
+        await post("/fees/collection/payments", "teacher", {
+          studentId: student.studentId,
+          lines: [{ feeAssignmentId: row.id, paying: 10 }],
+        })
+      ).status,
+    ).toBe(403);
+  }, 30_000);
+});

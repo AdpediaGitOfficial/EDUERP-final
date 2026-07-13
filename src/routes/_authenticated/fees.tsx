@@ -1202,7 +1202,7 @@ function PayDialog({
   onClose: () => void;
   onPaid: (receipt?: any) => void;
 }) {
-  const [method, setMethod] = useState<"upi" | "card" | "netbanking" | "wallet">("upi");
+  const [method, setMethod] = useState<"upi" | "card" | "netbanking">("upi");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<"successful" | "pending" | "failed">("successful");
@@ -1215,8 +1215,6 @@ function PayDialog({
   const [cardCvv, setCardCvv] = useState("");
   // Netbanking
   const [bank, setBank] = useState("");
-  // Wallet
-  const [wallet, setWallet] = useState("");
 
   const balance = assignment ? Number(assignment.amount_due) - Number(assignment.amount_paid) : 0;
   const payAmount = Number(amount) || balance;
@@ -1239,7 +1237,6 @@ function PayDialog({
     setCardExpiry("");
     setCardCvv("");
     setBank("");
-    setWallet("");
   };
 
   const submit = async () => {
@@ -1265,9 +1262,6 @@ function PayDialog({
     } else if (method === "netbanking") {
       if (!bank) return toast.error("Select your bank");
       instrument = bank;
-    } else if (method === "wallet") {
-      if (!wallet) return toast.error("Select a wallet");
-      instrument = wallet;
     }
     setSaving(true);
     let receipt: any = null;
@@ -1337,7 +1331,7 @@ function PayDialog({
             </div>
 
             <Tabs value={method} onValueChange={(v) => setMethod(v as any)}>
-              <TabsList className="grid grid-cols-4 w-full">
+              <TabsList className="grid grid-cols-3 w-full">
                 <TabsTrigger value="upi" className="gap-1">
                   <Smartphone className="size-3.5" /> UPI
                 </TabsTrigger>
@@ -1345,10 +1339,7 @@ function PayDialog({
                   <CreditCard className="size-3.5" /> Card
                 </TabsTrigger>
                 <TabsTrigger value="netbanking" className="gap-1">
-                  <Landmark className="size-3.5" /> Net
-                </TabsTrigger>
-                <TabsTrigger value="wallet" className="gap-1">
-                  <Wallet className="size-3.5" /> Wallet
+                  <Landmark className="size-3.5" /> Net Banking
                 </TabsTrigger>
               </TabsList>
 
@@ -1452,31 +1443,6 @@ function PayDialog({
                 <p className="text-[11px] text-muted-foreground">
                   You'll be redirected to your bank to authorize the payment.
                 </p>
-              </TabsContent>
-
-              <TabsContent value="wallet" className="mt-4 space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Select wallet</Label>
-                  <Select value={wallet} onValueChange={setWallet}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose wallet" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[
-                        "Paytm",
-                        "PhonePe",
-                        "Amazon Pay",
-                        "Mobikwik",
-                        "Freecharge",
-                        "Airtel Payments Bank",
-                      ].map((w) => (
-                        <SelectItem key={w} value={w}>
-                          {w}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </TabsContent>
             </Tabs>
 

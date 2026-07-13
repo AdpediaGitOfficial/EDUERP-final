@@ -13,11 +13,12 @@ export const Route = createFileRoute("/_authenticated/finance")({
 
 const NAV: TabItem[] = [
   { to: "/finance", label: "Dashboard", exact: true },
+  { to: "/finance/collection", label: "Collection" },
+  { to: "/finance/fees", label: "Fees" },
+  { to: "/finance/payments", label: "Payments" },
   { to: "/finance/expenses", label: "Expenses" },
   { to: "/finance/ledger", label: "Ledger" },
   { to: "/finance/reconciliation", label: "Reconciliation" },
-  { to: "/finance/fees", label: "Fees" },
-  { to: "/finance/payments", label: "Payments" },
 ];
 
 function Layout() {
