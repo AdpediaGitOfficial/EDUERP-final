@@ -5,7 +5,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomBytes } from "node:crypto";
 import { PrismaService } from "../../infra/database/prisma.service";
+import { AuthService } from "../auth/auth.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
 /**
@@ -20,11 +23,107 @@ import type { AuthUser } from "../../common/decorators/current-user.decorator";
  */
 @Injectable()
 export class TeacherProfileService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+  ) {}
 
   private requireManage(actor: AuthUser) {
     if (!actor.roles.some((r) => r === "admin" || r === "hr"))
       throw new ForbiddenException("Only administrators and HR can edit teacher records.");
+  }
+
+  /**
+   * Resolve the teacher's portal login: the username (email) and whether an
+   * auth account already exists for it. Used by the profile Credentials card.
+   */
+  async teacherCredentials(teacher: {
+    staff_id: string | null;
+    email: string | null;
+  }): Promise<{ username: string | null; hasLogin: boolean; userId: string | null }> {
+    const userId = await this.resolveProfileId(teacher);
+    if (userId) {
+      const login = await this.prisma.users.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      });
+      if (login) return { username: login.email ?? teacher.email, hasLogin: true, userId };
+    }
+    // No account by profile id; a login may still exist under the teacher email.
+    if (teacher.email) {
+      const byEmail = await this.prisma.users.findUnique({
+        where: { email: teacher.email.toLowerCase() },
+        select: { id: true, email: true },
+      });
+      if (byEmail) return { username: byEmail.email, hasLogin: true, userId: byEmail.id };
+    }
+    return { username: teacher.email, hasLogin: false, userId };
+  }
+
+  /**
+   * Admin/HR sets (or resets) a teacher's portal password and reveals it once.
+   * Self-provisions a login if the teacher has none yet (role 'teacher'), so it
+   * mirrors the student/parent credentials flow.
+   */
+  async setPassword(
+    actor: AuthUser,
+    teacherId: string,
+    opts?: { password?: string; send?: boolean },
+  ) {
+    this.requireManage(actor);
+    const teacher = await this.getTeacher(teacherId);
+    const tempPassword = opts?.password?.trim() || `Pass-${randomBytes(4).toString("hex")}!`;
+
+    let userId = await this.resolveProfileId(teacher);
+    if (!userId && teacher.email) {
+      // A login may exist under the email even without a linked profile id.
+      const byEmail = await this.prisma.users.findUnique({
+        where: { email: teacher.email.toLowerCase() },
+        select: { id: true },
+      });
+      userId = byEmail?.id ?? null;
+    }
+
+    let created = false;
+    if (userId) {
+      // Existing profile/login → set (auto-creates the auth row if only a
+      // profile exists), forcing the teacher role when provisioning.
+      await this.auth.adminSetPassword(userId, tempPassword, { roleIfMissing: "teacher" });
+    } else {
+      if (!teacher.email) {
+        throw new BadRequestException("Add an email to this teacher before creating a login.");
+      }
+      const res = await this.auth.provisionAccount({
+        email: teacher.email,
+        password: tempPassword,
+        fullName: teacher.full_name ?? undefined,
+        role: "teacher",
+      });
+      userId = res.userId;
+      created = true;
+    }
+
+    const send = opts?.send !== false;
+    if (send && userId) {
+      await this.notifications
+        .notify({
+          senderId: actor.id,
+          userIds: [userId],
+          subject: "Your portal login pass",
+          body: `A new staff portal password has been set for ${teacher.full_name ?? "you"}. Please sign in and change it.`,
+        })
+        .catch(() => undefined);
+    }
+
+    return {
+      ok: true,
+      userId,
+      username: teacher.email,
+      tempPassword,
+      sent: send,
+      created,
+    };
   }
 
   private async getTeacher(teacherId: string) {

@@ -3670,6 +3670,28 @@ describe("account credentials: self-service change-password + admin set/reveal",
     expect((await relogin(ACCOUNTS.student, PASSWORD)).status).toBe(201);
   });
 
+  it("admin sets & reveals a teacher portal password; non-admin cannot", async () => {
+    const list = await get("/teachers?pageSize=25", "admin");
+    // avoid the shared demo teacher login so its password stays usable
+    const t =
+      (list.body.rows as any[]).find((r) => r.email && r.email !== ACCOUNTS.teacher) ??
+      list.body.rows[0];
+    const res = await post(`/teachers/${t.id}/set-password`, "admin", {
+      password: "TeachSet123",
+      send: false,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.tempPassword).toBe("TeachSet123");
+    expect(res.body.sent).toBe(false);
+    // detail exposes the credentials block for the profile card
+    const detail = await get(`/teachers/${t.id}/detail`, "admin");
+    expect(detail.body.credentials).toBeTruthy();
+    expect(detail.body.credentials.hasLogin).toBe(true);
+    // a plain teacher can't set staff passwords
+    const denied = await post(`/teachers/${t.id}/set-password`, "teacher", { send: false });
+    expect(denied.status).toBe(403);
+  });
+
   it("admin sets & reveals a student portal password; teacher cannot", async () => {
     const list = await get("/students?pageSize=1", "admin");
     const studentId = list.body.rows[0].id;

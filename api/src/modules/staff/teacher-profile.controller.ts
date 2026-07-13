@@ -14,6 +14,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNumber,
@@ -21,6 +22,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   MinLength,
   ValidateNested,
@@ -28,6 +30,11 @@ import {
 import { TeacherProfileService } from "./teacher-profile.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
+
+class SetPasswordDto {
+  @IsOptional() @IsString() @MinLength(6) @MaxLength(72) password?: string;
+  @IsOptional() @IsBoolean() send?: boolean;
+}
 
 class CoreDto {
   @IsOptional() @IsString() @MinLength(1) fullName?: string;
@@ -145,6 +152,15 @@ export class TeacherProfileController {
   @Patch(":id")
   updateCore(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Body() dto: CoreDto) {
     return this.svc.updateCore(actor, id, dto);
+  }
+
+  @Post(":id/set-password")
+  setPassword(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: SetPasswordDto,
+  ) {
+    return this.svc.setPassword(actor, id, { password: dto.password, send: dto.send });
   }
 
   @Patch(":id/staff")

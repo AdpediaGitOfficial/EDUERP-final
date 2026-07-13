@@ -1,5 +1,6 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../infra/database/prisma.service";
+import { TeacherProfileService } from "./teacher-profile.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
 /**
@@ -13,7 +14,10 @@ import type { AuthUser } from "../../common/decorators/current-user.decorator";
  */
 @Injectable()
 export class StaffService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(TeacherProfileService) private readonly teacherProfiles: TeacherProfileService,
+  ) {}
 
   async listStaff(actor: AuthUser, page = 1, pageSize = 50, q?: string) {
     const isHrOrAdmin = actor.roles.some((r) => r === "admin" || r === "hr");
@@ -270,6 +274,10 @@ export class StaffService {
           : null,
       })),
       announcements,
+      credentials: await this.teacherProfiles.teacherCredentials({
+        staff_id: teacher.staff_id ?? null,
+        email: teacher.email ?? null,
+      }),
     };
   }
 

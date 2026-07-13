@@ -26,8 +26,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { badgeClass, fmtDate, money, niceLabel, downloadCsv } from "@/lib/module-util";
-import { Download, Printer, Mail, Phone, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Download,
+  Printer,
+  Mail,
+  Phone,
+  Pencil,
+  Plus,
+  Trash2,
+  IdCard,
+  KeyRound,
+  RefreshCw,
+  Send,
+  Copy,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useMemo, useState } from "react";
 
@@ -469,6 +483,13 @@ function TeacherDetailPage() {
               value={staff?.reporting_manager_id ? "Assigned" : "—"}
             />
           </Card>
+          {canManage && (
+            <TeacherLoginCard
+              teacherId={teacherId}
+              credentials={detail?.credentials}
+              onDone={invalidate}
+            />
+          )}
         </TabsContent>
 
         {/* PERSONAL */}
@@ -1496,5 +1517,184 @@ function TimetableTab({ teacherId, canManage }: { teacherId: string; canManage: 
         </div>
       )}
     </Card>
+  );
+}
+
+// ===================================================== TEACHER LOGIN CARD ===
+
+function TeacherLoginCard({
+  teacherId,
+  credentials,
+  onDone,
+}: {
+  teacherId: string;
+  credentials?: { username: string | null; hasLogin: boolean };
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const username = credentials?.username ?? null;
+  const hasLogin = !!credentials?.hasLogin;
+  return (
+    <Card className="p-6 rounded-2xl mt-4">
+      <div className="flex items-center gap-2 font-display font-semibold">
+        <IdCard className="size-4 text-primary" /> Portal Login Credentials
+      </div>
+      <p className="text-sm text-muted-foreground mt-1 mb-4">
+        The teacher signs in with their email as the username. For security, passwords are stored
+        only as encrypted hashes and can never be viewed — set a new one to share it.
+      </p>
+      <div className="rounded-xl border border-l-4 border-l-violet-500 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-medium">Teacher Login</div>
+            <div className="text-sm mt-1 truncate">
+              <span className="text-muted-foreground">Username: </span>
+              <span className="font-medium">{username ?? "—"}</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {hasLogin ? "Active login" : "No login yet — set a password to create one"}
+            </div>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+            <KeyRound className="size-4" /> Set password
+          </Button>
+        </div>
+      </div>
+
+      {open && (
+        <TeacherSetPasswordDialog
+          teacherId={teacherId}
+          username={username}
+          onClose={() => setOpen(false)}
+          onDone={onDone}
+        />
+      )}
+    </Card>
+  );
+}
+
+function TeacherSetPasswordDialog({
+  teacherId,
+  username,
+  onClose,
+  onDone,
+}: {
+  teacherId: string;
+  username: string | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [mode, setMode] = useState<"auto" | "custom">("auto");
+  const [custom, setCustom] = useState("");
+  const [send, setSend] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ password: string; sent: boolean } | null>(null);
+
+  const save = async () => {
+    if (mode === "custom" && custom.trim().length < 6) {
+      return toast.error("Custom password must be at least 6 characters.");
+    }
+    setSaving(true);
+    try {
+      const res = await apiPost<any>(`/teachers/${teacherId}/set-password`, {
+        password: mode === "custom" ? custom.trim() : undefined,
+        send,
+      });
+      setResult({ password: res.tempPassword, sent: !!res.sent });
+      toast.success(send ? "Password set and sent." : "Password set.");
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not set the password.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Set teacher password</DialogTitle>
+        </DialogHeader>
+
+        {result ? (
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              This password is shown once. Copy it now and share it securely
+              {result.sent ? " (a copy was also sent to their inbox)" : ""}.
+            </p>
+            <div className="flex items-center justify-between rounded-lg bg-muted/50 p-2.5">
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground truncate">
+                  {username ?? "teacher"}
+                </div>
+                <div className="font-mono break-all">{result.password}</div>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  navigator.clipboard?.writeText(result.password);
+                  toast.success("Copied");
+                }}
+                aria-label="Copy password"
+              >
+                <Copy className="size-4" />
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button onClick={onClose}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {!username && (
+              <p className="text-xs text-muted-foreground">
+                No login exists yet — saving will create one from this teacher's profile.
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("auto")}
+                className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm ${mode === "auto" ? "border-primary bg-primary/10" : "text-muted-foreground hover:bg-muted"}`}
+              >
+                <RefreshCw className="size-4" /> Auto-generate
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("custom")}
+                className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm ${mode === "custom" ? "border-primary bg-primary/10" : "text-muted-foreground hover:bg-muted"}`}
+              >
+                <KeyRound className="size-4" /> Set custom
+              </button>
+            </div>
+            {mode === "custom" && (
+              <div className="space-y-1.5">
+                <Label>Custom password</Label>
+                <Input
+                  value={custom}
+                  onChange={(e) => setCustom(e.target.value)}
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
+                />
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox checked={send} onCheckedChange={(v) => setSend(!!v)} />
+              <Send className="size-3.5 text-muted-foreground" /> Also send to their inbox
+            </label>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={onClose} disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={save} disabled={saving}>
+                {saving ? "Saving…" : "Set password"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
