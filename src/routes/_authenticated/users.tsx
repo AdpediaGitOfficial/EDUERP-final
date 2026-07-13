@@ -1,5 +1,5 @@
 import { RequireRole } from "@/components/require-role";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
@@ -29,7 +29,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
-import { ROLE_LABEL, type AppRole } from "@/lib/roles";
+import {
+  ROLE_LABEL,
+  CREATABLE_ROLES,
+  isAdmissionManagedRole,
+  type AppRole,
+} from "@/lib/roles";
 import { Copy, Eye, History, KeyRound, Pencil, Search, Trash2, UserPlus, X } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/users")({
@@ -396,7 +401,7 @@ function UsersPage() {
 
 /* ------------------------------- Add ------------------------------------ */
 function AddUserDialog({ onCreated }: { onCreated: () => void }) {
-  const [role, setRole] = useState<AppRole>("student");
+  const [role, setRole] = useState<AppRole>("teacher");
   const [saving, setSaving] = useState(false);
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -447,13 +452,20 @@ function AddUserDialog({ onCreated }: { onCreated: () => void }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ALL_ROLES.map((r) => (
+              {CREATABLE_ROLES.map((r) => (
                 <SelectItem key={r} value={r}>
                   {ROLE_LABEL[r]}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            Students and parents aren't added here — they're created through{" "}
+            <Link to="/admissions/new" className="text-primary underline underline-offset-2">
+              Student Admission
+            </Link>
+            , along with their class, guardians and fees.
+          </p>
         </div>
         <Button type="submit" className="w-full" disabled={saving}>
           {saving ? "Creating…" : "Create user"}
@@ -475,7 +487,10 @@ function EditUserDialog({
 }) {
   const [fullName, setFullName] = useState(user.fullName);
   const [phone, setPhone] = useState(user.phone ?? "");
-  const [role, setRole] = useState<AppRole>((user.roles[0] as AppRole) ?? "student");
+  // Students & parents are managed by Student Admission — their role can't be
+  // changed here (and we never send it, so the backend guard never trips).
+  const isAdmissionManaged = user.roles.some(isAdmissionManagedRole);
+  const [role, setRole] = useState<AppRole>((user.roles[0] as AppRole) ?? "teacher");
   const [status, setStatus] = useState<"active" | "inactive">(
     user.status === "inactive" ? "inactive" : "active",
   );
@@ -488,7 +503,7 @@ function EditUserDialog({
       await apiPatch(`/users/${user.id}`, {
         fullName: fullName.trim(),
         phone: phone.trim() || null,
-        role,
+        role: isAdmissionManaged ? undefined : role,
         status,
       });
       toast.success("User updated.");
@@ -520,18 +535,25 @@ function EditUserDialog({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label>Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as AppRole)} disabled={isSelf}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ALL_ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {ROLE_LABEL[r]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isAdmissionManaged ? (
+              <>
+                <Input value={ROLE_LABEL[user.roles[0] as AppRole]} disabled readOnly />
+                <p className="text-xs text-muted-foreground">Managed in Student Admission.</p>
+              </>
+            ) : (
+              <Select value={role} onValueChange={(v) => setRole(v as AppRole)} disabled={isSelf}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CREATABLE_ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label>Phone</Label>

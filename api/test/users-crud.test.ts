@@ -216,3 +216,45 @@ describe("users edit/delete: guards", () => {
     expect(badRole.status).toBe(400);
   });
 });
+
+describe("users: student/parent are admission-managed (not created here)", () => {
+  it("admin cannot create a student from the users screen (400)", async () => {
+    const res = await authed("post", "/users", "admin").send({
+      fullName: "Should Not Exist",
+      email: `blocked.student.${stamp}@greenwood.test`,
+      password: "TempPass123!",
+      role: "student",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("admin cannot create a parent from the users screen (400)", async () => {
+    const res = await authed("post", "/users", "admin").send({
+      fullName: "Should Not Exist",
+      email: `blocked.parent.${stamp}@greenwood.test`,
+      password: "TempPass123!",
+      role: "parent",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("a blocked create leaves no orphan account behind", async () => {
+    const email = `blocked.orphan.${stamp}@greenwood.test`;
+    await authed("post", "/users", "admin").send({
+      fullName: "Orphan Check",
+      email,
+      password: "TempPass123!",
+      role: "student",
+    });
+    const found = await authed("get", `/users?q=${encodeURIComponent(email)}`, "admin");
+    expect(found.status).toBe(200);
+    expect(found.body.rows.length).toBe(0);
+  });
+
+  it("admin cannot convert an existing user to student/parent (400, unchanged)", async () => {
+    const res = await authed("patch", `/users/${me.teacher.id}`, "admin").send({ role: "student" });
+    expect(res.status).toBe(400);
+    const still = await authed("get", `/users/${me.teacher.id}`, "admin");
+    expect(still.body.roles).toContain("teacher");
+  });
+});

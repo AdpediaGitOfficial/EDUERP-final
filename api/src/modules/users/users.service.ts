@@ -42,6 +42,15 @@ export const APP_ROLES = [
 ] as const;
 export type AppRoleName = (typeof APP_ROLES)[number];
 
+/**
+ * Students and parents are provisioned exclusively by Student Admission, which
+ * atomically creates the enrolment (class/roll/admission no), guardian links and
+ * fee ledger. Creating or assigning them from the generic user admin would leave
+ * orphan accounts (a student with no class/fees, a parent with no children), so
+ * these roles are refused here — the guard, not the UI, is the source of truth.
+ */
+export const ADMISSION_MANAGED_ROLES = new Set<string>(["student", "parent"]);
+
 export type CreateUserInput = {
   fullName: string;
   email: string;
@@ -88,6 +97,12 @@ export class UsersService {
   async createUser(actor: AuthUser, input: CreateUserInput) {
     if (!actor.roles.includes("admin"))
       throw new ForbiddenException("Only administrators can create users.");
+    // Refuse student/parent BEFORE provisioning, so no orphan auth account is
+    // created. Those roles are provisioned by Student Admission.
+    if (ADMISSION_MANAGED_ROLES.has(input.role))
+      throw new BadRequestException(
+        "Students and parents are created through Student Admission, not from the Users screen.",
+      );
     const { userId } = await this.auth.provisionAccount({
       email: input.email,
       password: input.password,
@@ -96,9 +111,7 @@ export class UsersService {
       phone: input.phone ?? null,
     });
     try {
-      if (input.role === "student") {
-        await this.prisma.students.create({ data: { profile_id: userId } });
-      } else if (input.role === "teacher") {
+      if (input.role === "teacher") {
         await this.prisma.teachers.create({
           data: {
             full_name: input.fullName,
@@ -207,6 +220,12 @@ export class UsersService {
       throw new BadRequestException("You cannot change your own admin role.");
     if (isSelf && input.status === "inactive")
       throw new BadRequestException("You cannot deactivate your own account.");
+    // Can't convert anyone into a student/parent here — those are owned by
+    // Student Admission (see ADMISSION_MANAGED_ROLES).
+    if (input.role && ADMISSION_MANAGED_ROLES.has(input.role))
+      throw new BadRequestException(
+        "A user can't be changed to the student or parent role here — manage those through Student Admission.",
+      );
 
     const newRole = input.role ? this.assertRole(input.role) : undefined;
 
