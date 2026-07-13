@@ -73,7 +73,8 @@ function Page() {
     mutationFn: async () => {
       const payload = {
         name: deptForm.name,
-        code: deptForm.code,
+        // New departments get a system-assigned code; keep the existing code on edit.
+        code: deptForm.code.trim() || undefined,
         budget: Number(deptForm.budget) || 0,
         description: deptForm.description,
       };
@@ -320,8 +321,17 @@ function Page() {
               <Label>Code</Label>
               <Input
                 value={deptForm.code}
-                onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value })}
+                readOnly
+                tabIndex={-1}
+                placeholder={deptForm.id ? "" : "Auto-generated"}
+                aria-label="Department code (auto-generated)"
+                className="bg-muted text-muted-foreground cursor-not-allowed"
               />
+              {!deptForm.id && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Assigned automatically from the name on save.
+                </p>
+              )}
             </div>
             <div>
               <Label>Annual budget</Label>

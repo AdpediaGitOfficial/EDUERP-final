@@ -86,7 +86,8 @@ class StaffDocumentDto {
 
 class DepartmentDto {
   @IsString() @MinLength(1) name: string;
-  @IsString() @MinLength(1) code: string;
+  // Code is auto-generated from the name when omitted (see createDepartment).
+  @IsOptional() @IsString() code?: string;
   @IsOptional() @IsNumber() budget?: number;
   @IsOptional() @IsString() description?: string;
 }

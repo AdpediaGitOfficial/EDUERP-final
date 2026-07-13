@@ -35,7 +35,7 @@ export interface StaffInput {
 }
 export interface DepartmentInput {
   name: string;
-  code: string;
+  code?: string;
   budget?: number;
   description?: string | null;
 }
@@ -1184,11 +1184,15 @@ export class HrService {
 
   async createDepartment(actor: AuthUser, input: DepartmentInput) {
     this.requireHr(actor);
+    // The code is system-assigned: a 2-letter prefix from the name + a running
+    // 3-digit sequence (e.g. "Accounts" → AC001). A hand-supplied code is still
+    // honoured, so existing integrations keep working.
+    const code = input.code?.trim() || (await this.nextDepartmentCode(input.name));
     try {
       const row = await this.prisma.departments.create({
         data: {
           name: input.name,
-          code: input.code,
+          code,
           budget: input.budget ?? 0,
           description: input.description || null,
         },
@@ -1199,6 +1203,21 @@ export class HrService {
         throw new ConflictException("A department with that name or code already exists.");
       throw e;
     }
+  }
+
+  /** Next unused department code for the name's prefix (AC001, AC002, …). */
+  private async nextDepartmentCode(name: string): Promise<string> {
+    const prefix = (name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "DP");
+    const rows = await this.prisma.departments.findMany({
+      where: { code: { startsWith: prefix } },
+      select: { code: true },
+    });
+    let max = 0;
+    for (const r of rows) {
+      const m = r.code.slice(prefix.length).match(/^(\d+)/);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `${prefix}${String(max + 1).padStart(3, "0")}`;
   }
 
   async updateDepartment(actor: AuthUser, id: string, input: DepartmentInput) {
