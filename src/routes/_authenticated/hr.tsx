@@ -13,6 +13,10 @@ export const Route = createFileRoute("/_authenticated/hr")({
 
 const NAV: TabItem[] = [
   { to: "/hr", label: "Dashboard", exact: true },
+  // Surfaced as top-level tabs — Attendance is a daily action and Payroll a
+  // frequent monthly one; the rest stay grouped to keep the row short.
+  { to: "/hr/attendance", label: "Attendance" },
+  { to: "/hr/payroll", label: "Payroll" },
   {
     label: "People",
     items: [
@@ -24,16 +28,14 @@ const NAV: TabItem[] = [
   {
     label: "Time & Leave",
     items: [
-      { to: "/hr/attendance", label: "Attendance" },
       { to: "/hr/leave", label: "Leave" },
       { to: "/hr/shifts", label: "Shifts" },
       { to: "/hr/overtime", label: "Overtime" },
     ],
   },
   {
-    label: "Payroll",
+    label: "Compensation",
     items: [
-      { to: "/hr/payroll", label: "Payroll" },
       { to: "/hr/salary", label: "Salary" },
       { to: "/hr/loans", label: "Loans" },
       { to: "/hr/expenses", label: "Expenses" },
