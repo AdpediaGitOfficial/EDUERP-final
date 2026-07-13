@@ -43,6 +43,10 @@ function Page() {
     queryKey: ["candidates"],
     queryFn: () => apiGet<any[]>("/hr/recruitment/candidates"),
   });
+  const { data: departments } = useQuery({
+    queryKey: ["hr-departments"],
+    queryFn: () => apiGet<any[]>("/hr/departments"),
+  });
 
   const [openingOpen, setOpeningOpen] = useState(false);
   const [openingForm, setOpeningForm] = useState<any>({
@@ -267,10 +271,26 @@ function Page() {
             </div>
             <div>
               <Label>Department</Label>
-              <Input
-                value={openingForm.department}
-                onChange={(e) => setOpeningForm({ ...openingForm, department: e.target.value })}
-              />
+              <Select
+                value={openingForm.department || undefined}
+                onValueChange={(v) => setOpeningForm({ ...openingForm, department: v })}
+              >
+                <SelectTrigger aria-label="Department">
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(departments ?? []).map((d: any) => (
+                    <SelectItem key={d.id} value={d.name}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                  {(departments ?? []).length === 0 && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      No departments yet — add one under HR → Departments.
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Positions</Label>
