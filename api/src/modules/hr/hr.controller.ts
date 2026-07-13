@@ -10,9 +10,12 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { HrService } from "./hr.service";
+import { streamPayslipPdf } from "../../common/pdf/payslip-pdf";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import {
@@ -20,10 +23,13 @@ import {
   IsBoolean,
   IsDateString,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  Min,
   MinLength,
   ValidateNested,
 } from "class-validator";
@@ -82,6 +88,19 @@ class StaffDocumentDto {
   @IsString() @MinLength(1) docType: string;
   @IsString() @MinLength(1) fileUrl: string;
   @IsOptional() @IsString() title?: string;
+}
+
+class GeneratePayrollDto {
+  @IsInt() @Min(2000) @Max(2100) year: number;
+  @IsInt() @Min(1) @Max(12) month: number;
+}
+
+class EditPayrollRunDto {
+  @IsOptional() @IsNumber() allowances?: number;
+  @IsOptional() @IsNumber() attendance_deduction?: number;
+  @IsOptional() @IsNumber() statutory_deductions?: number;
+  @IsOptional() @IsNumber() other_deductions?: number;
+  @IsOptional() @IsString() notes?: string;
 }
 
 class DepartmentDto {
@@ -289,6 +308,64 @@ export class HrController {
     @Query("pageSize", new ParseIntPipe({ optional: true })) pageSize?: number,
   ) {
     return this.hr.listPayrollRuns(actor, page ?? 1, Math.min(pageSize ?? 50, 200));
+  }
+
+  @Post("payroll/generate")
+  generatePayroll(@CurrentUser() actor: AuthUser, @Body() dto: GeneratePayrollDto) {
+    return this.hr.generatePayroll(actor, dto.year, dto.month);
+  }
+
+  @Get("payroll/months")
+  payrollMonths(@CurrentUser() actor: AuthUser) {
+    return this.hr.payrollMonths(actor);
+  }
+
+  @Get("payroll/detail")
+  payrollDetail(
+    @CurrentUser() actor: AuthUser,
+    @Query("year", ParseIntPipe) year: number,
+    @Query("month", ParseIntPipe) month: number,
+  ) {
+    return this.hr.payrollDetail(actor, year, month);
+  }
+
+  @Patch("payroll/runs/:id/pay")
+  payPayrollRun(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.hr.payPayrollRun(actor, id);
+  }
+
+  @Patch("payroll/runs/:id")
+  updatePayrollRun(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: EditPayrollRunDto,
+  ) {
+    return this.hr.updatePayrollRun(actor, id, dto);
+  }
+
+  @Get("payroll/runs/:id/payslip.pdf")
+  async payslipPdf(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Res() res: Response,
+  ) {
+    const r = await this.hr.payslipData(actor, id);
+    streamPayslipPdf(res, {
+      schoolName: process.env.SCHOOL_NAME || "Greenwood International School",
+      staffName: r.staff?.full_name ?? null,
+      employeeCode: r.staff?.employee_code ?? null,
+      designation: r.staff?.designation ?? null,
+      department: r.staff?.department ?? null,
+      month: r.month,
+      workingDays: r.working_days,
+      daysWorked: r.days_worked == null ? null : Number(r.days_worked),
+      grossSalary: Number(r.gross_salary),
+      attendanceDeduction: Number(r.attendance_deduction),
+      statutoryDeductions: Number(r.statutory_deductions),
+      otherDeductions: Number(r.other_deductions),
+      netSalary: Number(r.net_salary),
+      status: r.status,
+    });
   }
 
   @Get("expense-claims")

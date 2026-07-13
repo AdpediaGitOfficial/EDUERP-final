@@ -341,6 +341,248 @@ export class HrService {
     };
   }
 
+  // ── Payroll generation + management ──────────────────────────────────────
+  private canReadPayroll(actor: AuthUser) {
+    return this.isHr(actor) || actor.roles.includes("accountant");
+  }
+  private round2(n: number) {
+    return Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
+  }
+
+  /**
+   * Generate (or refresh) payroll for a month. One run per active staff member
+   * who has a salary structure. Gross = basic + earnings; statutory = PF (12% of
+   * basic, ₹15k wage cap) / ESI (0.75% if gross ≤ ₹21k) / PT / TDS per the
+   * structure's flags; attendance deduction = per-day gross × approved *unpaid*
+   * leave days in the month (full month otherwise); other = structure deductions
+   * + active-loan EMIs. Idempotent per (staff, month); already-*paid* runs are
+   * left untouched.
+   */
+  async generatePayroll(actor: AuthUser, year: number, month: number) {
+    this.requireHr(actor);
+    if (!Number.isInteger(month) || month < 1 || month > 12)
+      throw new BadRequestException("Month must be 1–12");
+    if (!Number.isInteger(year) || year < 2000 || year > 2100)
+      throw new BadRequestException("Invalid year");
+    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+    const monthEnd = new Date(Date.UTC(year, month, 0));
+    const daysInMonth = monthEnd.getUTCDate();
+
+    const [staff, structs, leaveTypes, leaves, loans] = await Promise.all([
+      this.prisma.staff.findMany({ where: { status: "active" }, select: { id: true } }),
+      this.prisma.hr_salary_structures.findMany({
+        where: { effective_from: { lte: monthEnd } },
+        orderBy: { effective_from: "desc" },
+      }),
+      this.prisma.hr_leave_types.findMany({ select: { name: true, code: true, is_paid: true } }),
+      this.prisma.leave_requests.findMany({
+        where: { status: "approved", start_date: { lte: monthEnd }, end_date: { gte: monthStart } },
+      }),
+      this.prisma.hr_loans.findMany({ where: { status: "active" } }),
+    ]);
+
+    const structByStaff = new Map<string, (typeof structs)[number]>();
+    for (const s of structs) if (!structByStaff.has(s.staff_id)) structByStaff.set(s.staff_id, s);
+
+    const unpaidNames = new Set(
+      leaveTypes
+        .filter((t) => t.is_paid === false)
+        .flatMap((t) => [t.name?.toLowerCase(), t.code?.toLowerCase()])
+        .filter(Boolean) as string[],
+    );
+    const unpaidDaysByStaff = new Map<string, number>();
+    for (const lv of leaves) {
+      if (!unpaidNames.has((lv.leave_type ?? "").toLowerCase())) continue;
+      const s = Math.max(lv.start_date.getTime(), monthStart.getTime());
+      const e = Math.min(lv.end_date.getTime(), monthEnd.getTime());
+      const days = Math.floor((e - s) / 86_400_000) + 1;
+      if (days > 0)
+        unpaidDaysByStaff.set(lv.staff_id, (unpaidDaysByStaff.get(lv.staff_id) ?? 0) + days);
+    }
+
+    const emiByStaff = new Map<string, number>();
+    for (const ln of loans) {
+      const emi = Number(ln.principal) / Math.max(1, ln.tenure_months);
+      emiByStaff.set(ln.staff_id, (emiByStaff.get(ln.staff_id) ?? 0) + emi);
+    }
+    const sumJson = (v: unknown) =>
+      Array.isArray(v) ? v.reduce((a, x: any) => a + Number(x?.amount || 0), 0) : 0;
+
+    let generated = 0;
+    let skippedPaid = 0;
+    let noStructure = 0;
+    for (const st of staff) {
+      const struct = structByStaff.get(st.id);
+      if (!struct) {
+        noStructure++;
+        continue;
+      }
+      const existing = await this.prisma.payroll_runs.findUnique({
+        where: { staff_id_month: { staff_id: st.id, month: monthStart } },
+      });
+      if (existing?.status === "paid") {
+        skippedPaid++;
+        continue;
+      }
+      const basic = Number(struct.basic) || 0;
+      const earnings = sumJson(struct.earnings);
+      const gross = basic + earnings;
+      const pf = struct.pf_enabled ? Math.min(basic, 15000) * 0.12 : 0;
+      const esi = struct.esi_enabled && gross <= 21000 ? gross * 0.0075 : 0;
+      const pt = struct.pt_enabled ? (gross > 15000 ? 200 : 0) : 0;
+      const tds = struct.tds_enabled ? Number(struct.tds_amount || 0) : 0;
+      const statutory = pf + esi + pt + tds;
+      const other = sumJson(struct.deductions) + (emiByStaff.get(st.id) ?? 0);
+      const unpaidDays = Math.min(unpaidDaysByStaff.get(st.id) ?? 0, daysInMonth);
+      const daysWorked = daysInMonth - unpaidDays;
+      const attendance = gross > 0 ? (gross / daysInMonth) * unpaidDays : 0;
+      const deductions = attendance + statutory + other;
+      const net = Math.max(0, gross - deductions);
+      const data = {
+        base_salary: this.round2(basic),
+        allowances: this.round2(earnings),
+        gross_salary: this.round2(gross),
+        working_days: daysInMonth,
+        days_worked: this.round2(daysWorked),
+        attendance_deduction: this.round2(attendance),
+        statutory_deductions: this.round2(statutory),
+        other_deductions: this.round2(other),
+        deductions: this.round2(deductions),
+        net_salary: this.round2(net),
+      };
+      await this.prisma.payroll_runs.upsert({
+        where: { staff_id_month: { staff_id: st.id, month: monthStart } },
+        create: { staff_id: st.id, month: monthStart, status: "pending", ...data },
+        update: { ...data, updated_at: new Date() },
+      });
+      generated++;
+    }
+    return { month: monthStart, daysInMonth, generated, skippedPaid, noStructure };
+  }
+
+  /** Payroll runs grouped by month, for the "Generated Payroll List". */
+  async payrollMonths(actor: AuthUser) {
+    if (!this.canReadPayroll(actor)) throw new ForbiddenException();
+    const runs = await this.prisma.payroll_runs.findMany({
+      select: { month: true, status: true, net_salary: true, created_at: true, pay_date: true },
+    });
+    const byMonth = new Map<string, any>();
+    for (const r of runs) {
+      const key = r.month.toISOString().slice(0, 10);
+      const g = byMonth.get(key) ?? {
+        month: r.month,
+        employees: 0,
+        totalNet: 0,
+        paid: 0,
+        pending: 0,
+        generatedOn: r.created_at,
+      };
+      g.employees++;
+      g.totalNet += Number(r.net_salary || 0);
+      if (r.status === "paid") g.paid++;
+      else g.pending++;
+      if (r.created_at > g.generatedOn) g.generatedOn = r.created_at;
+      byMonth.set(key, g);
+    }
+    return Array.from(byMonth.values())
+      .map((g) => ({ ...g, totalNet: this.round2(g.totalNet), status: g.pending === 0 ? "paid" : "generated" }))
+      .sort((a, b) => b.month.getTime() - a.month.getTime());
+  }
+
+  /** Per-employee breakdown for one payroll month. */
+  async payrollDetail(actor: AuthUser, year: number, month: number) {
+    if (!this.canReadPayroll(actor)) throw new ForbiddenException();
+    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+    const rows = await this.prisma.payroll_runs.findMany({
+      where: { month: monthStart },
+      include: { staff: { select: { full_name: true, employee_code: true, designation: true } } },
+      orderBy: { staff: { full_name: "asc" } },
+    });
+    return {
+      month: monthStart,
+      rows: rows.map((p) => ({
+        id: p.id,
+        staffName: p.staff?.full_name ?? null,
+        employeeCode: p.staff?.employee_code ?? null,
+        designation: p.staff?.designation ?? null,
+        grossSalary: p.gross_salary,
+        workingDays: p.working_days,
+        daysWorked: p.days_worked,
+        attendanceDeduction: p.attendance_deduction,
+        statutoryDeductions: p.statutory_deductions,
+        otherDeductions: p.other_deductions,
+        netSalary: p.net_salary,
+        status: p.status,
+        payDate: p.pay_date,
+      })),
+    };
+  }
+
+  /** Mark a single payroll run as paid (stamps the pay date). */
+  async payPayrollRun(actor: AuthUser, id: string) {
+    this.requireHr(actor);
+    const run = await this.prisma.payroll_runs.findUnique({ where: { id } });
+    if (!run) throw new NotFoundException("Payroll run not found");
+    if (run.status === "paid") return { ok: true, alreadyPaid: true };
+    await this.prisma.payroll_runs.update({
+      where: { id },
+      data: { status: "paid", pay_date: new Date(), updated_at: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /** Edit an unpaid run's deduction/allowance amounts; net is recomputed. */
+  async updatePayrollRun(
+    actor: AuthUser,
+    id: string,
+    input: {
+      allowances?: number;
+      attendance_deduction?: number;
+      statutory_deductions?: number;
+      other_deductions?: number;
+      notes?: string;
+    },
+  ) {
+    this.requireHr(actor);
+    const run = await this.prisma.payroll_runs.findUnique({ where: { id } });
+    if (!run) throw new NotFoundException("Payroll run not found");
+    if (run.status === "paid")
+      throw new BadRequestException("A paid payroll run can't be edited.");
+    const allowances = input.allowances ?? Number(run.allowances);
+    const gross = Number(run.base_salary) + allowances;
+    const attendance = input.attendance_deduction ?? Number(run.attendance_deduction);
+    const statutory = input.statutory_deductions ?? Number(run.statutory_deductions);
+    const other = input.other_deductions ?? Number(run.other_deductions);
+    const deductions = attendance + statutory + other;
+    await this.prisma.payroll_runs.update({
+      where: { id },
+      data: {
+        allowances: this.round2(allowances),
+        gross_salary: this.round2(gross),
+        attendance_deduction: this.round2(attendance),
+        statutory_deductions: this.round2(statutory),
+        other_deductions: this.round2(other),
+        deductions: this.round2(deductions),
+        net_salary: this.round2(Math.max(0, gross - deductions)),
+        notes: input.notes ?? run.notes,
+        updated_at: new Date(),
+      },
+    });
+    return { ok: true };
+  }
+
+  /** Data for a single payslip PDF (scoped like listing). */
+  async payslipData(actor: AuthUser, id: string) {
+    const run = await this.prisma.payroll_runs.findUnique({
+      where: { id },
+      include: { staff: { select: { full_name: true, employee_code: true, designation: true, department: true, profile_id: true } } },
+    });
+    if (!run) throw new NotFoundException("Payroll run not found");
+    if (!this.canReadPayroll(actor) && run.staff?.profile_id !== actor.id)
+      throw new ForbiddenException();
+    return run;
+  }
+
   async listExpenseClaims(actor: AuthUser, page = 1, pageSize = 50) {
     let scope: Prisma.expense_claimsWhereInput;
     if (actor.roles.some((r) => r === "admin" || r === "hr" || r === "accountant")) scope = {};
