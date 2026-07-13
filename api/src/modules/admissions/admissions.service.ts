@@ -563,7 +563,8 @@ export class AdmissionsService {
       const guardian = dto.primaryGuardian === "mother" ? dto.mother : dto.father;
       const gName = (guardian?.name ?? "").trim() || fullName + " (Guardian)";
       const email = (dto.parentLoginEmail ?? "").trim();
-      if (!email) throw new BadRequestException("Parent Account Login Email is required for a new parent");
+      if (!email)
+        throw new BadRequestException("Parent Account Login Email is required for a new parent");
       // Reuse the parents module: dedup (email/phone/national id) + provision.
       const created = await this.parents.create(actor, {
         fullName: gName,
@@ -581,7 +582,8 @@ export class AdmissionsService {
         where: { id: parentId },
         data: {
           qualification: guardian?.qualification ?? null,
-          annual_income: guardian?.annualIncome != null ? new Prisma.Decimal(guardian.annualIncome) : null,
+          annual_income:
+            guardian?.annualIncome != null ? new Prisma.Decimal(guardian.annualIncome) : null,
         },
       });
     }
@@ -763,7 +765,15 @@ export class AdmissionsService {
           .catch(() => undefined);
       }
 
-      return { ok: true, studentId, admissionNo, rollNo, tempPassword, parentId, parentTempPassword };
+      return {
+        ok: true,
+        studentId,
+        admissionNo,
+        rollNo,
+        tempPassword,
+        parentId,
+        parentTempPassword,
+      };
     } catch (e) {
       await this.auth.deleteAccount(userId).catch(() => undefined);
       if (createdParentId) await this.auth.deleteAccount(createdParentId).catch(() => undefined);
@@ -772,11 +782,7 @@ export class AdmissionsService {
   }
 
   /** Create a non-login guardian profile for the secondary parent and link it. */
-  private async linkSecondaryGuardian(
-    studentId: string,
-    g: GuardianInput,
-    primary: string,
-  ) {
+  private async linkSecondaryGuardian(studentId: string, g: GuardianInput, primary: string) {
     const rel = primary === "mother" ? "father" : "mother";
     const profile = await this.prisma.profiles.create({
       data: {

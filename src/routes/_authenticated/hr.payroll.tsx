@@ -32,8 +32,18 @@ import { ArrowLeft, Play, Eye, Pencil, IndianRupee, FileText } from "lucide-reac
 export const Route = createFileRoute("/_authenticated/hr/payroll")({ component: Page });
 
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 type MonthRow = {
@@ -188,7 +198,9 @@ function RunList({ onOpen }: { onOpen: (year: number, month: number) => void }) 
                       <td className="p-3">
                         <StatusBadge
                           tone={r.status === "paid" ? "success" : "info"}
-                          label={r.status === "paid" ? "Fully paid" : `${r.paid}/${r.employees} paid`}
+                          label={
+                            r.status === "paid" ? "Fully paid" : `${r.paid}/${r.employees} paid`
+                          }
                         />
                       </td>
                       <td className="p-3 text-muted-foreground">
@@ -208,7 +220,11 @@ function RunList({ onOpen }: { onOpen: (year: number, month: number) => void }) 
                   );
                 })}
                 {data && data.length === 0 && (
-                  <EmptyRow colSpan={6} title="No payroll generated yet" hint="Generate a month above to begin." />
+                  <EmptyRow
+                    colSpan={6}
+                    title="No payroll generated yet"
+                    hint="Generate a month above to begin."
+                  />
                 )}
               </tbody>
             </table>
@@ -451,7 +467,11 @@ function EditRunDialog({
           </div>
           <div>
             <Label>Attendance deduction</Label>
-            <Input type="number" value={attendance} onChange={(e) => setAttendance(e.target.value)} />
+            <Input
+              type="number"
+              value={attendance}
+              onChange={(e) => setAttendance(e.target.value)}
+            />
           </div>
           <div>
             <Label>Statutory deductions (PF / ESI / PT / TDS)</Label>

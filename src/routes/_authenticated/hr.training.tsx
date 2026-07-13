@@ -31,7 +31,12 @@ export const Route = createFileRoute("/_authenticated/hr/training")({ component:
 
 function Page() {
   const qc = useQueryClient();
-  const { data: programs, isLoading, isError, refetch } = useQuery({
+  const {
+    data: programs,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["training-programs"],
     queryFn: () => apiGet<any[]>("/hr/training/programs"),
   });
@@ -106,43 +111,43 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={6} />
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead className="bg-muted/40">
-              <tr className="text-left">
-                <th className="p-3">Program</th>
-                <th className="p-3">Type</th>
-                <th className="p-3">Provider</th>
-                <th className="p-3">Dates</th>
-                <th className="p-3">Attended</th>
-                <th className="p-3">Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(programs ?? []).map((p: any) => (
-                <tr key={p.id} className="border-t">
-                  <td className="p-3">
-                    <div className="font-medium">{p.title}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {(p.skill_tags ?? []).join(", ")}
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <Badge variant="secondary">{p.program_type}</Badge>
-                  </td>
-                  <td className="p-3">{p.provider}</td>
-                  <td className="p-3">
-                    {fmtDate(p.start_date)} → {fmtDate(p.end_date)}
-                  </td>
-                  <td className="p-3">
-                    {(attendance ?? []).filter((a: any) => a.program_id === p.id).length}
-                  </td>
-                  <td className="p-3">{money(p.cost)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
+              <thead className="bg-muted/40">
+                <tr className="text-left">
+                  <th className="p-3">Program</th>
+                  <th className="p-3">Type</th>
+                  <th className="p-3">Provider</th>
+                  <th className="p-3">Dates</th>
+                  <th className="p-3">Attended</th>
+                  <th className="p-3">Cost</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {(programs ?? []).map((p: any) => (
+                  <tr key={p.id} className="border-t">
+                    <td className="p-3">
+                      <div className="font-medium">{p.title}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {(p.skill_tags ?? []).join(", ")}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <Badge variant="secondary">{p.program_type}</Badge>
+                    </td>
+                    <td className="p-3">{p.provider}</td>
+                    <td className="p-3">
+                      {fmtDate(p.start_date)} → {fmtDate(p.end_date)}
+                    </td>
+                    <td className="p-3">
+                      {(attendance ?? []).filter((a: any) => a.program_id === p.id).length}
+                    </td>
+                    <td className="p-3">{money(p.cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
       <Dialog open={open} onOpenChange={setOpen}>

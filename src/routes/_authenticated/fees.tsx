@@ -131,8 +131,7 @@ export function FeesPage() {
         <div />
       </AppShell>
     );
-  if (user.primaryRole === "admin" || user.primaryRole === "accountant")
-    return <AdminFees />;
+  if (user.primaryRole === "admin" || user.primaryRole === "accountant") return <AdminFees />;
   if (user.primaryRole === "parent") return <SelfFees userId={user.id} isParent />;
   return (
     <AppShell>
@@ -279,62 +278,62 @@ function AdminFees() {
               )}
             </div>
             {isAdmin && (
-            <Dialog open={openAssign} onOpenChange={setOpenAssign}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="size-4" /> Assign fees
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Assign fee to students</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={submitAssign} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label>Fee structure</Label>
-                    <Select value={assignStructureId} onValueChange={setAssignStructureId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pick a structure" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(structures ?? []).map((s: any) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name} — {inr(s.amount)} · {FREQ_LABEL[s.frequency] || "One-time"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Assign to class (leave blank for all)</Label>
-                    <Select
-                      value={assignClassId || "all"}
-                      onValueChange={(v) => setAssignClassId(v === "all" ? "" : v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All students</SelectItem>
-                        {(classes ?? []).map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                            {c.section && ` · ${c.section}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Due date</Label>
-                    <Input name="due" type="date" required />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    Assign
+              <Dialog open={openAssign} onOpenChange={setOpenAssign}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="size-4" /> Assign fees
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Assign fee to students</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={submitAssign} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label>Fee structure</Label>
+                      <Select value={assignStructureId} onValueChange={setAssignStructureId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pick a structure" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(structures ?? []).map((s: any) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name} — {inr(s.amount)} · {FREQ_LABEL[s.frequency] || "One-time"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Assign to class (leave blank for all)</Label>
+                      <Select
+                        value={assignClassId || "all"}
+                        onValueChange={(v) => setAssignClassId(v === "all" ? "" : v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All students</SelectItem>
+                          {(classes ?? []).map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                              {c.section && ` · ${c.section}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Due date</Label>
+                      <Input name="due" type="date" required />
+                    </div>
+                    <Button type="submit" className="w-full">
+                      Assign
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
             )}
           </div>
           <Card className="rounded-2xl overflow-hidden">
@@ -399,76 +398,76 @@ function AdminFees() {
         </TabsContent>
         <TabsContent value="structures" className="mt-4 space-y-4">
           {isAdmin && (
-          <div className="flex justify-end">
-            <Dialog open={openStructure} onOpenChange={setOpenStructure}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="size-4" /> New structure
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Fee structure</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={submitStructure} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label>Name</Label>
-                    <Input name="name" required placeholder="Term 1 Tuition" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
+            <div className="flex justify-end">
+              <Dialog open={openStructure} onOpenChange={setOpenStructure}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="size-4" /> New structure
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Fee structure</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={submitStructure} className="space-y-4">
                     <div className="space-y-1.5">
-                      <Label>Amount (₹)</Label>
-                      <Input name="amount" type="number" step="0.01" required />
+                      <Label>Name</Label>
+                      <Input name="name" required placeholder="Term 1 Tuition" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Amount (₹)</Label>
+                        <Input name="amount" type="number" step="0.01" required />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Frequency</Label>
+                        <Select name="frequency" defaultValue="one_time">
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="one_time">One-time</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                            <SelectItem value="quarterly">Quarterly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Frequency</Label>
-                      <Select name="frequency" defaultValue="one_time">
+                      <Label>Class (optional)</Label>
+                      <Select
+                        value={structureClassId || "any"}
+                        onValueChange={(v) => setStructureClassId(v === "any" ? "" : v)}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="one_time">One-time</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
-                          <SelectItem value="quarterly">Quarterly</SelectItem>
+                          <SelectItem value="any">Any class</SelectItem>
+                          {(classes ?? []).map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                              {c.section && ` · ${c.section}`}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Class (optional)</Label>
-                    <Select
-                      value={structureClassId || "any"}
-                      onValueChange={(v) => setStructureClassId(v === "any" ? "" : v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="any">Any class</SelectItem>
-                        {(classes ?? []).map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                            {c.section && ` · ${c.section}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Term</Label>
-                    <Input name="term" placeholder="Term 1" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Academic year</Label>
-                    <Input name="year" defaultValue="2025-2026" />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    Save
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
+                    <div className="space-y-1.5">
+                      <Label>Term</Label>
+                      <Input name="term" placeholder="Term 1" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Academic year</Label>
+                      <Input name="year" defaultValue="2025-2026" />
+                    </div>
+                    <Button type="submit" className="w-full">
+                      Save
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {(structures ?? []).map((s: any) => (

@@ -168,7 +168,9 @@ function CollectPage() {
                     <td className="px-3 py-2 font-medium">{r.name ?? "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground">{r.className ?? "—"}</td>
                     <td className="px-3 py-2 text-right">
-                      <span className={r.due > 0 ? "font-semibold text-red-600 dark:text-red-400" : ""}>
+                      <span
+                        className={r.due > 0 ? "font-semibold text-red-600 dark:text-red-400" : ""}
+                      >
                         {inr(r.due)}
                       </span>
                     </td>
@@ -248,7 +250,8 @@ function StudentSheet({ studentId, onBack }: { studentId: string; onBack: () => 
   const toggle = (id: string) =>
     setSelected((prev) => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   const toggleHead = (h: Head) => {
@@ -353,7 +356,8 @@ function StudentSheet({ studentId, onBack }: { studentId: string; onBack: () => 
                       onClick={() =>
                         setCollapsed((prev) => {
                           const n = new Set(prev);
-                          n.has(h.title) ? n.delete(h.title) : n.add(h.title);
+                          if (n.has(h.title)) n.delete(h.title);
+                          else n.add(h.title);
                           return n;
                         })
                       }
@@ -404,13 +408,17 @@ function StudentSheet({ studentId, onBack }: { studentId: string; onBack: () => 
                                   )}
                                 </td>
                                 <td className="px-3 py-2">{r.feesType}</td>
-                                <td className="px-3 py-2 text-muted-foreground">{fmtDate(r.dueDate)}</td>
+                                <td className="px-3 py-2 text-muted-foreground">
+                                  {fmtDate(r.dueDate)}
+                                </td>
                                 <td className="px-3 py-2">
                                   <StatusBadge status={r.status} />
                                 </td>
                                 <td className="px-3 py-2 text-right">{inr(r.amount)}</td>
                                 <td className="px-3 py-2 text-right">{inr(r.paid)}</td>
-                                <td className="px-3 py-2 text-right font-medium">{inr(r.balance)}</td>
+                                <td className="px-3 py-2 text-right font-medium">
+                                  {inr(r.balance)}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -442,7 +450,15 @@ function StudentSheet({ studentId, onBack }: { studentId: string; onBack: () => 
   );
 }
 
-function Mini({ label, value, tone }: { label: string; value: string; tone?: "danger" | "success" }) {
+function Mini({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "danger" | "success";
+}) {
   const cls =
     tone === "danger"
       ? "text-red-600 dark:text-red-400"
@@ -555,7 +571,11 @@ function CollectModal({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Payment Date</Label>
-            <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+            <Input
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Payment Mode</Label>

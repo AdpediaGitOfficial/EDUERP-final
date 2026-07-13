@@ -35,7 +35,12 @@ const STAGES = ["applied", "screening", "interview", "offer", "joined"] as const
 function Page() {
   const qc = useQueryClient();
   const confirm = useConfirm();
-  const { data: openings, isLoading, isError, refetch } = useQuery({
+  const {
+    data: openings,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["job-openings"],
     queryFn: () => apiGet<any[]>("/hr/recruitment/openings"),
   });
@@ -169,49 +174,49 @@ function Page() {
           <TableSkeleton rows={6} cols={3} />
         </Card>
       ) : (
-      <div className="grid md:grid-cols-3 gap-3 mb-6">
-        {(openings ?? []).map((o: any) => (
-          <Card key={o.id} className="p-4 rounded-2xl">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="font-medium">{o.title}</div>
-                <div className="text-xs text-muted-foreground">
-                  {o.department} • {o.positions} position{o.positions > 1 ? "s" : ""}
+        <div className="grid md:grid-cols-3 gap-3 mb-6">
+          {(openings ?? []).map((o: any) => (
+            <Card key={o.id} className="p-4 rounded-2xl">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="font-medium">{o.title}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {o.department} • {o.positions} position{o.positions > 1 ? "s" : ""}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Badge className={badgeClass(o.status === "open" ? "active" : "inactive")}>
+                    {niceLabel(o.status)}
+                  </Badge>
+                  {o.status === "open" && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Close opening ${o.title ?? ""}`.trim()}
+                      onClick={async () => {
+                        if (
+                          await confirm({
+                            title: "Close this opening?",
+                            description: `"${o.title}" will be marked closed and stop accepting applicants.`,
+                            confirmText: "Close opening",
+                          })
+                        )
+                          closeOpening.mutate(o.id);
+                      }}
+                      title="Close"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <Badge className={badgeClass(o.status === "open" ? "active" : "inactive")}>
-                  {niceLabel(o.status)}
-                </Badge>
-                {o.status === "open" && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`Close opening ${o.title ?? ""}`.trim()}
-                    onClick={async () => {
-                      if (
-                        await confirm({
-                          title: "Close this opening?",
-                          description: `"${o.title}" will be marked closed and stop accepting applicants.`,
-                          confirmText: "Close opening",
-                        })
-                      )
-                        closeOpening.mutate(o.id);
-                    }}
-                    title="Close"
-                  >
-                    <X className="size-4" />
-                  </Button>
-                )}
+              <div className="text-xs text-muted-foreground">
+                Opened {fmtDate(o.opened_at)} • Closes {fmtDate(o.closes_at)}
               </div>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Opened {fmtDate(o.opened_at)} • Closes {fmtDate(o.closes_at)}
-            </div>
-            <div className="text-xs mt-2">{o.description}</div>
-          </Card>
-        ))}
-      </div>
+              <div className="text-xs mt-2">{o.description}</div>
+            </Card>
+          ))}
+        </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         {STAGES.map((stage) => (

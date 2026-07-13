@@ -11,14 +11,7 @@ import {
   Put,
   UseGuards,
 } from "@nestjs/common";
-import {
-  IsBoolean,
-  IsIn,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-} from "class-validator";
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { StudentProfileService } from "./student-profile.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
@@ -93,9 +86,7 @@ class DocumentUpdateDto {
 @UseGuards(JwtAuthGuard)
 @Controller("students/:studentId/profile")
 export class StudentProfileController {
-  constructor(
-    @Inject(StudentProfileService) private readonly svc: StudentProfileService,
-  ) {}
+  constructor(@Inject(StudentProfileService) private readonly svc: StudentProfileService) {}
 
   @Get()
   getProfile(

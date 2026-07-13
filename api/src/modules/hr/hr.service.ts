@@ -485,7 +485,11 @@ export class HrService {
       byMonth.set(key, g);
     }
     return Array.from(byMonth.values())
-      .map((g) => ({ ...g, totalNet: this.round2(g.totalNet), status: g.pending === 0 ? "paid" : "generated" }))
+      .map((g) => ({
+        ...g,
+        totalNet: this.round2(g.totalNet),
+        status: g.pending === 0 ? "paid" : "generated",
+      }))
       .sort((a, b) => b.month.getTime() - a.month.getTime());
   }
 
@@ -546,8 +550,7 @@ export class HrService {
     this.requireHr(actor);
     const run = await this.prisma.payroll_runs.findUnique({ where: { id } });
     if (!run) throw new NotFoundException("Payroll run not found");
-    if (run.status === "paid")
-      throw new BadRequestException("A paid payroll run can't be edited.");
+    if (run.status === "paid") throw new BadRequestException("A paid payroll run can't be edited.");
     const allowances = input.allowances ?? Number(run.allowances);
     const gross = Number(run.base_salary) + allowances;
     const attendance = input.attendance_deduction ?? Number(run.attendance_deduction);
@@ -575,7 +578,17 @@ export class HrService {
   async payslipData(actor: AuthUser, id: string) {
     const run = await this.prisma.payroll_runs.findUnique({
       where: { id },
-      include: { staff: { select: { full_name: true, employee_code: true, designation: true, department: true, profile_id: true } } },
+      include: {
+        staff: {
+          select: {
+            full_name: true,
+            employee_code: true,
+            designation: true,
+            department: true,
+            profile_id: true,
+          },
+        },
+      },
     });
     if (!run) throw new NotFoundException("Payroll run not found");
     if (!this.canReadPayroll(actor) && run.staff?.profile_id !== actor.id)
@@ -810,7 +823,12 @@ export class HrService {
     const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
     if (!staff) throw new NotFoundException("Employee not found");
     return this.prisma.staff_documents.create({
-      data: { staff_id: staffId, doc_type: docType, title: title?.trim() || docType, file_url: fileUrl },
+      data: {
+        staff_id: staffId,
+        doc_type: docType,
+        title: title?.trim() || docType,
+        file_url: fileUrl,
+      },
     });
   }
 
@@ -932,7 +950,12 @@ export class HrService {
     this.requireHr(actor);
     try {
       const row = await this.prisma.hr_salary_templates.create({
-        data: { name: input.name, code: input.code, description: input.description || null, ...this.mapSalaryInput(input) },
+        data: {
+          name: input.name,
+          code: input.code,
+          description: input.description || null,
+          ...this.mapSalaryInput(input),
+        },
       });
       return { id: row.id };
     } catch (e) {
@@ -1049,8 +1072,7 @@ export class HrService {
   }) {
     const principal = Number(loan.principal ?? 0);
     const rate = Number(loan.interest_rate ?? 0);
-    const repaid =
-      loan.repayments?.reduce((s, r) => s + Number(r.amount ?? 0), 0) ?? 0;
+    const repaid = loan.repayments?.reduce((s, r) => s + Number(r.amount ?? 0), 0) ?? 0;
     const round = (n: number) => Math.round(n * 100) / 100;
     return {
       emi: this.computeEmi(principal, rate, loan.tenure_months),
@@ -1097,8 +1119,10 @@ export class HrService {
 
   async createLoan(actor: AuthUser, input: LoanInput) {
     this.requireHr(actor);
-    if (!(input.principal > 0)) throw new BadRequestException("Principal must be greater than zero");
-    if (!(input.tenure_months > 0)) throw new BadRequestException("Tenure must be at least 1 month");
+    if (!(input.principal > 0))
+      throw new BadRequestException("Principal must be greater than zero");
+    if (!(input.tenure_months > 0))
+      throw new BadRequestException("Tenure must be at least 1 month");
     const staff = await this.prisma.staff.findUnique({ where: { id: input.staff_id } });
     if (!staff) throw new NotFoundException("Employee not found");
     const row = await this.prisma.hr_loans.create({
@@ -1161,7 +1185,7 @@ export class HrService {
           loan_id: loanId,
           amount: input.amount,
           paid_on: input.paid_on ? new Date(input.paid_on) : new Date(),
-          installment_no: input.installment_no ?? (loan.repayments.length + 1),
+          installment_no: input.installment_no ?? loan.repayments.length + 1,
           notes: input.notes || null,
         },
       }),
@@ -1315,12 +1339,15 @@ export class HrService {
       where: { id },
       include: {
         staff: { select: { id: true, full_name: true, employee_code: true, profile_id: true } },
-        cycle: { select: { id: true, name: true, status: true, period_start: true, period_end: true } },
+        cycle: {
+          select: { id: true, name: true, status: true, period_start: true, period_end: true },
+        },
         ratings: true,
       },
     });
     if (!appraisal) throw new NotFoundException("Appraisal not found");
-    if (!this.isHr(actor) && appraisal.staff.profile_id !== actor.id) throw new ForbiddenException();
+    if (!this.isHr(actor) && appraisal.staff.profile_id !== actor.id)
+      throw new ForbiddenException();
     const criteria = await this.prisma.hr_appraisal_criteria.findMany({
       where: { is_active: true },
       orderBy: { created_at: "asc" },
@@ -1364,9 +1391,9 @@ export class HrService {
       criteria,
       // merge existing + incoming so the score reflects a partial save too
       [
-        ...(await this.prisma.hr_appraisal_ratings.findMany({ where: { appraisal_id: id } })).filter(
-          (er) => !ratings.some((nr) => nr.criterion_id === er.criterion_id),
-        ),
+        ...(
+          await this.prisma.hr_appraisal_ratings.findMany({ where: { appraisal_id: id } })
+        ).filter((er) => !ratings.some((nr) => nr.criterion_id === er.criterion_id)),
         ...ratings.map((r) => ({ criterion_id: r.criterion_id, score: r.score })),
       ],
     );
@@ -1389,7 +1416,9 @@ export class HrService {
           overall_score: overall,
           status: appraisal.status === "pending" ? "in_review" : appraisal.status,
           reviewer_id: appraisal.reviewer_id ?? reviewer?.id ?? null,
-          ...(input.self_comments !== undefined ? { self_comments: input.self_comments || null } : {}),
+          ...(input.self_comments !== undefined
+            ? { self_comments: input.self_comments || null }
+            : {}),
           ...(input.manager_comments !== undefined
             ? { manager_comments: input.manager_comments || null }
             : {}),
@@ -1449,7 +1478,11 @@ export class HrService {
 
   /** Next unused department code for the name's prefix (AC001, AC002, …). */
   private async nextDepartmentCode(name: string): Promise<string> {
-    const prefix = (name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "DP");
+    const prefix =
+      name
+        .replace(/[^A-Za-z]/g, "")
+        .slice(0, 2)
+        .toUpperCase() || "DP";
     const rows = await this.prisma.departments.findMany({
       where: { code: { startsWith: prefix } },
       select: { code: true },

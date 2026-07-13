@@ -112,7 +112,7 @@ to the NestJS API (rate limited), `/_serverFn/` RPCs to the web app (rate limite
 
 **The Prisma client MUST be regenerated on every code update.** `schema.prisma` and the generated
 client (`node_modules/@prisma/client`) are two separate things: pulling new code that adds a Prisma
-model does *not* update the client. If you skip `prisma generate`, the API crashes at runtime with
+model does _not_ update the client. If you skip `prisma generate`, the API crashes at runtime with
 `TypeError: Cannot read properties of undefined (reading 'findMany')` because `this.prisma.<newModel>`
 is `undefined`. `npm ci`/`npm install` now runs `prisma generate` automatically via a `postinstall`
 hook, so a clean install is enough — but never restart the API on a stale client.
@@ -156,7 +156,7 @@ cd /var/www/greenwood-erp/api
 pm2 reload greenwood-api
 ```
 
-If some endpoints still fail with a *database* error (e.g. `relation "..." does not exist`) after
+If some endpoints still fail with a _database_ error (e.g. `relation "..." does not exist`) after
 that, the release also added tables the running database is missing — apply the new
 `supabase/migrations/*.sql` file(s) with `psql -f` against the production `DATABASE_URL`, then reload
 again.

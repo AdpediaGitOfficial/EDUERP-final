@@ -31,7 +31,12 @@ type LeaveType = {
 };
 
 function Page() {
-  const { data: employmentTypes, isLoading, isError, refetch } = useQuery({
+  const {
+    data: employmentTypes,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["hr-employment-types"],
     queryFn: () => apiGet<EmploymentType[]>("/hr/employment-types"),
   });
@@ -61,93 +66,93 @@ function Page() {
           <TableSkeleton rows={6} cols={3} />
         </Card>
       ) : (
-      <div className="grid lg:grid-cols-3 gap-4 mb-4">
-        <Card className="p-5 rounded-2xl">
-          <h3 className="font-semibold mb-3">Employment types</h3>
-          <div className="flex flex-wrap gap-1.5">
-            {(employmentTypes ?? []).map((t) => (
-              <StatusBadge key={t.id} tone="info" label={t.name} />
-            ))}
-            {(employmentTypes ?? []).length === 0 && (
-              <span className="text-sm text-muted-foreground">None configured.</span>
-            )}
-          </div>
-        </Card>
+        <div className="grid lg:grid-cols-3 gap-4 mb-4">
+          <Card className="p-5 rounded-2xl">
+            <h3 className="font-semibold mb-3">Employment types</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {(employmentTypes ?? []).map((t) => (
+                <StatusBadge key={t.id} tone="info" label={t.name} />
+              ))}
+              {(employmentTypes ?? []).length === 0 && (
+                <span className="text-sm text-muted-foreground">None configured.</span>
+              )}
+            </div>
+          </Card>
 
-        <Card className="p-5 rounded-2xl">
-          <h3 className="font-semibold mb-3">Pay grades</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="py-1">Grade</th>
-                  <th className="py-1">Level</th>
-                  <th className="py-1 text-right">Range</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(payGrades ?? []).map((g) => (
-                  <tr key={g.id} className="border-t">
-                    <td className="py-1.5">
-                      {g.name} <span className="text-muted-foreground">({g.code})</span>
-                    </td>
-                    <td className="py-1.5">{g.level}</td>
-                    <td className="py-1.5 text-right whitespace-nowrap">
-                      {money(Number(g.min_salary ?? 0))} – {money(Number(g.max_salary ?? 0))}
-                    </td>
-                  </tr>
-                ))}
-                {(payGrades ?? []).length === 0 && (
+          <Card className="p-5 rounded-2xl">
+            <h3 className="font-semibold mb-3">Pay grades</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs uppercase text-muted-foreground">
                   <tr>
-                    <td colSpan={3} className="py-3 text-muted-foreground">
-                      None configured.
-                    </td>
+                    <th className="py-1">Grade</th>
+                    <th className="py-1">Level</th>
+                    <th className="py-1 text-right">Range</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+                </thead>
+                <tbody>
+                  {(payGrades ?? []).map((g) => (
+                    <tr key={g.id} className="border-t">
+                      <td className="py-1.5">
+                        {g.name} <span className="text-muted-foreground">({g.code})</span>
+                      </td>
+                      <td className="py-1.5">{g.level}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">
+                        {money(Number(g.min_salary ?? 0))} – {money(Number(g.max_salary ?? 0))}
+                      </td>
+                    </tr>
+                  ))}
+                  {(payGrades ?? []).length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-3 text-muted-foreground">
+                        None configured.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
-        <Card className="p-5 rounded-2xl">
-          <h3 className="font-semibold mb-3">Leave types</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="py-1">Type</th>
-                  <th className="py-1">Quota</th>
-                  <th className="py-1">Flags</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(leaveTypes ?? []).map((l) => (
-                  <tr key={l.id} className="border-t">
-                    <td className="py-1.5">{l.name}</td>
-                    <td className="py-1.5">{l.annual_quota || "—"}</td>
-                    <td className="py-1.5">
-                      <div className="flex flex-wrap gap-1">
-                        <StatusBadge
-                          tone={l.is_paid ? "success" : "neutral"}
-                          label={l.is_paid ? "Paid" : "Unpaid"}
-                        />
-                        {l.carry_forward && <StatusBadge tone="info" label="Carry fwd" />}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {(leaveTypes ?? []).length === 0 && (
+          <Card className="p-5 rounded-2xl">
+            <h3 className="font-semibold mb-3">Leave types</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs uppercase text-muted-foreground">
                   <tr>
-                    <td colSpan={3} className="py-3 text-muted-foreground">
-                      None configured.
-                    </td>
+                    <th className="py-1">Type</th>
+                    <th className="py-1">Quota</th>
+                    <th className="py-1">Flags</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
+                </thead>
+                <tbody>
+                  {(leaveTypes ?? []).map((l) => (
+                    <tr key={l.id} className="border-t">
+                      <td className="py-1.5">{l.name}</td>
+                      <td className="py-1.5">{l.annual_quota || "—"}</td>
+                      <td className="py-1.5">
+                        <div className="flex flex-wrap gap-1">
+                          <StatusBadge
+                            tone={l.is_paid ? "success" : "neutral"}
+                            label={l.is_paid ? "Paid" : "Unpaid"}
+                          />
+                          {l.carry_forward && <StatusBadge tone="info" label="Carry fwd" />}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {(leaveTypes ?? []).length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-3 text-muted-foreground">
+                        None configured.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       )}
 
       <div className="grid md:grid-cols-2 gap-4">

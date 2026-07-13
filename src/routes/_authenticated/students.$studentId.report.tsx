@@ -547,11 +547,7 @@ function StudentReportPage() {
                       <Tooltip />
                       <Legend />
                       <Bar dataKey="You" fill={CHART_PRIMARY} radius={[6, 6, 0, 0]} />
-                      <Bar
-                        dataKey="Class"
-                        fill={CHART_MUTED}
-                        radius={[6, 6, 0, 0]}
-                      />
+                      <Bar dataKey="Class" fill={CHART_MUTED} radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

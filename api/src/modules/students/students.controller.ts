@@ -190,11 +190,7 @@ export class StudentsController {
   }
 
   @Post(":id/transfer")
-  transfer(
-    @CurrentUser() actor: AuthUser,
-    @Param("id") id: string,
-    @Body() dto: TransferDto,
-  ) {
+  transfer(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Body() dto: TransferDto) {
     return this.students.transfer(actor, id, dto.toClassId, dto.rollNo);
   }
 

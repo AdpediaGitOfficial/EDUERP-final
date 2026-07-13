@@ -81,7 +81,10 @@ export class TeacherProfileService {
     } catch (e) {
       if ((e as { code?: string }).code === "P2002") {
         created = await this.prisma.staff.create({
-          data: { employee_code: `${base}-${teacher.id.replace(/-/g, "").slice(8, 14).toUpperCase()}`, ...data },
+          data: {
+            employee_code: `${base}-${teacher.id.replace(/-/g, "").slice(8, 14).toUpperCase()}`,
+            ...data,
+          },
         });
       } else {
         throw e;

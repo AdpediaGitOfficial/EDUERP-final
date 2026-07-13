@@ -27,6 +27,7 @@ So "Foundation Cleanup" is genuinely small. The real foundation work is
 ## Findings
 
 ### Removed in cleanup pass #1 (done)
+
 - Dead exported utilities: `nextStageLabel` (`src/lib/admission-stages.ts`),
   `nextAssetCode` (`src/lib/assets-util.ts`), `firstOfMonth`
   (`src/lib/module-util.ts`) — zero references.
@@ -35,6 +36,7 @@ So "Foundation Cleanup" is genuinely small. The real foundation work is
   ("Staff Monitoring") rather than deleted.
 
 ### Kept deliberately (not debt)
+
 - The 24 unused `src/components/ui/*` shadcn primitives include `drawer`,
   `table`, `dropdown-menu`, `pagination`, `command`, `calendar`,
   `context-menu` — the exact building blocks for the enterprise components we're
@@ -47,16 +49,18 @@ So "Foundation Cleanup" is genuinely small. The real foundation work is
   not fake data. Gate behind an env flag when going multi-tenant/production.
 
 ### Standardization gaps (the real Phase-1 work)
-| Gap | Evidence | Lever |
-|---|---|---|
-| No shared **DataTable** | ~60 route files hand-roll `<table>` | Highest |
-| **StatusBadge** under-adopted | shared component exists; 29 files still use inline `bg-*-100` badges | High (mechanical) |
-| **QueryError**/skeleton states | used in only ~4 files | Med |
-| Missing components | Drawer detail-panel, Filters bar, DatePicker, BulkActionBar, ExportDialog, CommandPalette, PermissionBadge, ImportWizard, shared Timeline / AuditLog viewer | High |
-| Decorative topbar **search** | no `value`/`onChange` — false affordance | Med → build CommandPalette |
-| Monolith pages | `students.index` (1838), `fees` (1612), `dashboard` (1603) lines | Med (decompose) |
+
+| Gap                            | Evidence                                                                                                                                                    | Lever                      |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| No shared **DataTable**        | ~60 route files hand-roll `<table>`                                                                                                                         | Highest                    |
+| **StatusBadge** under-adopted  | shared component exists; 29 files still use inline `bg-*-100` badges                                                                                        | High (mechanical)          |
+| **QueryError**/skeleton states | used in only ~4 files                                                                                                                                       | Med                        |
+| Missing components             | Drawer detail-panel, Filters bar, DatePicker, BulkActionBar, ExportDialog, CommandPalette, PermissionBadge, ImportWizard, shared Timeline / AuditLog viewer | High                       |
+| Decorative topbar **search**   | no `value`/`onChange` — false affordance                                                                                                                    | Med → build CommandPalette |
+| Monolith pages                 | `students.index` (1838), `fees` (1612), `dashboard` (1603) lines                                                                                            | Med (decompose)            |
 
 ### Backend architecture tidy-ups (verify RBAC intent before merging)
+
 - `payments.tsx` route is a subset of `fees.tsx` (both fetch `/payments`).
 - `reception.admissions` overlaps the `admissions` module; `reception` transport
   routes overlap the `fleet` module (same tables).

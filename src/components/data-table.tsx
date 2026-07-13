@@ -107,16 +107,16 @@ export function DataTable<T>({
 
   const toggleSort = (id: string) => {
     setSort((prev) =>
-      prev?.id === id
-        ? prev.dir === "asc"
-          ? { id, dir: "desc" }
-          : null
-        : { id, dir: "asc" },
+      prev?.id === id ? (prev.dir === "asc" ? { id, dir: "desc" } : null) : { id, dir: "asc" },
     );
   };
   const sortIcon = (id: string) => {
     if (sort?.id !== id) return <ArrowUpDown className="size-3.5 opacity-40" />;
-    return sort.dir === "asc" ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />;
+    return sort.dir === "asc" ? (
+      <ArrowUp className="size-3.5" />
+    ) : (
+      <ArrowDown className="size-3.5" />
+    );
   };
 
   const selected = selectedIds ?? new Set<string>();
@@ -125,7 +125,8 @@ export function DataTable<T>({
   const setSelected = (next: Set<string>) => onSelectedChange?.(next);
   const toggleRow = (id: string) => {
     const next = new Set(selected);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     setSelected(next);
   };
   const togglePage = () => {
@@ -148,9 +149,7 @@ export function DataTable<T>({
           {toolbar}
           {selectable && selected.size > 0 && (
             <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-accent">
-              <span className="text-sm font-medium">
-                {selected.size.toLocaleString()} selected
-              </span>
+              <span className="text-sm font-medium">{selected.size.toLocaleString()} selected</span>
               <div className="ml-auto flex flex-wrap items-center gap-2">
                 {bulkActions}
                 <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
@@ -178,7 +177,10 @@ export function DataTable<T>({
                   </th>
                 )}
                 {columns.map((c) => (
-                  <th key={c.id} className={`p-3 font-medium ${alignCls(c.align)} ${c.headerClassName ?? ""}`}>
+                  <th
+                    key={c.id}
+                    className={`p-3 font-medium ${alignCls(c.align)} ${c.headerClassName ?? ""}`}
+                  >
                     {c.sortValue ? (
                       <button
                         type="button"
@@ -228,7 +230,10 @@ export function DataTable<T>({
                           </td>
                         )}
                         {columns.map((c) => (
-                          <td key={c.id} className={`p-3 ${alignCls(c.align)} ${c.cellClassName ?? ""}`}>
+                          <td
+                            key={c.id}
+                            className={`p-3 ${alignCls(c.align)} ${c.cellClassName ?? ""}`}
+                          >
                             {c.cell(row)}
                           </td>
                         ))}

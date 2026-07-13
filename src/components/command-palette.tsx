@@ -78,11 +78,7 @@ export function CommandPalette({
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       {/* shouldFilter stays on for pages; student rows are already server-filtered
           and use forceMount-friendly values, so keep them in a separate group. */}
-      <CommandInput
-        placeholder="Search pages or students…"
-        value={q}
-        onValueChange={setQ}
-      />
+      <CommandInput placeholder="Search pages or students…" value={q} onValueChange={setQ} />
       <CommandList>
         <CommandEmpty>No results.</CommandEmpty>
         <CommandGroup heading="Pages">
@@ -111,7 +107,9 @@ export function CommandPalette({
                 <span className="truncate">{s.full_name}</span>
                 <span className="ml-2 text-xs text-muted-foreground">
                   {s.admission_no}
-                  {s.class_name ? ` · ${s.class_name}${s.class_section ? " " + s.class_section : ""}` : ""}
+                  {s.class_name
+                    ? ` · ${s.class_name}${s.class_section ? " " + s.class_section : ""}`
+                    : ""}
                 </span>
               </CommandItem>
             ))}

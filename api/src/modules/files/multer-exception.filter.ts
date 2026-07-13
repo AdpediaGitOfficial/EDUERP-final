@@ -12,7 +12,12 @@ export class MulterExceptionFilter implements ExceptionFilter {
     const err = exception as { name?: string; code?: string; status?: number; message?: string };
 
     // Let already-typed HttpExceptions pass through untouched.
-    if (typeof err?.status === "number" && err.status >= 400 && err.status < 500 && err.name !== "MulterError") {
+    if (
+      typeof err?.status === "number" &&
+      err.status >= 400 &&
+      err.status < 500 &&
+      err.name !== "MulterError"
+    ) {
       return res.status(err.status).json({ statusCode: err.status, message: err.message });
     }
 

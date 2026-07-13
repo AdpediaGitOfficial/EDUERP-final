@@ -32,7 +32,13 @@ function Page() {
     queryKey: ["report-catalogue"],
     queryFn: () => apiGet<Catalogue>("/academics/reports"),
   });
-  const { data: report, isFetching, isLoading, isError, refetch } = useQuery({
+  const {
+    data: report,
+    isFetching,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["academic-report", type],
     queryFn: () => apiGet<Report>(`/academics/reports/${type}`),
   });
@@ -89,11 +95,21 @@ function Page() {
           </SelectContent>
         </Select>
         <div className="flex-1" />
-        <Button size="sm" variant="outline" onClick={exportCsv} disabled={!report || report.rows.length === 0}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={exportCsv}
+          disabled={!report || report.rows.length === 0}
+        >
           <Download className="size-4 mr-1" />
           Export CSV
         </Button>
-        <Button size="sm" variant="outline" onClick={print} disabled={!report || report.rows.length === 0}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={print}
+          disabled={!report || report.rows.length === 0}
+        >
           <Printer className="size-4 mr-1" />
           Print
         </Button>
@@ -112,7 +128,11 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={4} />
         ) : report && report.rows.length === 0 && !isFetching ? (
-          <EmptyState icon={FileBarChart} title="No data" hint="This report has no rows for the current session." />
+          <EmptyState
+            icon={FileBarChart}
+            title="No data"
+            hint="This report has no rows for the current session."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

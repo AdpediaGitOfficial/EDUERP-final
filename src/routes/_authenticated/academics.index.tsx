@@ -143,9 +143,19 @@ function Dashboard() {
         <StatCardsSkeleton count={6} />
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <Stat icon={School} label="Classes" value={s?.totalClasses} hint={`${s?.totalSections ?? 0} sections`} />
+          <Stat
+            icon={School}
+            label="Classes"
+            value={s?.totalClasses}
+            hint={`${s?.totalSections ?? 0} sections`}
+          />
           <Stat icon={Users} label="Students" value={s?.totalStudents} />
-          <Stat icon={GraduationCap} label="Teachers" value={s?.totalTeachers} hint={`1:${s?.studentTeacherRatio ?? 0} ratio`} />
+          <Stat
+            icon={GraduationCap}
+            label="Teachers"
+            value={s?.totalTeachers}
+            hint={`1:${s?.studentTeacherRatio ?? 0} ratio`}
+          />
           <Stat icon={BookOpen} label="Active Subjects" value={s?.activeSubjects} />
           <Stat
             icon={CalendarCheck}
@@ -154,15 +164,32 @@ function Dashboard() {
             hint={`${s?.classesWithoutTimetable ?? 0} pending`}
             tone={s && s.timetableCompletion < 100 ? "warning" : "success"}
           />
-          <Stat icon={GraduationCap} label="To Promote" value={s?.studentsToPromote} hint="session end" />
+          <Stat
+            icon={GraduationCap}
+            label="To Promote"
+            value={s?.studentsToPromote}
+            hint="session end"
+          />
         </div>
       )}
 
       {/* Operational alerts strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MiniAlert label="Pending teacher allocation" value={s?.pendingTeacherAllocation} icon={UserCog} />
-        <MiniAlert label="Classes without class teacher" value={s?.classesWithoutClassTeacher} icon={UserCog} />
-        <MiniAlert label="Classes without timetable" value={s?.classesWithoutTimetable} icon={CalendarDays} />
+        <MiniAlert
+          label="Pending teacher allocation"
+          value={s?.pendingTeacherAllocation}
+          icon={UserCog}
+        />
+        <MiniAlert
+          label="Classes without class teacher"
+          value={s?.classesWithoutClassTeacher}
+          icon={UserCog}
+        />
+        <MiniAlert
+          label="Classes without timetable"
+          value={s?.classesWithoutTimetable}
+          icon={CalendarDays}
+        />
         <MiniAlert label="Unassigned students" value={s?.unassignedStudents} icon={Users} />
       </div>
 
@@ -190,7 +217,9 @@ function Dashboard() {
                     <td className="p-3 font-medium">{c.name}</td>
                     <td className="p-3">{c.sections.join(", ") || "—"}</td>
                     <td className="p-3">
-                      {c.inCharge ?? <span className="text-muted-foreground italic">Not assigned</span>}
+                      {c.inCharge ?? (
+                        <span className="text-muted-foreground italic">Not assigned</span>
+                      )}
                     </td>
                     <td className="p-3 text-right font-semibold">{c.students}</td>
                     <td className="p-3 text-right">
@@ -224,7 +253,11 @@ function Dashboard() {
             {integrity && (
               <StatusBadge
                 tone={integrity.healthy ? "success" : "warning"}
-                label={integrity.healthy ? "All clear" : `${integrity.issueCount} issue${integrity.issueCount === 1 ? "" : "s"}`}
+                label={
+                  integrity.healthy
+                    ? "All clear"
+                    : `${integrity.issueCount} issue${integrity.issueCount === 1 ? "" : "s"}`
+                }
                 className="ml-auto"
               />
             )}
@@ -239,7 +272,9 @@ function Dashboard() {
                 )}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={c.ok ? "text-muted-foreground" : "font-medium"}>{c.label}</span>
+                    <span className={c.ok ? "text-muted-foreground" : "font-medium"}>
+                      {c.label}
+                    </span>
                     {!c.ok && <span className="text-amber-600 font-semibold">{c.count}</span>}
                   </div>
                   {!c.ok && c.samples.length > 0 && (
@@ -263,7 +298,14 @@ function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data?.charts.studentsByClass ?? []}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-30} textAnchor="end" height={60} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 11 }}
+                  interval={0}
+                  angle={-30}
+                  textAnchor="end"
+                  height={60}
+                />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
                 <Bar dataKey="count" fill={CHART_PRIMARY} radius={[4, 4, 0, 0]} />
@@ -352,7 +394,8 @@ function Dashboard() {
                   : "—"}
               </p>
               <p className="text-xs text-muted-foreground">
-                {s?.teacherAttendanceToday.present ?? 0}/{s?.teacherAttendanceToday.total ?? 0} present
+                {s?.teacherAttendanceToday.present ?? 0}/{s?.teacherAttendanceToday.total ?? 0}{" "}
+                present
               </p>
             </div>
           </div>

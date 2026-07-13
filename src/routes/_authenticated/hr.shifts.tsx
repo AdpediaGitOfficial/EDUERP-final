@@ -30,7 +30,12 @@ export const Route = createFileRoute("/_authenticated/hr/shifts")({ component: P
 
 function Page() {
   const qc = useQueryClient();
-  const { data: shifts, isLoading, isError, refetch } = useQuery({
+  const {
+    data: shifts,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["shifts"],
     queryFn: () => apiGet<any[]>("/hr/shifts"),
   });
@@ -82,25 +87,25 @@ function Page() {
           <TableSkeleton rows={6} cols={4} />
         </Card>
       ) : (
-      <div className="grid md:grid-cols-4 gap-3 mb-6">
-        {(shifts ?? []).map((s: any) => (
-          <Card key={s.id} className="p-4 rounded-2xl">
-            <div className="flex items-center justify-between">
-              <div className="font-medium">{s.name}</div>
-              <Badge>{s.shift_type}</Badge>
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              {s.start_time} – {s.end_time}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Off: {(s.weekly_off ?? []).join(", ")}
-            </div>
-            <div className="text-xs mt-2">
-              Assigned: {(assigns ?? []).filter((a: any) => a.shift_id === s.id).length}
-            </div>
-          </Card>
-        ))}
-      </div>
+        <div className="grid md:grid-cols-4 gap-3 mb-6">
+          {(shifts ?? []).map((s: any) => (
+            <Card key={s.id} className="p-4 rounded-2xl">
+              <div className="flex items-center justify-between">
+                <div className="font-medium">{s.name}</div>
+                <Badge>{s.shift_type}</Badge>
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                {s.start_time} – {s.end_time}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Off: {(s.weekly_off ?? []).join(", ")}
+              </div>
+              <div className="text-xs mt-2">
+                Assigned: {(assigns ?? []).filter((a: any) => a.shift_id === s.id).length}
+              </div>
+            </Card>
+          ))}
+        </div>
       )}
       <Card className="rounded-2xl overflow-hidden">
         <table className="w-full text-sm">

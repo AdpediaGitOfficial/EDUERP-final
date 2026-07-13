@@ -93,58 +93,58 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={7} />
         ) : (
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40">
-            <tr className="text-left">
-              <th className="p-3">Employee</th>
-              <th className="p-3">Category</th>
-              <th className="p-3">Amount</th>
-              <th className="p-3">Date</th>
-              <th className="p-3">Notes</th>
-              <th className="p-3">Status</th>
-              <th className="p-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((e: any) => (
-              <tr key={e.id} className="border-t">
-                <td className="p-3">
-                  <div className="font-medium">{e.staff?.full_name}</div>
-                  <div className="text-xs text-muted-foreground">{e.staff?.employee_code}</div>
-                </td>
-                <td className="p-3">{niceLabel(e.category)}</td>
-                <td className="p-3 font-medium">{money(e.amount)}</td>
-                <td className="p-3">{fmtDate(e.claim_date)}</td>
-                <td className="p-3 text-muted-foreground text-xs">{e.notes}</td>
-                <td className="p-3">
-                  <Badge className={badgeClass(e.status)}>{niceLabel(e.status)}</Badge>
-                </td>
-                <td className="p-3 text-right whitespace-nowrap">
-                  {e.status === "pending" ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => decide.mutate({ id: e.id, status: "approved" })}
-                      >
-                        Approve
-                      </Button>{" "}
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => decide.mutate({ id: e.id, status: "rejected" })}
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </td>
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr className="text-left">
+                <th className="p-3">Employee</th>
+                <th className="p-3">Category</th>
+                <th className="p-3">Amount</th>
+                <th className="p-3">Date</th>
+                <th className="p-3">Notes</th>
+                <th className="p-3">Status</th>
+                <th className="p-3 text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(data ?? []).map((e: any) => (
+                <tr key={e.id} className="border-t">
+                  <td className="p-3">
+                    <div className="font-medium">{e.staff?.full_name}</div>
+                    <div className="text-xs text-muted-foreground">{e.staff?.employee_code}</div>
+                  </td>
+                  <td className="p-3">{niceLabel(e.category)}</td>
+                  <td className="p-3 font-medium">{money(e.amount)}</td>
+                  <td className="p-3">{fmtDate(e.claim_date)}</td>
+                  <td className="p-3 text-muted-foreground text-xs">{e.notes}</td>
+                  <td className="p-3">
+                    <Badge className={badgeClass(e.status)}>{niceLabel(e.status)}</Badge>
+                  </td>
+                  <td className="p-3 text-right whitespace-nowrap">
+                    {e.status === "pending" ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => decide.mutate({ id: e.id, status: "approved" })}
+                        >
+                          Approve
+                        </Button>{" "}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => decide.mutate({ id: e.id, status: "rejected" })}
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
     </>

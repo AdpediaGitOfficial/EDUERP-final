@@ -46,7 +46,12 @@ function Page() {
   const [editing, setEditing] = useState<any | null>(null);
   const [markMissing, setMarkMissing] = useState<any | null>(null);
 
-  const { data: teachers, isLoading, isError, refetch } = useQuery({
+  const {
+    data: teachers,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["teachers-active"],
     queryFn: () => apiGet<any[]>("/hr/attendance/teachers"),
   });
@@ -206,122 +211,126 @@ function Page() {
             ) : isLoading ? (
               <TableSkeleton rows={6} cols={8} />
             ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[640px]">
-                <thead className="bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3 w-10">
-                      <Checkbox
-                        checked={selectedIds.length > 0 && selectedIds.length === rows.length}
-                        onCheckedChange={(v) => {
-                          const next: Record<string, boolean> = {};
-                          if (v) rows.forEach((r) => (next[r.teacher.id] = true));
-                          setSelected(next);
-                        }}
-                      />
-                    </th>
-                    <th className="p-3">Teacher</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">Quick mark</th>
-                    <th className="p-3">Check-in</th>
-                    <th className="p-3">Source</th>
-                    <th className="p-3">Reason</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ teacher, row, notMarked: nm }) => (
-                    <tr key={teacher.id} className="border-t">
-                      <td className="p-3">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[640px]">
+                  <thead className="bg-muted/40">
+                    <tr className="text-left">
+                      <th className="p-3 w-10">
                         <Checkbox
-                          checked={!!selected[teacher.id]}
-                          onCheckedChange={(v) => setSelected((s) => ({ ...s, [teacher.id]: !!v }))}
+                          checked={selectedIds.length > 0 && selectedIds.length === rows.length}
+                          onCheckedChange={(v) => {
+                            const next: Record<string, boolean> = {};
+                            if (v) rows.forEach((r) => (next[r.teacher.id] = true));
+                            setSelected(next);
+                          }}
                         />
-                      </td>
-                      <td className="p-3">
-                        <div className="font-medium">{teacher.full_name}</div>
-                        <div className="text-xs text-muted-foreground">{teacher.subject}</div>
-                      </td>
-                      <td className="p-3">
-                        {row ? (
-                          <Badge className={badgeClass(row.status)}>{niceLabel(row.status)}</Badge>
-                        ) : nm ? (
-                          <Badge className="bg-muted text-foreground border-0">Not Marked</Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Pending</span>
-                        )}
-                      </td>
-                      <td className="p-3">
-                        <div className="flex gap-3 text-xs">
-                          {(["present", "absent", "late", "leave"] as const).map((s) => (
-                            <label key={s} className="flex items-center gap-1 cursor-pointer">
-                              <input
-                                type="radio"
-                                name={`qm-${teacher.id}`}
-                                className="accent-primary"
-                                checked={row?.status === s}
-                                onChange={() =>
-                                  upsertMut.mutate({
-                                    teacherId: teacher.id,
-                                    status: s,
-                                    reason: row
-                                      ? `Quick-mark update by ${niceLabel(role)}`
-                                      : `Quick-mark by ${niceLabel(role)}`,
-                                    existing: row,
-                                    checkIn: row?.check_in_time ?? new Date().toISOString(),
-                                  })
-                                }
-                              />
-                              {niceLabel(s)}
-                            </label>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="p-3 text-xs">
-                        {row?.check_in_time
-                          ? new Date(row.check_in_time).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "—"}
-                      </td>
-                      <td className="p-3 text-xs text-muted-foreground">
-                        {row ? niceLabel(row.marked_by ?? "self") : "—"}
-                      </td>
-                      <td className="p-3 text-xs text-muted-foreground">
-                        {row?.correction_reason ?? ""}
-                      </td>
-                      <td className="p-3 text-right">
-                        {row ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setEditing({ teacher, row })}
-                          >
-                            Correct
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setMarkMissing({ teacher })}
-                          >
-                            Mark
-                          </Button>
-                        )}
-                      </td>
+                      </th>
+                      <th className="p-3">Teacher</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Quick mark</th>
+                      <th className="p-3">Check-in</th>
+                      <th className="p-3">Source</th>
+                      <th className="p-3">Reason</th>
+                      <th className="p-3 text-right">Actions</th>
                     </tr>
-                  ))}
-                  {rows.length === 0 && (
-                    <EmptyRow
-                      colSpan={8}
-                      title="No active teachers"
-                      hint="Active teaching staff will appear here."
-                    />
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rows.map(({ teacher, row, notMarked: nm }) => (
+                      <tr key={teacher.id} className="border-t">
+                        <td className="p-3">
+                          <Checkbox
+                            checked={!!selected[teacher.id]}
+                            onCheckedChange={(v) =>
+                              setSelected((s) => ({ ...s, [teacher.id]: !!v }))
+                            }
+                          />
+                        </td>
+                        <td className="p-3">
+                          <div className="font-medium">{teacher.full_name}</div>
+                          <div className="text-xs text-muted-foreground">{teacher.subject}</div>
+                        </td>
+                        <td className="p-3">
+                          {row ? (
+                            <Badge className={badgeClass(row.status)}>
+                              {niceLabel(row.status)}
+                            </Badge>
+                          ) : nm ? (
+                            <Badge className="bg-muted text-foreground border-0">Not Marked</Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Pending</span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex gap-3 text-xs">
+                            {(["present", "absent", "late", "leave"] as const).map((s) => (
+                              <label key={s} className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`qm-${teacher.id}`}
+                                  className="accent-primary"
+                                  checked={row?.status === s}
+                                  onChange={() =>
+                                    upsertMut.mutate({
+                                      teacherId: teacher.id,
+                                      status: s,
+                                      reason: row
+                                        ? `Quick-mark update by ${niceLabel(role)}`
+                                        : `Quick-mark by ${niceLabel(role)}`,
+                                      existing: row,
+                                      checkIn: row?.check_in_time ?? new Date().toISOString(),
+                                    })
+                                  }
+                                />
+                                {niceLabel(s)}
+                              </label>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-3 text-xs">
+                          {row?.check_in_time
+                            ? new Date(row.check_in_time).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "—"}
+                        </td>
+                        <td className="p-3 text-xs text-muted-foreground">
+                          {row ? niceLabel(row.marked_by ?? "self") : "—"}
+                        </td>
+                        <td className="p-3 text-xs text-muted-foreground">
+                          {row?.correction_reason ?? ""}
+                        </td>
+                        <td className="p-3 text-right">
+                          {row ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditing({ teacher, row })}
+                            >
+                              Correct
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setMarkMissing({ teacher })}
+                            >
+                              Mark
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {rows.length === 0 && (
+                      <EmptyRow
+                        colSpan={8}
+                        title="No active teachers"
+                        hint="Active teaching staff will appear here."
+                      />
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
         </TabsContent>

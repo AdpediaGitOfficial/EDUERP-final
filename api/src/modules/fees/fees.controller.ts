@@ -271,7 +271,10 @@ export class FeesController {
     @Query("ids") ids: string,
     @Res() res: Response,
   ) {
-    const paymentIds = (ids || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const paymentIds = (ids || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     const data = await this.fees.collectionReceipt(actor, paymentIds);
     streamCollectionReceiptPdf(res, { schoolName: SCHOOL_NAME, ...data });
   }

@@ -66,7 +66,10 @@ function CustomFieldsPage() {
         fieldType: form.fieldType,
         options:
           form.fieldType === "dropdown"
-            ? form.options.split(",").map((o) => o.trim()).filter(Boolean)
+            ? form.options
+                .split(",")
+                .map((o) => o.trim())
+                .filter(Boolean)
             : [],
         sortOrder: Number(form.sortOrder) || 0,
       };
@@ -113,7 +116,14 @@ function CustomFieldsPage() {
     setOpen(true);
   };
   const onDelete = async (f: Field) => {
-    if (!(await confirm({ title: "Delete custom field?", description: f.label, confirmText: "Delete", destructive: true })))
+    if (
+      !(await confirm({
+        title: "Delete custom field?",
+        description: f.label,
+        confirmText: "Delete",
+        destructive: true,
+      }))
+    )
       return;
     remove.mutate(f.id);
   };
@@ -183,14 +193,28 @@ function CustomFieldsPage() {
                       )}
                     </td>
                     <td className="p-3">
-                      <Switch checked={f.active} onCheckedChange={() => toggleActive.mutate(f)} aria-label={`Toggle ${f.label}`} />
+                      <Switch
+                        checked={f.active}
+                        onCheckedChange={() => toggleActive.mutate(f)}
+                        aria-label={`Toggle ${f.label}`}
+                      />
                     </td>
                     <td className="p-3">
                       <div className="flex items-center justify-end gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => openEdit(f)} aria-label={`Edit ${f.label}`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => openEdit(f)}
+                          aria-label={`Edit ${f.label}`}
+                        >
                           <Pencil className="size-4" />
                         </Button>
-                        <Button size="icon" variant="ghost" onClick={() => onDelete(f)} aria-label={`Delete ${f.label}`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => onDelete(f)}
+                          aria-label={`Delete ${f.label}`}
+                        >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
                       </div>

@@ -29,12 +29,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ROLE_LABEL,
-  CREATABLE_ROLES,
-  isAdmissionManagedRole,
-  type AppRole,
-} from "@/lib/roles";
+import { ROLE_LABEL, CREATABLE_ROLES, isAdmissionManagedRole, type AppRole } from "@/lib/roles";
 import { Copy, Eye, History, KeyRound, Pencil, Search, Trash2, UserPlus, X } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/users")({

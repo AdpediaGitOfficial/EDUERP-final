@@ -592,7 +592,10 @@ export class AcademicsService {
       select: { academic_year: true },
       distinct: ["academic_year"],
     });
-    const years = rows.map((r) => r.academic_year).filter(Boolean).sort();
+    const years = rows
+      .map((r) => r.academic_year)
+      .filter(Boolean)
+      .sort();
     return years.length ? years[years.length - 1] : null;
   }
 
@@ -646,7 +649,10 @@ export class AcademicsService {
         : Promise.resolve(0),
       this.prisma.attendance.groupBy({
         by: ["status"],
-        where: { date: { gte: this.startOfToday() }, ...(classIds.length ? { class_id: { in: classIds } } : {}) },
+        where: {
+          date: { gte: this.startOfToday() },
+          ...(classIds.length ? { class_id: { in: classIds } } : {}),
+        },
         _count: { _all: true },
       }),
       this.prisma.teacher_attendance.groupBy({
@@ -667,7 +673,9 @@ export class AcademicsService {
         _count: { _all: true },
       }),
       this.prisma.profiles.findMany({
-        where: { id: { in: classes.map((c) => c.class_teacher_id).filter((x): x is string => !!x) } },
+        where: {
+          id: { in: classes.map((c) => c.class_teacher_id).filter((x): x is string => !!x) },
+        },
         select: { id: true, full_name: true },
       }),
     ]);
@@ -706,7 +714,9 @@ export class AcademicsService {
 
     // Teacher workload — top teachers by weekly period count.
     const loadProfiles = await this.prisma.profiles.findMany({
-      where: { id: { in: teacherLoadRows.map((t) => t.teacher_id).filter((x): x is string => !!x) } },
+      where: {
+        id: { in: teacherLoadRows.map((t) => t.teacher_id).filter((x): x is string => !!x) },
+      },
       select: { id: true, full_name: true },
     });
     const loadName = new Map(loadProfiles.map((p) => [p.id, p.full_name]));
@@ -722,10 +732,16 @@ export class AcademicsService {
       { name: string; sections: string[]; inCharge: string | null; students: number }
     >();
     for (const c of classes) {
-      const g = overviewMap.get(c.name) ?? { name: c.name, sections: [], inCharge: null, students: 0 };
+      const g = overviewMap.get(c.name) ?? {
+        name: c.name,
+        sections: [],
+        inCharge: null,
+        students: 0,
+      };
       if (c.section) g.sections.push(c.section);
       g.students += c._count.students;
-      if (!g.inCharge && c.class_teacher_id) g.inCharge = teacherName.get(c.class_teacher_id) ?? null;
+      if (!g.inCharge && c.class_teacher_id)
+        g.inCharge = teacherName.get(c.class_teacher_id) ?? null;
       overviewMap.set(c.name, g);
     }
     const classSectionOverview = [...overviewMap.values()].map((g) => ({
@@ -761,9 +777,7 @@ export class AcademicsService {
       charts: { studentsByClass, genderRatio, teacherWorkload },
       classSectionOverview,
       alerts: {
-        classesWithoutTimetable: withoutTimetable.map((c) =>
-          `${c.name} ${c.section ?? ""}`.trim(),
-        ),
+        classesWithoutTimetable: withoutTimetable.map((c) => `${c.name} ${c.section ?? ""}`.trim()),
         classesWithoutClassTeacher: withoutClassTeacher.map((c) =>
           `${c.name} ${c.section ?? ""}`.trim(),
         ),
@@ -895,14 +909,18 @@ export class AcademicsService {
         label: "Class-sections with no subjects",
         count: classesWithoutSubjects.length,
         ok: classesWithoutSubjects.length === 0,
-        samples: classesWithoutSubjects.slice(0, 10).map((c) => `${c.name} ${c.section ?? ""}`.trim()),
+        samples: classesWithoutSubjects
+          .slice(0, 10)
+          .map((c) => `${c.name} ${c.section ?? ""}`.trim()),
       },
       {
         key: "classes_without_timetable",
         label: "Class-sections with no timetable",
         count: classesWithoutTimetable.length,
         ok: classesWithoutTimetable.length === 0,
-        samples: classesWithoutTimetable.slice(0, 10).map((c) => `${c.name} ${c.section ?? ""}`.trim()),
+        samples: classesWithoutTimetable
+          .slice(0, 10)
+          .map((c) => `${c.name} ${c.section ?? ""}`.trim()),
       },
     ];
 
@@ -931,7 +949,10 @@ export class AcademicsService {
         GROUP BY c.academic_year`,
     ]);
     const byYear = new Map(
-      counts.map((c) => [c.academic_year, { students: Number(c.students), sections: Number(c.sections) }]),
+      counts.map((c) => [
+        c.academic_year,
+        { students: Number(c.students), sections: Number(c.sections) },
+      ]),
     );
     return sessions.map((s) => ({
       ...s,
@@ -1042,7 +1063,9 @@ export class AcademicsService {
     const existing = await this.prisma.academic_sessions.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Session not found");
     if (status === "archived" && existing.is_current)
-      throw new BadRequestException("The current session cannot be archived. Set another current first.");
+      throw new BadRequestException(
+        "The current session cannot be archived. Set another current first.",
+      );
     await this.prisma.academic_sessions.update({
       where: { id },
       data: { status, updated_at: new Date() },
@@ -1222,7 +1245,13 @@ export class AcademicsService {
         });
         return {
           title: `Class Strength — ${session}`,
-          columns: [col("class", "Class"), col("section", "Section"), col("capacity", "Capacity"), col("students", "Students"), col("utilisation", "Utilisation %")],
+          columns: [
+            col("class", "Class"),
+            col("section", "Section"),
+            col("capacity", "Capacity"),
+            col("students", "Students"),
+            col("utilisation", "Utilisation %"),
+          ],
           rows: classes.map((c) => ({
             class: c.name,
             section: c.section ?? "—",
@@ -1240,7 +1269,13 @@ export class AcademicsService {
         });
         return {
           title: `Vacant Seats — ${session}`,
-          columns: [col("class", "Class"), col("section", "Section"), col("capacity", "Capacity"), col("students", "Filled"), col("vacant", "Vacant")],
+          columns: [
+            col("class", "Class"),
+            col("section", "Section"),
+            col("capacity", "Capacity"),
+            col("students", "Filled"),
+            col("vacant", "Vacant"),
+          ],
           rows: classes
             .filter((c) => c.capacity)
             .map((c) => ({
@@ -1260,7 +1295,10 @@ export class AcademicsService {
         const classIds = classes.map((c) => c.id);
         const cn = new Map(classes.map((c) => [c.id, `${c.name} ${c.section ?? ""}`.trim()]));
         const [subjects, assignments, teachers] = await Promise.all([
-          this.prisma.subjects.findMany({ where: { class_id: { in: classIds } }, orderBy: { name: "asc" } }),
+          this.prisma.subjects.findMany({
+            where: { class_id: { in: classIds } },
+            orderBy: { name: "asc" },
+          }),
           this.prisma.teacher_subjects.findMany({ where: { class_id: { in: classIds } } }),
           this.prisma.profiles.findMany({ select: { id: true, full_name: true } }),
         ]);
@@ -1273,7 +1311,14 @@ export class AcademicsService {
         }
         return {
           title: `Subject Allocation — ${session}`,
-          columns: [col("class", "Class"), col("subject", "Subject"), col("code", "Code"), col("type", "Type"), col("periods", "Periods/wk"), col("teachers", "Teachers")],
+          columns: [
+            col("class", "Class"),
+            col("subject", "Subject"),
+            col("code", "Code"),
+            col("type", "Type"),
+            col("periods", "Periods/wk"),
+            col("teachers", "Teachers"),
+          ],
           rows: subjects.map((s) => ({
             class: s.class_id ? (cn.get(s.class_id) ?? "—") : "—",
             subject: s.name,
@@ -1286,16 +1331,28 @@ export class AcademicsService {
       }
       case "teacher_allocation": {
         const rows = await this.listTeacherSubjects(actor);
-        const byTeacher = new Map<string, { name: string; subjects: Set<string>; classes: Set<string> }>();
+        const byTeacher = new Map<
+          string,
+          { name: string; subjects: Set<string>; classes: Set<string> }
+        >();
         for (const r of rows) {
-          const t = byTeacher.get(r.teacherId) ?? { name: r.teacherName, subjects: new Set(), classes: new Set() };
+          const t = byTeacher.get(r.teacherId) ?? {
+            name: r.teacherName,
+            subjects: new Set(),
+            classes: new Set(),
+          };
           t.subjects.add(r.subjectName);
           t.classes.add(r.className);
           byTeacher.set(r.teacherId, t);
         }
         return {
           title: `Teacher Allocation — ${session}`,
-          columns: [col("teacher", "Teacher"), col("subjects", "# Subjects"), col("classes", "# Classes"), col("subjectList", "Subjects")],
+          columns: [
+            col("teacher", "Teacher"),
+            col("subjects", "# Subjects"),
+            col("classes", "# Classes"),
+            col("subjectList", "Subjects"),
+          ],
           rows: [...byTeacher.values()].map((t) => ({
             teacher: t.name,
             subjects: t.subjects.size,
@@ -1308,7 +1365,13 @@ export class AcademicsService {
         const w = await this.teacherWorkload(actor, year);
         return {
           title: `Teacher Workload — ${w.session}`,
-          columns: [col("teacher", "Teacher"), col("assignments", "Assignments"), col("plannedPeriods", "Planned"), col("scheduledPeriods", "Scheduled"), col("remaining", "Remaining")],
+          columns: [
+            col("teacher", "Teacher"),
+            col("assignments", "Assignments"),
+            col("plannedPeriods", "Planned"),
+            col("scheduledPeriods", "Scheduled"),
+            col("remaining", "Remaining"),
+          ],
           rows: w.teachers.map((t) => ({
             teacher: t.teacherName,
             assignments: t.assignments,
@@ -1322,7 +1385,13 @@ export class AcademicsService {
         const rooms = await this.listRooms(actor);
         return {
           title: "Room Utilisation",
-          columns: [col("room", "Room"), col("type", "Type"), col("capacity", "Capacity"), col("assignedClasses", "Classes"), col("weeklySlots", "Weekly slots")],
+          columns: [
+            col("room", "Room"),
+            col("type", "Type"),
+            col("capacity", "Capacity"),
+            col("assignedClasses", "Classes"),
+            col("weeklySlots", "Weekly slots"),
+          ],
           rows: rooms.map((r) => ({
             room: r.room_number,
             type: r.room_type,
@@ -1336,7 +1405,13 @@ export class AcademicsService {
         const offerings = await this.listElectiveOfferings(actor);
         return {
           title: "Elective Report",
-          columns: [col("elective", "Elective"), col("capacity", "Capacity"), col("enrolled", "Enrolled"), col("waitlisted", "Waitlisted"), col("seatsLeft", "Seats left")],
+          columns: [
+            col("elective", "Elective"),
+            col("capacity", "Capacity"),
+            col("enrolled", "Enrolled"),
+            col("waitlisted", "Waitlisted"),
+            col("seatsLeft", "Seats left"),
+          ],
           rows: offerings.map((o) => ({
             elective: o.name,
             capacity: o.seat_capacity,
@@ -1359,7 +1434,13 @@ export class AcademicsService {
         );
         return {
           title: `Promotion Register — ${session}`,
-          columns: [col("date", "Date"), col("student", "Student"), col("from", "From"), col("to", "To"), col("result", "Result")],
+          columns: [
+            col("date", "Date"),
+            col("student", "Student"),
+            col("from", "From"),
+            col("to", "To"),
+            col("result", "Result"),
+          ],
           rows,
         };
       }
@@ -1394,7 +1475,8 @@ export class AcademicsService {
   /** Calendar events for a session, folding in the holidays table (read-only). */
   async listCalendar(actor: AuthUser, session?: string) {
     this.requireAcademicAdmin(actor);
-    const resolved = session && session !== "all" ? session : ((await this.currentYear()) ?? undefined);
+    const resolved =
+      session && session !== "all" ? session : ((await this.currentYear()) ?? undefined);
     const [events, holidays] = await Promise.all([
       this.prisma.academic_calendar.findMany({
         where: resolved ? { session: resolved } : {},
@@ -1480,11 +1562,20 @@ export class AcademicsService {
     if (!cls) throw new NotFoundException("Class not found");
     const students = await this.prisma.students.findMany({
       where: { class_id: fromClassId, status: "active" },
-      select: { id: true, roll_no: true, admission_no: true, profiles: { select: { full_name: true } } },
+      select: {
+        id: true,
+        roll_no: true,
+        admission_no: true,
+        profiles: { select: { full_name: true } },
+      },
       orderBy: { roll_no: "asc" },
     });
     return {
-      fromClass: { id: cls.id, name: `${cls.name} ${cls.section ?? ""}`.trim(), session: cls.academic_year },
+      fromClass: {
+        id: cls.id,
+        name: `${cls.name} ${cls.section ?? ""}`.trim(),
+        session: cls.academic_year,
+      },
       students: students.map((s) => ({
         id: s.id,
         name: s.profiles?.full_name ?? "—",
@@ -1585,7 +1676,9 @@ export class AcademicsService {
           id: {
             in: [
               ...new Set(
-                rows.flatMap((r) => [r.from_class_id, r.to_class_id].filter((x): x is string => !!x)),
+                rows.flatMap((r) =>
+                  [r.from_class_id, r.to_class_id].filter((x): x is string => !!x),
+                ),
               ),
             ],
           },
@@ -1597,7 +1690,15 @@ export class AcademicsService {
     const cn = new Map(classes.map((c) => [c.id, `${c.name} ${c.section ?? ""}`.trim()]));
     const batches = new Map<
       string,
-      { batchId: string; date: Date; fromSession: string | null; toSession: string | null; promoted: number; detained: number; rows: any[] }
+      {
+        batchId: string;
+        date: Date;
+        fromSession: string | null;
+        toSession: string | null;
+        promoted: number;
+        detained: number;
+        rows: any[];
+      }
     >();
     for (const r of rows) {
       const b = batches.get(r.batch_id) ?? {
@@ -1629,7 +1730,10 @@ export class AcademicsService {
     const where = session && session !== "all" ? { session } : {};
     const [offerings, counts] = await Promise.all([
       this.prisma.elective_offerings.findMany({ where, orderBy: { name: "asc" } }),
-      this.prisma.elective_enrollments.groupBy({ by: ["offering_id", "status"], _count: { _all: true } }),
+      this.prisma.elective_enrollments.groupBy({
+        by: ["offering_id", "status"],
+        _count: { _all: true },
+      }),
     ]);
     const byOffering = new Map<string, { enrolled: number; waitlisted: number }>();
     for (const c of counts) {
@@ -1706,7 +1810,12 @@ export class AcademicsService {
     });
     const students = await this.prisma.students.findMany({
       where: { id: { in: rows.map((r) => r.student_id) } },
-      select: { id: true, admission_no: true, roll_no: true, profiles: { select: { full_name: true } } },
+      select: {
+        id: true,
+        admission_no: true,
+        roll_no: true,
+        profiles: { select: { full_name: true } },
+      },
     });
     const sn = new Map(students.map((s) => [s.id, s]));
     return rows.map((r) => {
@@ -1755,7 +1864,9 @@ export class AcademicsService {
   /** Drop an enrolment; if it freed a seat, auto-promote the oldest waitlisted student. */
   async dropElective(actor: AuthUser, enrollmentId: string) {
     this.requireAcademicAdmin(actor);
-    const enrollment = await this.prisma.elective_enrollments.findUnique({ where: { id: enrollmentId } });
+    const enrollment = await this.prisma.elective_enrollments.findUnique({
+      where: { id: enrollmentId },
+    });
     if (!enrollment) throw new NotFoundException("Enrolment not found");
     const wasEnrolled = enrollment.status === "enrolled";
     await this.prisma.elective_enrollments.delete({ where: { id: enrollmentId } });
@@ -1784,15 +1895,20 @@ export class AcademicsService {
    * row being edited. Returns a per-type conflict summary with samples.
    */
   private async findTimetableConflicts(
-    input: { day_of_week: number; start_time: string; end_time: string; teacher_id?: string | null; room?: string | null; class_id: string },
+    input: {
+      day_of_week: number;
+      start_time: string;
+      end_time: string;
+      teacher_id?: string | null;
+      room?: string | null;
+      class_id: string;
+    },
     excludeId?: string,
   ) {
     const teacher = input.teacher_id ?? null;
     const room = input.room && input.room.trim() ? input.room : null;
     const exclude = excludeId ?? null;
-    const rows = await this.prisma.$queryRaw<
-      { id: string; kind: string; label: string }[]
-    >`
+    const rows = await this.prisma.$queryRaw<{ id: string; kind: string; label: string }[]>`
       SELECT t.id,
              CASE
                WHEN ${teacher}::uuid IS NOT NULL AND t.teacher_id = ${teacher}::uuid THEN 'teacher'
@@ -1910,7 +2026,10 @@ export class AcademicsService {
   async listTeacherSubjects(actor: AuthUser, classId?: string, teacherId?: string) {
     this.requireAcademicAdmin(actor);
     const rows = await this.prisma.teacher_subjects.findMany({
-      where: { ...(classId ? { class_id: classId } : {}), ...(teacherId ? { teacher_id: teacherId } : {}) },
+      where: {
+        ...(classId ? { class_id: classId } : {}),
+        ...(teacherId ? { teacher_id: teacherId } : {}),
+      },
       orderBy: { created_at: "asc" },
     });
     const [teachers, subjects, classes] = await Promise.all([
@@ -2023,7 +2142,8 @@ export class AcademicsService {
       byTeacher.set(a.teacher_id, cur);
     }
     // include teachers who only appear in the timetable
-    for (const [tid] of slotsByTeacher) if (tid && !byTeacher.has(tid)) byTeacher.set(tid, { assignments: 0, plannedPeriods: 0 });
+    for (const [tid] of slotsByTeacher)
+      if (tid && !byTeacher.has(tid)) byTeacher.set(tid, { assignments: 0, plannedPeriods: 0 });
 
     const ids = [...byTeacher.keys()];
     const profs = await this.prisma.profiles.findMany({

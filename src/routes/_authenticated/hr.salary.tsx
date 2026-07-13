@@ -65,7 +65,11 @@ type Breakdown = {
 type StaffRow = { id: string; full_name: string; employee_code: string; department: string };
 type EmployeeSalary = {
   structure:
-    | (Components & { effective_from: string; notes: string | null; template?: { name: string; code: string } | null })
+    | (Components & {
+        effective_from: string;
+        notes: string | null;
+        template?: { name: string; code: string } | null;
+      })
     | null;
   breakdown: Breakdown | null;
 };
@@ -177,7 +181,13 @@ function LineItemsEditor({
   );
 }
 
-function StatutoryToggles({ c, set }: { c: Components; set: (patch: Partial<Components>) => void }) {
+function StatutoryToggles({
+  c,
+  set,
+}: {
+  c: Components;
+  set: (patch: Partial<Components>) => void;
+}) {
   return (
     <div className="grid grid-cols-2 gap-3 text-sm">
       <div className="flex items-center justify-between rounded-lg border px-3 py-2">
@@ -462,7 +472,12 @@ function SetSalaryTab() {
   const [q, setQ] = useState("");
   const [staffId, setStaffId] = useState<string | null>(null);
 
-  const { data: staff, isLoading, isError, refetch } = useQuery({
+  const {
+    data: staff,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["hr-staff-list"],
     queryFn: () => apiGet<StaffRow[]>("/hr/staff"),
   });
@@ -568,22 +583,22 @@ function SetSalaryTab() {
         ) : isLoading ? (
           <TableSkeleton rows={8} cols={1} />
         ) : (
-        <div className="max-h-[60vh] overflow-y-auto space-y-1">
-          {filtered.slice(0, 100).map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setStaffId(s.id)}
-              className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${
-                s.id === staffId ? "bg-primary/10 text-foreground" : "hover:bg-muted"
-              }`}
-            >
-              <div className="font-medium">{s.full_name}</div>
-              <div className="text-xs text-muted-foreground font-mono">
-                {s.employee_code} · {s.department}
-              </div>
-            </button>
-          ))}
-        </div>
+          <div className="max-h-[60vh] overflow-y-auto space-y-1">
+            {filtered.slice(0, 100).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setStaffId(s.id)}
+                className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${
+                  s.id === staffId ? "bg-primary/10 text-foreground" : "hover:bg-muted"
+                }`}
+              >
+                <div className="font-medium">{s.full_name}</div>
+                <div className="text-xs text-muted-foreground font-mono">
+                  {s.employee_code} · {s.department}
+                </div>
+              </button>
+            ))}
+          </div>
         )}
       </Card>
 

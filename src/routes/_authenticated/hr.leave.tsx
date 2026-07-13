@@ -12,7 +12,12 @@ export const Route = createFileRoute("/_authenticated/hr/leave")({ component: Pa
 
 function Page() {
   const qc = useQueryClient();
-  const { data: requests, isLoading, isError, refetch } = useQuery({
+  const {
+    data: requests,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["hr-leave-requests"],
     queryFn: async () => {
       const res = await apiGet<{ rows: any[] }>("/hr/leave-requests?pageSize=200");
@@ -51,56 +56,56 @@ function Page() {
           ) : isLoading ? (
             <TableSkeleton rows={6} cols={6} />
           ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr className="text-left">
-                <th className="p-3">Staff</th>
-                <th className="p-3">Type</th>
-                <th className="p-3">Dates</th>
-                <th className="p-3">Days</th>
-                <th className="p-3">Status</th>
-                <th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(requests ?? []).map((r: any) => (
-                <tr key={r.id} className="border-t">
-                  <td className="p-3">
-                    <div className="font-medium">{r.staff?.full_name}</div>
-                    <div className="text-xs text-muted-foreground">{r.staff?.department}</div>
-                  </td>
-                  <td className="p-3">{niceLabel(r.leave_type)}</td>
-                  <td className="p-3">
-                    {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
-                  </td>
-                  <td className="p-3">{r.days}</td>
-                  <td className="p-3">
-                    <Badge className={badgeClass(r.status)}>{niceLabel(r.status)}</Badge>
-                  </td>
-                  <td className="p-3 text-right whitespace-nowrap">
-                    {r.status === "pending" && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => decide.mutate({ id: r.id, status: "approved" })}
-                        >
-                          Approve
-                        </Button>{" "}
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => decide.mutate({ id: r.id, status: "rejected" })}
-                        >
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                  </td>
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40">
+                <tr className="text-left">
+                  <th className="p-3">Staff</th>
+                  <th className="p-3">Type</th>
+                  <th className="p-3">Dates</th>
+                  <th className="p-3">Days</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(requests ?? []).map((r: any) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="p-3">
+                      <div className="font-medium">{r.staff?.full_name}</div>
+                      <div className="text-xs text-muted-foreground">{r.staff?.department}</div>
+                    </td>
+                    <td className="p-3">{niceLabel(r.leave_type)}</td>
+                    <td className="p-3">
+                      {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
+                    </td>
+                    <td className="p-3">{r.days}</td>
+                    <td className="p-3">
+                      <Badge className={badgeClass(r.status)}>{niceLabel(r.status)}</Badge>
+                    </td>
+                    <td className="p-3 text-right whitespace-nowrap">
+                      {r.status === "pending" && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => decide.mutate({ id: r.id, status: "approved" })}
+                          >
+                            Approve
+                          </Button>{" "}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => decide.mutate({ id: r.id, status: "rejected" })}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </Card>
         <Card className="rounded-2xl overflow-hidden">

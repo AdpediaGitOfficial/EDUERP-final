@@ -114,7 +114,12 @@ function Page() {
 // ── Cycles ────────────────────────────────────────────────────────────────────
 function CyclesTab({ onOpen }: { onOpen: (id: string) => void }) {
   const qc = useQueryClient();
-  const { data: cycles, isLoading, isError, refetch } = useQuery({
+  const {
+    data: cycles,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["appraisal-cycles"],
     queryFn: () => apiGet<Cycle[]>("/hr/appraisal-cycles"),
   });
@@ -175,58 +180,63 @@ function CyclesTab({ onOpen }: { onOpen: (id: string) => void }) {
           <TableSkeleton rows={6} cols={4} />
         </Card>
       ) : (
-      <>
-      {cycles && cycles.length === 0 && (
-        <EmptyState
-          icon={ClipboardCheck}
-          title="No appraisal cycles yet"
-          hint="Create a review period, then enrol employees and score them against your criteria."
-        />
-      )}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(cycles ?? []).map((c) => (
-          <Card key={c.id} className="p-5 rounded-2xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-semibold">{c.name}</h3>
-                <p className="text-xs text-muted-foreground">
-                  {c.period_start?.slice(0, 10) ?? "—"} → {c.period_end?.slice(0, 10) ?? "—"}
+        <>
+          {cycles && cycles.length === 0 && (
+            <EmptyState
+              icon={ClipboardCheck}
+              title="No appraisal cycles yet"
+              hint="Create a review period, then enrol employees and score them against your criteria."
+            />
+          )}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(cycles ?? []).map((c) => (
+              <Card key={c.id} className="p-5 rounded-2xl">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold">{c.name}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {c.period_start?.slice(0, 10) ?? "—"} → {c.period_end?.slice(0, 10) ?? "—"}
+                    </p>
+                  </div>
+                  <StatusBadge
+                    tone={CYCLE_TONE[c.status] ?? "neutral"}
+                    label={niceLabel(c.status)}
+                  />
+                </div>
+                {c.description && (
+                  <p className="text-sm text-muted-foreground mt-1">{c.description}</p>
+                )}
+                <p className="text-sm mt-3">
+                  <span className="font-semibold">{c.appraisalCount}</span> appraisal
+                  {c.appraisalCount === 1 ? "" : "s"}
                 </p>
-              </div>
-              <StatusBadge tone={CYCLE_TONE[c.status] ?? "neutral"} label={niceLabel(c.status)} />
-            </div>
-            {c.description && <p className="text-sm text-muted-foreground mt-1">{c.description}</p>}
-            <p className="text-sm mt-3">
-              <span className="font-semibold">{c.appraisalCount}</span> appraisal
-              {c.appraisalCount === 1 ? "" : "s"}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => onOpen(c.id)}>
-                Open
-              </Button>
-              {c.status === "draft" && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setStatus.mutate({ id: c.id, status: "active" })}
-                >
-                  Activate
-                </Button>
-              )}
-              {c.status === "active" && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setStatus.mutate({ id: c.id, status: "closed" })}
-                >
-                  Close
-                </Button>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
-      </>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => onOpen(c.id)}>
+                    Open
+                  </Button>
+                  {c.status === "draft" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setStatus.mutate({ id: c.id, status: "active" })}
+                    >
+                      Activate
+                    </Button>
+                  )}
+                  {c.status === "active" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setStatus.mutate({ id: c.id, status: "closed" })}
+                    >
+                      Close
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -401,7 +411,11 @@ function CriteriaTab() {
               </tr>
             ))}
             {(criteria ?? []).length === 0 && (
-              <EmptyRow colSpan={4} title="No criteria yet" hint="Add rating criteria to score appraisals." />
+              <EmptyRow
+                colSpan={4}
+                title="No criteria yet"
+                hint="Add rating criteria to score appraisals."
+              />
             )}
           </tbody>
         </table>
@@ -417,7 +431,10 @@ function CriteriaTab() {
               <Label>
                 Name <span className="text-red-500">*</span>
               </Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
             </div>
             <div>
               <Label>Description</Label>
@@ -551,7 +568,10 @@ function CycleAppraisals({ cycleId, onBack }: { cycleId: string; onBack: () => v
                 </td>
                 <td className="p-3">{a.staff?.department}</td>
                 <td className="p-3">
-                  <StatusBadge tone={APPR_TONE[a.status] ?? "neutral"} label={niceLabel(a.status)} />
+                  <StatusBadge
+                    tone={APPR_TONE[a.status] ?? "neutral"}
+                    label={niceLabel(a.status)}
+                  />
                 </td>
                 <td className="p-3 text-right font-semibold">
                   {a.overall_score != null ? `${Number(a.overall_score)}%` : "—"}
@@ -707,7 +727,10 @@ function AppraisalDialog({
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3">
               <div>
-                <StatusBadge tone={APPR_TONE[data.status] ?? "neutral"} label={niceLabel(data.status)} />
+                <StatusBadge
+                  tone={APPR_TONE[data.status] ?? "neutral"}
+                  label={niceLabel(data.status)}
+                />
                 <span className="ml-2 text-sm text-muted-foreground">
                   {data.ratedCount}/{data.criteriaCount} criteria rated
                 </span>

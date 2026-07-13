@@ -339,7 +339,10 @@ export function HostelTab({ studentId }: { studentId: string }) {
       {h && h.isResident ? (
         <DL
           items={[
-            ["Status", <Badge className="bg-emerald-100 text-emerald-700 border-0">Resident</Badge>],
+            [
+              "Status",
+              <Badge className="bg-emerald-100 text-emerald-700 border-0">Resident</Badge>,
+            ],
             ["Block", h.hostelBlock],
             ["Room", h.roomNo],
             ["Bed", h.bedNo],
@@ -445,7 +448,13 @@ export function DisciplinaryTab({ studentId }: { studentId: string }) {
       );
       toast.success("Incident logged.");
       setOpen(false);
-      setForm({ severity: "minor", category: "general", description: "", actionTaken: "", incidentDate: "" });
+      setForm({
+        severity: "minor",
+        category: "general",
+        description: "",
+        actionTaken: "",
+        incidentDate: "",
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -461,7 +470,14 @@ export function DisciplinaryTab({ studentId }: { studentId: string }) {
     ).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
 
   const remove = async (r: any) => {
-    if (!(await confirm({ title: "Remove incident?", description: r.description, confirmText: "Remove", destructive: true })))
+    if (
+      !(await confirm({
+        title: "Remove incident?",
+        description: r.description,
+        confirmText: "Remove",
+        destructive: true,
+      }))
+    )
       return;
     run(() => apiDelete<StudentProfile>(`/students/${studentId}/profile/disciplinary/${r.id}`))
       .then(() => toast.success("Removed."))
@@ -499,7 +515,9 @@ export function DisciplinaryTab({ studentId }: { studentId: string }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-t align-top">
-                <td className="p-3 text-muted-foreground whitespace-nowrap">{fmtDate(r.incidentDate)}</td>
+                <td className="p-3 text-muted-foreground whitespace-nowrap">
+                  {fmtDate(r.incidentDate)}
+                </td>
                 <td className="p-3 capitalize">{r.category}</td>
                 <td className="p-3">{severityBadge(r.severity)}</td>
                 <td className="p-3">{r.description}</td>
@@ -537,7 +555,10 @@ export function DisciplinaryTab({ studentId }: { studentId: string }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={data?.canEdit ? 7 : 6} className="p-8 text-center text-muted-foreground">
+                <td
+                  colSpan={data?.canEdit ? 7 : 6}
+                  className="p-8 text-center text-muted-foreground"
+                >
                   No disciplinary incidents on record. A clean slate.
                 </td>
               </tr>
@@ -553,10 +574,20 @@ export function DisciplinaryTab({ studentId }: { studentId: string }) {
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <TabField label="Incident date" htmlFor="d-date">
-              <Input id="d-date" type="date" value={form.incidentDate} onChange={t("incidentDate")} />
+              <Input
+                id="d-date"
+                type="date"
+                value={form.incidentDate}
+                onChange={t("incidentDate")}
+              />
             </TabField>
             <TabField label="Category" htmlFor="d-cat">
-              <Input id="d-cat" value={form.category} onChange={t("category")} placeholder="e.g. attendance" />
+              <Input
+                id="d-cat"
+                value={form.category}
+                onChange={t("category")}
+                placeholder="e.g. attendance"
+              />
             </TabField>
             <TabField label="Severity" htmlFor="d-sev">
               <Select
@@ -636,7 +667,14 @@ export function DocumentsTab({ studentId }: { studentId: string }) {
       );
       toast.success("Document added.");
       setOpen(false);
-      setForm({ docType: "other", title: "", fileUrl: "", issuedDate: "", expiryDate: "", verified: false });
+      setForm({
+        docType: "other",
+        title: "",
+        fileUrl: "",
+        issuedDate: "",
+        expiryDate: "",
+        verified: false,
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -652,7 +690,14 @@ export function DocumentsTab({ studentId }: { studentId: string }) {
     ).catch((e) => toast.error(e instanceof Error ? e.message : "Failed"));
 
   const remove = async (r: any) => {
-    if (!(await confirm({ title: "Remove document?", description: r.title, confirmText: "Remove", destructive: true })))
+    if (
+      !(await confirm({
+        title: "Remove document?",
+        description: r.title,
+        confirmText: "Remove",
+        destructive: true,
+      }))
+    )
       return;
     run(() => apiDelete<StudentProfile>(`/students/${studentId}/profile/documents/${r.id}`))
       .then(() => toast.success("Removed."))
@@ -741,7 +786,10 @@ export function DocumentsTab({ studentId }: { studentId: string }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={data?.canEdit ? 6 : 5} className="p-8 text-center text-muted-foreground">
+                <td
+                  colSpan={data?.canEdit ? 6 : 5}
+                  className="p-8 text-center text-muted-foreground"
+                >
                   No documents uploaded yet.
                 </td>
               </tr>
@@ -760,7 +808,10 @@ export function DocumentsTab({ studentId }: { studentId: string }) {
               <Input id="doc-title" value={form.title} onChange={t("title")} />
             </TabField>
             <TabField label="Type" htmlFor="doc-type">
-              <Select value={form.docType} onValueChange={(v) => setForm((f) => ({ ...f, docType: v }))}>
+              <Select
+                value={form.docType}
+                onValueChange={(v) => setForm((f) => ({ ...f, docType: v }))}
+              >
                 <SelectTrigger id="doc-type">
                   <SelectValue />
                 </SelectTrigger>
@@ -774,13 +825,28 @@ export function DocumentsTab({ studentId }: { studentId: string }) {
               </Select>
             </TabField>
             <TabField label="File URL" htmlFor="doc-url">
-              <Input id="doc-url" value={form.fileUrl} onChange={t("fileUrl")} placeholder="https://…" />
+              <Input
+                id="doc-url"
+                value={form.fileUrl}
+                onChange={t("fileUrl")}
+                placeholder="https://…"
+              />
             </TabField>
             <TabField label="Issued date" htmlFor="doc-issued">
-              <Input id="doc-issued" type="date" value={form.issuedDate} onChange={t("issuedDate")} />
+              <Input
+                id="doc-issued"
+                type="date"
+                value={form.issuedDate}
+                onChange={t("issuedDate")}
+              />
             </TabField>
             <TabField label="Expiry date" htmlFor="doc-expiry">
-              <Input id="doc-expiry" type="date" value={form.expiryDate} onChange={t("expiryDate")} />
+              <Input
+                id="doc-expiry"
+                type="date"
+                value={form.expiryDate}
+                onChange={t("expiryDate")}
+              />
             </TabField>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <Checkbox
@@ -953,7 +1019,9 @@ export function ClassTimetableTab({ studentId }: { studentId: string }) {
   }, [rows]);
 
   if (isLoading) {
-    return <Card className="rounded-2xl p-6 text-sm text-muted-foreground">Loading timetable…</Card>;
+    return (
+      <Card className="rounded-2xl p-6 text-sm text-muted-foreground">Loading timetable…</Card>
+    );
   }
   if (rows.length === 0) {
     return (
@@ -1014,9 +1082,7 @@ type Notice = {
 
 function noticeBadge(audience: string, className: string | null) {
   if (audience === "class")
-    return (
-      <Badge className="bg-indigo-100 text-indigo-700 border-0">{className ?? "Class"}</Badge>
-    );
+    return <Badge className="bg-indigo-100 text-indigo-700 border-0">{className ?? "Class"}</Badge>;
   if (audience === "parents")
     return <Badge className="bg-emerald-100 text-emerald-700 border-0">Parents</Badge>;
   return <Badge className="bg-sky-100 text-sky-700 border-0">School-wide</Badge>;
@@ -1038,7 +1104,10 @@ export function SisProfilePanel({ studentId }: { studentId: string }) {
     setBusy(target);
     try {
       const res = await apiPost<any>(`/students/${studentId}/profile/send-pass`, { target });
-      setPass({ label: `${target === "student" ? "Student" : "Parent"} temp password`, value: res.tempPassword });
+      setPass({
+        label: `${target === "student" ? "Student" : "Parent"} temp password`,
+        value: res.tempPassword,
+      });
       toast.success(`${target === "student" ? "Student" : "Parent"} pass sent.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
@@ -1050,8 +1119,18 @@ export function SisProfilePanel({ studentId }: { studentId: string }) {
   return (
     <>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <StatCard tone="indigo" icon={<Wallet className="size-4" />} label="Total Fees" value={inr(fee.total)} />
-        <StatCard tone="emerald" icon={<CheckCircle2 className="size-4" />} label="Amount Paid" value={inr(fee.paid)} />
+        <StatCard
+          tone="indigo"
+          icon={<Wallet className="size-4" />}
+          label="Total Fees"
+          value={inr(fee.total)}
+        />
+        <StatCard
+          tone="emerald"
+          icon={<CheckCircle2 className="size-4" />}
+          label="Amount Paid"
+          value={inr(fee.paid)}
+        />
         <StatCard
           tone={fee.balance > 0 ? "red" : "emerald"}
           icon={<Wallet className="size-4" />}
@@ -1071,11 +1150,15 @@ export function SisProfilePanel({ studentId }: { studentId: string }) {
           <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
             <div className="flex flex-wrap items-center gap-6">
               <div className="text-center">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">QR</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+                  QR
+                </div>
                 <QRCodeSVG value={admissionNo} size={92} />
               </div>
               <div className="text-center">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Barcode</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
+                  Barcode
+                </div>
                 <Barcode value={admissionNo} height={48} width={1.4} fontSize={11} />
               </div>
             </div>
@@ -1085,10 +1168,20 @@ export function SisProfilePanel({ studentId }: { studentId: string }) {
               </Button>
               {data.canEdit && (
                 <>
-                  <Button size="sm" variant="outline" disabled={busy === "student"} onClick={() => sendPass("student")}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === "student"}
+                    onClick={() => sendPass("student")}
+                  >
                     <KeyRound className="size-4" /> Send Student Pass
                   </Button>
-                  <Button size="sm" variant="outline" disabled={busy === "parent"} onClick={() => sendPass("parent")}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === "parent"}
+                    onClick={() => sendPass("parent")}
+                  >
                     <Mail className="size-4" /> Send Parent Pass
                   </Button>
                 </>
@@ -1253,7 +1346,10 @@ export function ProfileInfoTab({ studentId }: { studentId: string }) {
               ["Bank Name", d.bankName],
               ["Account Number", d.bankAccount],
               ["IFSC Code", d.bankIfsc],
-              ["Opening Due Balance", d.openingDueBalance != null ? inr(d.openingDueBalance) : null],
+              [
+                "Opening Due Balance",
+                d.openingDueBalance != null ? inr(d.openingDueBalance) : null,
+              ],
             ]}
           />
         </Section>
@@ -1315,10 +1411,14 @@ export function SiblingsTab({ studentId }: { studentId: string }) {
     <Card className="rounded-2xl p-6">
       <div className="flex items-center gap-2 font-display font-semibold mb-4">
         <Users className="size-4 text-primary" /> Sibling Information
-        {siblings.length > 0 && <Badge className="bg-primary/10 text-primary">{siblings.length}</Badge>}
+        {siblings.length > 0 && (
+          <Badge className="bg-primary/10 text-primary">{siblings.length}</Badge>
+        )}
       </div>
       {siblings.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No siblings found for this student's guardians.</p>
+        <p className="text-sm text-muted-foreground">
+          No siblings found for this student's guardians.
+        </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {siblings.map((s: any) => (
@@ -1344,7 +1444,13 @@ export function SiblingsTab({ studentId }: { studentId: string }) {
                 <Row
                   k="Status"
                   v={
-                    <Badge className={s.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}>
+                    <Badge
+                      className={
+                        s.status === "active"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-muted text-muted-foreground"
+                      }
+                    >
                       {s.status}
                     </Badge>
                   }
@@ -1503,7 +1609,8 @@ export function BehaviorTab({ studentId }: { studentId: string }) {
   const { data } = useSisProfile(studentId);
   const b = data?.behavior ?? { score: 0, positive: 0, neutral: 0, concern: 0, notes: [] };
   const toneBadge = (t: string) => {
-    if (t === "positive") return <Badge className="bg-emerald-100 text-emerald-700 border-0">Positive</Badge>;
+    if (t === "positive")
+      return <Badge className="bg-emerald-100 text-emerald-700 border-0">Positive</Badge>;
     if (t === "concern" || t === "needs_improvement")
       return <Badge className="bg-red-100 text-red-700 border-0">Concern</Badge>;
     return <Badge className="bg-muted text-muted-foreground border-0">Neutral</Badge>;
@@ -1520,7 +1627,9 @@ export function BehaviorTab({ studentId }: { studentId: string }) {
               Each positive note = +1, each concern = −1, neutral = 0.
             </p>
           </div>
-          <div className={`font-display text-4xl font-semibold ${b.score < 0 ? "text-red-600" : "text-emerald-600"}`}>
+          <div
+            className={`font-display text-4xl font-semibold ${b.score < 0 ? "text-red-600" : "text-emerald-600"}`}
+          >
             {b.score > 0 ? "+" : ""}
             {b.score}
           </div>
@@ -1545,7 +1654,9 @@ export function BehaviorTab({ studentId }: { studentId: string }) {
       <Card className="rounded-2xl overflow-hidden">
         <div className="p-4 border-b font-medium text-sm">Behavior notes</div>
         {(b.notes ?? []).length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">No behavior notes yet.</div>
+          <div className="p-8 text-center text-muted-foreground text-sm">
+            No behavior notes yet.
+          </div>
         ) : (
           <ul className="divide-y">
             {b.notes.map((n: any) => (

@@ -2479,9 +2479,9 @@ describe("HR: salary templates + per-employee Set Salary", () => {
 
   it("teacher cannot read or write compensation", async () => {
     expect((await get("/hr/salary-templates", "teacher")).status).toBe(403);
-    expect(
-      (await post("/hr/salary-templates", "teacher", { name: "X", code: "X" })).status,
-    ).toBe(403);
+    expect((await post("/hr/salary-templates", "teacher", { name: "X", code: "X" })).status).toBe(
+      403,
+    );
   });
 
   it("creates a template (dup code 409), computes ESI when gross is under the ceiling", async () => {
@@ -2561,9 +2561,9 @@ describe("HR: salary templates + per-employee Set Salary", () => {
     expect(Number(after.body.structure.basic)).toBe(45000);
 
     const detail = await get(`/hr/staff/${staffId}`, "admin");
-    expect(
-      detail.body.history.some((h: any) => String(h.event_type).startsWith("salary_")),
-    ).toBe(true);
+    expect(detail.body.history.some((h: any) => String(h.event_type).startsWith("salary_"))).toBe(
+      true,
+    );
 
     // unknown template id is rejected
     expect(
@@ -2643,9 +2643,9 @@ describe("HR: staff loans & advances", () => {
     expect(detail.body.outstanding).toBe(10000);
 
     // cannot repay while pending
-    expect(
-      (await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 5000 })).status,
-    ).toBe(400);
+    expect((await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 5000 })).status).toBe(
+      400,
+    );
 
     // approve -> active + disbursed date set
     const approve = await patch(`/hr/loans/${loanId}/decision`, "admin", { decision: "approved" });
@@ -2660,9 +2660,9 @@ describe("HR: staff loans & advances", () => {
     ).toBe(400);
 
     // overpayment blocked
-    expect(
-      (await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 999999 })).status,
-    ).toBe(400);
+    expect((await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 999999 })).status).toBe(
+      400,
+    );
 
     // partial repayment leaves it active
     const r1 = await post(`/hr/loans/${loanId}/repayments`, "admin", { amount: 5000 });
@@ -2899,16 +2899,22 @@ describe("Academics: sessions entity", () => {
     expect(nowCurrent[0].id).toBe(id);
 
     // the current session cannot be archived
-    expect((await patch2(`/academics/sessions/${id}/status`, "admin", { status: "archived" })).status).toBe(400);
+    expect(
+      (await patch2(`/academics/sessions/${id}/status`, "admin", { status: "archived" })).status,
+    ).toBe(400);
 
     // restore the previous current so we don't disturb other tests
     if (prevCurrent) {
       await post(`/academics/sessions/${prevCurrent.id}/set-current`, "admin", {});
     }
     // now the JEST session (no longer current) can be archived
-    expect((await patch2(`/academics/sessions/${id}/status`, "admin", { status: "archived" })).status).toBe(200);
+    expect(
+      (await patch2(`/academics/sessions/${id}/status`, "admin", { status: "archived" })).status,
+    ).toBe(200);
     // teacher cannot write
-    expect((await post("/academics/sessions", "teacher", { name: "X-nope-1234" })).status).toBe(403);
+    expect((await post("/academics/sessions", "teacher", { name: "X-nope-1234" })).status).toBe(
+      403,
+    );
   });
 
   it("clone copies class-sections into a new upcoming year", async () => {
@@ -2926,7 +2932,9 @@ describe("Academics: sessions entity", () => {
     expect(clone.students).toBe(0);
     expect(clone.status).toBe("upcoming");
     // cloning onto an existing year is refused
-    expect((await post(`/academics/sessions/${source.id}/clone`, "admin", { name: newName })).status).toBe(409);
+    expect(
+      (await post(`/academics/sessions/${source.id}/clone`, "admin", { name: newName })).status,
+    ).toBe(409);
   });
 });
 
@@ -2972,18 +2980,23 @@ describe("Academics: subject master", () => {
     ).toBe(400);
 
     // teacher cannot create
-    expect(
-      (await post("/subjects", "teacher", { class_id: cls.id, name: "No" })).status,
-    ).toBe(403);
+    expect((await post("/subjects", "teacher", { class_id: cls.id, name: "No" })).status).toBe(403);
 
     // update
     expect(
-      (await patch3(`/subjects/${id}`, "admin", { class_id: cls.id, name: "Jest Subject v2", weekly_periods: 6 }))
-        .status,
+      (
+        await patch3(`/subjects/${id}`, "admin", {
+          class_id: cls.id,
+          name: "Jest Subject v2",
+          weekly_periods: 6,
+        })
+      ).status,
     ).toBe(200);
 
     // disable -> excluded when active filter is applied client-side; dashboard active count drops
-    expect((await patch3(`/subjects/${id}/active`, "admin", { is_active: false })).status).toBe(200);
+    expect((await patch3(`/subjects/${id}/active`, "admin", { is_active: false })).status).toBe(
+      200,
+    );
     const after = await get(`/subjects?classId=${cls.id}`, "admin");
     const mine = after.body.find((x: any) => x.id === id);
     expect(mine.isActive).toBe(false);
@@ -3026,7 +3039,9 @@ describe("Academics: classrooms / rooms", () => {
       (await post("/academics/rooms", "admin", { room_number: "X", room_type: "nope" })).status,
     ).toBe(400);
 
-    expect((await patch4(`/academics/rooms/${id}`, "admin", { room_number: num, capacity: 45 })).status).toBe(200);
+    expect(
+      (await patch4(`/academics/rooms/${id}`, "admin", { room_number: num, capacity: 45 })).status,
+    ).toBe(200);
     const after = (await get("/academics/rooms", "admin")).body.find((r: any) => r.id === id);
     expect(after.capacity).toBe(45);
 
@@ -3074,38 +3089,46 @@ describe("Academics: teacher-subject assignment & workload", () => {
 
     // duplicate is always a 409
     expect(
-      (await post("/academics/teacher-subjects", "admin", {
-        teacher_id: teacher.id,
-        class_id: classId,
-        subject_id: subjectId,
-      })).status,
+      (
+        await post("/academics/teacher-subjects", "admin", {
+          teacher_id: teacher.id,
+          class_id: classId,
+          subject_id: subjectId,
+        })
+      ).status,
     ).toBe(409);
 
     // subject that does not belong to the class -> 400
     const otherClass = classes.find((c) => c.id !== classId);
     if (otherClass) {
       expect(
-        (await post("/academics/teacher-subjects", "admin", {
-          teacher_id: teacher.id,
-          class_id: otherClass.id,
-          subject_id: subjectId,
-        })).status,
+        (
+          await post("/academics/teacher-subjects", "admin", {
+            teacher_id: teacher.id,
+            class_id: otherClass.id,
+            subject_id: subjectId,
+          })
+        ).status,
       ).toBe(400);
     }
 
     // teacher role cannot assign
     expect(
-      (await post("/academics/teacher-subjects", "teacher", {
-        teacher_id: teacher.id,
-        class_id: classId,
-        subject_id: subjectId,
-      })).status,
+      (
+        await post("/academics/teacher-subjects", "teacher", {
+          teacher_id: teacher.id,
+          class_id: classId,
+          subject_id: subjectId,
+        })
+      ).status,
     ).toBe(403);
 
     // list contains the assignment
     const list = await get(`/academics/teacher-subjects?classId=${classId}`, "admin");
     expect(list.status).toBe(200);
-    const mine = list.body.find((a: any) => a.subjectId === subjectId && a.teacherId === teacher.id);
+    const mine = list.body.find(
+      (a: any) => a.subjectId === subjectId && a.teacherId === teacher.id,
+    );
     expect(mine).toBeTruthy();
     expect(mine.className).toBeTruthy();
 
@@ -3136,12 +3159,18 @@ describe("Academics: timetable builder + conflict detection", () => {
 
   // pick a class + a free day/time to avoid the seeded timetable
   let classId = "";
-  let created: string[] = [];
+  const created: string[] = [];
 
   it("creates a slot, detects class/room/teacher conflicts, and blocks overlaps", async () => {
     classId = (await get("/classes", "admin")).body[0].id;
     // Use Sunday (day 0) at a late hour — unlikely to be seeded
-    const base = { class_id: classId, day_of_week: 0, start_time: "18:00", end_time: "19:00", room: "TT-JEST" };
+    const base = {
+      class_id: classId,
+      day_of_week: 0,
+      start_time: "18:00",
+      end_time: "19:00",
+      room: "TT-JEST",
+    };
 
     const c1 = await post("/timetable", "admin", base);
     expect(c1.status).toBe(201);
@@ -3149,33 +3178,52 @@ describe("Academics: timetable builder + conflict detection", () => {
 
     // same class overlapping -> 409
     expect(
-      (await post("/timetable", "admin", { class_id: classId, day_of_week: 0, start_time: "18:30", end_time: "19:30" }))
-        .status,
+      (
+        await post("/timetable", "admin", {
+          class_id: classId,
+          day_of_week: 0,
+          start_time: "18:30",
+          end_time: "19:30",
+        })
+      ).status,
     ).toBe(409);
 
     // same room overlapping in a different class -> 409 (room conflict)
     const otherClass = (await get("/classes", "admin")).body.find((c: any) => c.id !== classId);
     if (otherClass) {
       expect(
-        (await post("/timetable", "admin", {
-          class_id: otherClass.id,
-          day_of_week: 0,
-          start_time: "18:15",
-          end_time: "18:45",
-          room: "TT-JEST",
-        })).status,
+        (
+          await post("/timetable", "admin", {
+            class_id: otherClass.id,
+            day_of_week: 0,
+            start_time: "18:15",
+            end_time: "18:45",
+            room: "TT-JEST",
+          })
+        ).status,
       ).toBe(409);
     }
 
     // adjacent, non-overlapping in the same class -> 201
-    const c2 = await post("/timetable", "admin", { class_id: classId, day_of_week: 0, start_time: "19:00", end_time: "20:00" });
+    const c2 = await post("/timetable", "admin", {
+      class_id: classId,
+      day_of_week: 0,
+      start_time: "19:00",
+      end_time: "20:00",
+    });
     expect(c2.status).toBe(201);
     created.push(c2.body.id);
 
     // end before start -> 400
     expect(
-      (await post("/timetable", "admin", { class_id: classId, day_of_week: 0, start_time: "20:00", end_time: "19:00" }))
-        .status,
+      (
+        await post("/timetable", "admin", {
+          class_id: classId,
+          day_of_week: 0,
+          start_time: "20:00",
+          end_time: "19:00",
+        })
+      ).status,
     ).toBe(400);
 
     // check-conflicts endpoint agrees
@@ -3230,16 +3278,23 @@ describe("Academics: elective enrolment (seats + waitlist)", () => {
     expect(e3.body.status).toBe("waitlisted"); // capacity 2 reached
 
     // duplicate enrol -> 409
-    expect((await post(`/academics/electives/${offId}/enroll`, "admin", { student_id: ids[0] })).status).toBe(409);
+    expect(
+      (await post(`/academics/electives/${offId}/enroll`, "admin", { student_id: ids[0] })).status,
+    ).toBe(409);
 
     // offering listing reflects the counts
-    const listed = (await get("/academics/electives", "admin")).body.find((o: any) => o.id === offId);
+    const listed = (await get("/academics/electives", "admin")).body.find(
+      (o: any) => o.id === offId,
+    );
     expect(listed.enrolled).toBe(2);
     expect(listed.waitlisted).toBe(1);
     expect(listed.seatsLeft).toBe(0);
 
     // teacher cannot enrol
-    expect((await post(`/academics/electives/${offId}/enroll`, "teacher", { student_id: ids[0] })).status).toBe(403);
+    expect(
+      (await post(`/academics/electives/${offId}/enroll`, "teacher", { student_id: ids[0] }))
+        .status,
+    ).toBe(403);
 
     // drop an enrolled student -> the waitlisted one is auto-promoted
     const enrolls = (await get(`/academics/electives/${offId}/enrollments`, "admin")).body as any[];
@@ -3276,19 +3331,23 @@ describe("Academics: promotion engine", () => {
 
     // teacher cannot run
     expect(
-      (await post("/academics/promotion/execute", "teacher", {
-        from_class_id: fromId,
-        to_class_id: toId,
-        promotions: [{ student_id: s1.id, result: "promoted" }],
-      })).status,
+      (
+        await post("/academics/promotion/execute", "teacher", {
+          from_class_id: fromId,
+          to_class_id: toId,
+          promotions: [{ student_id: s1.id, result: "promoted" }],
+        })
+      ).status,
     ).toBe(403);
 
     // promoting without a target -> 400
     expect(
-      (await post("/academics/promotion/execute", "admin", {
-        from_class_id: fromId,
-        promotions: [{ student_id: s1.id, result: "promoted" }],
-      })).status,
+      (
+        await post("/academics/promotion/execute", "admin", {
+          from_class_id: fromId,
+          promotions: [{ student_id: s1.id, result: "promoted" }],
+        })
+      ).status,
     ).toBe(400);
 
     // promote s1, detain s2
@@ -3342,9 +3401,18 @@ describe("Academics: academic calendar", () => {
     expect(list.body.some((e: any) => e.eventType === "exam")).toBe(true);
 
     // teacher cannot write; invalid type 400
-    expect((await post("/academics/calendar", "teacher", { title: "X", start_date: "2027-01-01" })).status).toBe(403);
     expect(
-      (await post("/academics/calendar", "admin", { title: "X", start_date: "2027-01-01", event_type: "nope" })).status,
+      (await post("/academics/calendar", "teacher", { title: "X", start_date: "2027-01-01" }))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await post("/academics/calendar", "admin", {
+          title: "X",
+          start_date: "2027-01-01",
+          event_type: "nope",
+        })
+      ).status,
     ).toBe(400);
 
     const created = await post("/academics/calendar", "admin", {
@@ -3355,13 +3423,22 @@ describe("Academics: academic calendar", () => {
     expect(created.status).toBe(201);
     const id = created.body.id;
 
-    expect((await patch8(`/academics/calendar/${id}`, "admin", { title: "Jest Founders Day v2", start_date: "2027-03-04" })).status).toBe(200);
+    expect(
+      (
+        await patch8(`/academics/calendar/${id}`, "admin", {
+          title: "Jest Founders Day v2",
+          start_date: "2027-03-04",
+        })
+      ).status,
+    ).toBe(200);
     const after = (await get("/academics/calendar", "admin")).body.find((e: any) => e.id === id);
     expect(after.title).toBe("Jest Founders Day v2");
     expect(after.source).toBe("calendar");
 
     expect((await del8(`/academics/calendar/${id}`, "admin")).status).toBe(200);
-    expect((await get("/academics/calendar", "admin")).body.some((e: any) => e.id === id)).toBe(false);
+    expect((await get("/academics/calendar", "admin")).body.some((e: any) => e.id === id)).toBe(
+      false,
+    );
   });
 });
 
@@ -3389,7 +3466,10 @@ describe("Academics: reports & analytics", () => {
     // class-strength totals reconcile with the dashboard
     const strength = await get("/academics/reports/class_strength", "admin");
     const dash = await get("/academics/dashboard", "admin");
-    const totalStudents = strength.body.rows.reduce((a: number, r: any) => a + Number(r.students), 0);
+    const totalStudents = strength.body.rows.reduce(
+      (a: number, r: any) => a + Number(r.students),
+      0,
+    );
     expect(totalStudents).toBe(dash.body.stats.totalStudents);
 
     // unknown type -> 400; teacher -> 403
@@ -3403,7 +3483,9 @@ describe("hr: payroll generation + pay + payslip", () => {
   const MONTH = 12; // a far-future month kept isolated from real data
 
   it("a non-HR user cannot generate payroll (403)", async () => {
-    expect((await post("/hr/payroll/generate", "teacher", { year: YEAR, month: MONTH })).status).toBe(403);
+    expect(
+      (await post("/hr/payroll/generate", "teacher", { year: YEAR, month: MONTH })).status,
+    ).toBe(403);
   });
 
   it("admin generates payroll for a month", async () => {
@@ -3465,7 +3547,11 @@ describe("fees collection: filters, drill-down, collect, receipt, reminders", ()
     expect((await get("/fees/collection/filters", "teacher")).status).toBe(403);
 
     // Seed a fresh, uniquely-named fee head on Grade 8 A.
-    const struct = await post("/fees/structures", "admin", { name: tag, amount: 4000, term: "Term 1" });
+    const struct = await post("/fees/structures", "admin", {
+      name: tag,
+      amount: 4000,
+      term: "Term 1",
+    });
     expect(struct.status).toBe(201);
     const assigned = await post("/fees/assign", "admin", {
       structureId: struct.body.id,
@@ -3516,7 +3602,10 @@ describe("fees collection: filters, drill-down, collect, receipt, reminders", ()
     expect(rowAfter.fine).toBe(100);
 
     // Combined receipt PDF for the collection.
-    const pdf = await get(`/fees/collection/receipt.pdf?ids=${collect.body.paymentIds[0]}`, "admin");
+    const pdf = await get(
+      `/fees/collection/receipt.pdf?ids=${collect.body.paymentIds[0]}`,
+      "admin",
+    );
     expect(pdf.status).toBe(200);
     expect(pdf.headers["content-type"]).toContain("pdf");
 

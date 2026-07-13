@@ -52,7 +52,12 @@ function Page() {
     queryKey: ["academic-classes-all"],
     queryFn: () => apiGet<ClassRow[]>("/classes"),
   });
-  const { data: preview, isLoading, isError, refetch } = useQuery({
+  const {
+    data: preview,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["promotion-preview", fromClass],
     queryFn: () => apiGet<Preview>(`/academics/promotion/preview?fromClassId=${fromClass}`),
     enabled: !!fromClass,
@@ -71,7 +76,8 @@ function Page() {
     }
   }, [preview]);
 
-  const classLabel = (c: ClassRow) => `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
+  const classLabel = (c: ClassRow) =>
+    `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
   const promotedCount = Object.values(results).filter((r) => r === "promoted").length;
 
   const execute = useMutation({
@@ -94,7 +100,9 @@ function Page() {
       return res.json().catch(() => ({}));
     },
     onSuccess: (r: any) => {
-      toast.success(`Promotion complete — ${r?.promoted ?? 0} promoted, ${r?.detained ?? 0} detained`);
+      toast.success(
+        `Promotion complete — ${r?.promoted ?? 0} promoted, ${r?.detained ?? 0} detained`,
+      );
       setFromClass("");
       setToClass("");
       qc.invalidateQueries({ queryKey: ["promotion-register"] });
@@ -202,10 +210,7 @@ function Page() {
                   <span className="text-amber-600"> — pick a target class</span>
                 )}
               </p>
-              <Button
-                onClick={() => execute.mutate()}
-                disabled={promotedCount > 0 && !toClass}
-              >
+              <Button onClick={() => execute.mutate()} disabled={promotedCount > 0 && !toClass}>
                 Run promotion
               </Button>
             </div>
@@ -237,7 +242,9 @@ function Page() {
                   </div>
                   <div className="flex-1" />
                   <StatusBadge tone="success" label={`${b.promoted} promoted`} />
-                  {b.detained > 0 && <StatusBadge tone="warning" label={`${b.detained} detained`} />}
+                  {b.detained > 0 && (
+                    <StatusBadge tone="warning" label={`${b.detained} detained`} />
+                  )}
                 </button>
                 {expanded === b.batchId && (
                   <div className="border-t p-3 overflow-x-auto">
@@ -257,7 +264,10 @@ function Page() {
                             <td className="py-1.5">{r.fromClass}</td>
                             <td className="py-1.5">{r.toClass}</td>
                             <td className="py-1.5">
-                              <StatusBadge tone={RESULT_TONE[r.result] ?? "neutral"} label={r.result} />
+                              <StatusBadge
+                                tone={RESULT_TONE[r.result] ?? "neutral"}
+                                label={r.result}
+                              />
                             </td>
                           </tr>
                         ))}

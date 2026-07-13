@@ -99,7 +99,8 @@ class AdmitDirectDto {
   // Parents
   @IsIn(["new", "existing"]) parentMode: "new" | "existing";
   @IsOptional() @IsUUID() existingParentId?: string;
-  @IsOptional() @IsIn(["father", "mother", "other"]) primaryGuardian?: "father" | "mother" | "other";
+  @IsOptional() @IsIn(["father", "mother", "other"]) primaryGuardian?:
+    "father" | "mother" | "other";
   @IsOptional() @IsObject() father?: Record<string, unknown>;
   @IsOptional() @IsObject() mother?: Record<string, unknown>;
   @IsOptional() @IsString() @MaxLength(255) parentLoginEmail?: string;

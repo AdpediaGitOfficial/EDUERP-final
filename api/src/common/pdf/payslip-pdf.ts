@@ -29,7 +29,7 @@ export function streamPayslipPdf(res: Response, d: PayslipData) {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `inline; filename="payslip-${(d.employeeCode ?? "staff")}-${d.month.toISOString().slice(0, 7)}.pdf"`,
+    `inline; filename="payslip-${d.employeeCode ?? "staff"}-${d.month.toISOString().slice(0, 7)}.pdf"`,
   );
   doc.pipe(res);
 
@@ -39,8 +39,16 @@ export function streamPayslipPdf(res: Response, d: PayslipData) {
 
   doc.fillColor(accent).fontSize(22).font("Helvetica-Bold").text(d.schoolName);
   doc.moveDown(0.2);
-  doc.fillColor(muted).fontSize(11).font("Helvetica").text(`Salary Slip — ${MONTH(d.month)}`);
-  doc.moveTo(56, doc.y + 8).lineTo(539, doc.y + 8).strokeColor("#e5e7eb").stroke();
+  doc
+    .fillColor(muted)
+    .fontSize(11)
+    .font("Helvetica")
+    .text(`Salary Slip — ${MONTH(d.month)}`);
+  doc
+    .moveTo(56, doc.y + 8)
+    .lineTo(539, doc.y + 8)
+    .strokeColor("#e5e7eb")
+    .stroke();
   doc.moveDown(1.2);
 
   // Employee meta (two columns)
@@ -58,7 +66,11 @@ export function streamPayslipPdf(res: Response, d: PayslipData) {
     const x = 56 + col * 245;
     if (col === 0 && i > 0) my += 34;
     doc.fillColor(muted).fontSize(9).font("Helvetica").text(label.toUpperCase(), x, my);
-    doc.fillColor(ink).fontSize(11).font("Helvetica-Bold").text(value, x, my + 12, { width: 230 });
+    doc
+      .fillColor(ink)
+      .fontSize(11)
+      .font("Helvetica-Bold")
+      .text(value, x, my + 12, { width: 230 });
   });
   doc.y = my + 44;
   doc.moveDown(0.4);
@@ -93,7 +105,11 @@ export function streamPayslipPdf(res: Response, d: PayslipData) {
   doc.moveDown(0.6);
   const boxY = doc.y;
   doc.roundedRect(56, boxY, 483, 56, 8).fillAndStroke("#f5f3ff", "#ddd6fe");
-  doc.fillColor(muted).fontSize(10).font("Helvetica").text("NET SALARY", 72, boxY + 12);
+  doc
+    .fillColor(muted)
+    .fontSize(10)
+    .font("Helvetica")
+    .text("NET SALARY", 72, boxY + 12);
   doc
     .fillColor(accent)
     .fontSize(22)

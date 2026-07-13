@@ -42,14 +42,11 @@ export function daysUntil(d: string | null | undefined): number | null {
  * status never drifts to a different colour between modules.
  */
 export const TONE = {
-  success:
-    "bg-emerald-100 text-emerald-800 border-0 dark:bg-emerald-500/15 dark:text-emerald-300",
-  warning:
-    "bg-amber-100 text-amber-800 border-0 dark:bg-amber-500/15 dark:text-amber-300",
+  success: "bg-emerald-100 text-emerald-800 border-0 dark:bg-emerald-500/15 dark:text-emerald-300",
+  warning: "bg-amber-100 text-amber-800 border-0 dark:bg-amber-500/15 dark:text-amber-300",
   danger: "bg-red-100 text-red-800 border-0 dark:bg-red-500/15 dark:text-red-300",
   info: "bg-blue-100 text-blue-800 border-0 dark:bg-blue-500/15 dark:text-blue-300",
-  neutral:
-    "bg-slate-200 text-slate-700 border-0 dark:bg-slate-500/20 dark:text-slate-300",
+  neutral: "bg-slate-200 text-slate-700 border-0 dark:bg-slate-500/20 dark:text-slate-300",
 } as const;
 export type Tone = keyof typeof TONE;
 

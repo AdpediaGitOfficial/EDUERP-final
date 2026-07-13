@@ -273,74 +273,74 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={7} />
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr className="text-left">
-                <th className="p-3 font-medium">Code</th>
-                <th className="p-3 font-medium">Name</th>
-                <th className="p-3 font-medium">Department</th>
-                <th className="p-3 font-medium">Designation</th>
-                <th className="p-3 font-medium">Join date</th>
-                <th className="p-3 font-medium">Status</th>
-                <th className="p-3 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((s: any) => (
-                <tr key={s.id} className="border-t hover:bg-muted/30">
-                  <td className="p-3 font-mono text-xs">{s.employee_code}</td>
-                  <td className="p-3">
-                    <Link
-                      to="/hr/staff/$staffId"
-                      params={{ staffId: s.id }}
-                      className="text-primary underline-offset-2 hover:underline"
-                    >
-                      {s.full_name}
-                    </Link>
-                  </td>
-                  <td className="p-3">{s.department}</td>
-                  <td className="p-3">{s.designation}</td>
-                  <td className="p-3">{fmtDate(s.join_date)}</td>
-                  <td className="p-3">
-                    <Badge className={badgeClass(s.status)}>{niceLabel(s.status)}</Badge>
-                  </td>
-                  <td className="p-3 text-right whitespace-nowrap">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => openEdit(s)}
-                      title="Edit"
-                      aria-label={`Edit ${s.full_name}`}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => toggleStatus.mutate(s)}
-                      title={s.status === "active" ? "Deactivate" : "Reactivate"}
-                      aria-label={`${s.status === "active" ? "Deactivate" : "Reactivate"} ${s.full_name}`}
-                    >
-                      {s.status === "active" ? (
-                        <UserX className="size-4 text-red-600" />
-                      ) : (
-                        <UserCheck className="size-4 text-emerald-600" />
-                      )}
-                    </Button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40">
+                <tr className="text-left">
+                  <th className="p-3 font-medium">Code</th>
+                  <th className="p-3 font-medium">Name</th>
+                  <th className="p-3 font-medium">Department</th>
+                  <th className="p-3 font-medium">Designation</th>
+                  <th className="p-3 font-medium">Join date</th>
+                  <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 font-medium text-right">Actions</th>
                 </tr>
-              ))}
-              {filtered.length === 0 && (
-                <EmptyRow
-                  colSpan={7}
-                  title="No staff match your search"
-                  hint="Try a different name, department, or status."
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.map((s: any) => (
+                  <tr key={s.id} className="border-t hover:bg-muted/30">
+                    <td className="p-3 font-mono text-xs">{s.employee_code}</td>
+                    <td className="p-3">
+                      <Link
+                        to="/hr/staff/$staffId"
+                        params={{ staffId: s.id }}
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        {s.full_name}
+                      </Link>
+                    </td>
+                    <td className="p-3">{s.department}</td>
+                    <td className="p-3">{s.designation}</td>
+                    <td className="p-3">{fmtDate(s.join_date)}</td>
+                    <td className="p-3">
+                      <Badge className={badgeClass(s.status)}>{niceLabel(s.status)}</Badge>
+                    </td>
+                    <td className="p-3 text-right whitespace-nowrap">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => openEdit(s)}
+                        title="Edit"
+                        aria-label={`Edit ${s.full_name}`}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => toggleStatus.mutate(s)}
+                        title={s.status === "active" ? "Deactivate" : "Reactivate"}
+                        aria-label={`${s.status === "active" ? "Deactivate" : "Reactivate"} ${s.full_name}`}
+                      >
+                        {s.status === "active" ? (
+                          <UserX className="size-4 text-red-600" />
+                        ) : (
+                          <UserCheck className="size-4 text-emerald-600" />
+                        )}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <EmptyRow
+                    colSpan={7}
+                    title="No staff match your search"
+                    hint="Try a different name, department, or status."
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 

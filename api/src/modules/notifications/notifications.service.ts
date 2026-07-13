@@ -204,9 +204,7 @@ export class NotificationsService {
   private renderReminder(template: string | undefined, item: ReminderItem): string {
     const amount = this.inr(item.amount);
     if (template && template.trim()) {
-      return template
-        .replace(/\{name\}/gi, item.studentName)
-        .replace(/\{amount\}/gi, amount);
+      return template.replace(/\{name\}/gi, item.studentName).replace(/\{amount\}/gi, amount);
     }
     return `Dear Parent, this is a gentle reminder that ${amount} in school fees is currently pending for ${item.studentName}. Kindly clear the dues at the earliest. Thank you.`;
   }

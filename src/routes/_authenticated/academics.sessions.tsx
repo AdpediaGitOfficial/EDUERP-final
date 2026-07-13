@@ -50,11 +50,23 @@ const STATUS_TONE: Record<string, Tone> = {
   locked: "warning",
 };
 
-const EMPTY = { name: "", start_date: "", end_date: "", board: "", curriculum: "", status: "upcoming" };
+const EMPTY = {
+  name: "",
+  start_date: "",
+  end_date: "",
+  board: "",
+  curriculum: "",
+  status: "upcoming",
+};
 
 function Page() {
   const qc = useQueryClient();
-  const { data: sessions, isLoading, isError, refetch } = useQuery({
+  const {
+    data: sessions,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["academic-sessions"],
     queryFn: () => apiGet<Session[]>("/academics/sessions"),
   });
@@ -94,7 +106,15 @@ function Page() {
   });
 
   const action = useMutation({
-    mutationFn: async ({ path, method = "POST", body }: { path: string; method?: string; body?: any }) => {
+    mutationFn: async ({
+      path,
+      method = "POST",
+      body,
+    }: {
+      path: string;
+      method?: string;
+      body?: any;
+    }) => {
       const res = await apiFetch(path, { method, body: body ? JSON.stringify(body) : undefined });
       if (!res || !res.ok) {
         const b = res ? await res.json().catch(() => null) : null;
@@ -163,105 +183,123 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={7} />
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left">
-              <tr>
-                <th className="p-3 font-medium">Session</th>
-                <th className="p-3 font-medium">Period</th>
-                <th className="p-3 font-medium">Board / Curriculum</th>
-                <th className="p-3 font-medium text-right">Students</th>
-                <th className="p-3 font-medium text-right">Sections</th>
-                <th className="p-3 font-medium">Status</th>
-                <th className="p-3 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(sessions ?? []).map((s) => (
-                <tr key={s.id} className={s.is_current ? "border-t bg-emerald-50/40 dark:bg-emerald-500/10" : "border-t"}>
-                  <td className="p-3">
-                    <div className="font-medium flex items-center gap-2">
-                      {s.name}
-                      {s.is_current && <StatusBadge tone="success" label="Current" />}
-                      {s.promotion_locked && (
-                        <span title="Promotion locked">
-                          <Lock className="size-3.5 text-amber-600" />
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-3 whitespace-nowrap">
-                    {s.start_date ? fmtDate(s.start_date) : "—"} → {s.end_date ? fmtDate(s.end_date) : "—"}
-                  </td>
-                  <td className="p-3">
-                    {[s.board, s.curriculum].filter(Boolean).join(" · ") || (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="p-3 text-right">{s.students}</td>
-                  <td className="p-3 text-right">{s.sections}</td>
-                  <td className="p-3">
-                    <StatusBadge tone={STATUS_TONE[s.status] ?? "neutral"} label={niceLabel(s.status)} />
-                  </td>
-                  <td className="p-3 text-right whitespace-nowrap">
-                    <Button size="icon" variant="ghost" aria-label={`Edit ${s.name}`} onClick={() => openEdit(s)}>
-                      <Pencil className="size-4" />
-                    </Button>
-                    {!s.is_current && s.status !== "archived" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Set ${s.name} current`}
-                        title="Set current"
-                        onClick={() =>
-                          action.mutate({
-                            path: `/academics/sessions/${s.id}/set-current`,
-                            ok: "Current session updated",
-                          } as any)
-                        }
-                      >
-                        <CheckCircle2 className="size-4 text-emerald-600" />
-                      </Button>
-                    )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Clone ${s.name}`}
-                      title="Clone to a new year"
-                      onClick={() => {
-                        setCloneOf(s);
-                        setCloneName("");
-                      }}
-                    >
-                      <Copy className="size-4" />
-                    </Button>
-                    {s.status !== "archived" && !s.is_current && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Archive ${s.name}`}
-                        title="Archive"
-                        onClick={() =>
-                          action.mutate({
-                            path: `/academics/sessions/${s.id}/status`,
-                            method: "PATCH",
-                            body: { status: "archived" },
-                            ok: "Session archived",
-                          } as any)
-                        }
-                      >
-                        <Archive className="size-4 text-muted-foreground" />
-                      </Button>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-left">
+                <tr>
+                  <th className="p-3 font-medium">Session</th>
+                  <th className="p-3 font-medium">Period</th>
+                  <th className="p-3 font-medium">Board / Curriculum</th>
+                  <th className="p-3 font-medium text-right">Students</th>
+                  <th className="p-3 font-medium text-right">Sections</th>
+                  <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 font-medium text-right">Actions</th>
                 </tr>
-              ))}
-              {sessions && sessions.length === 0 && (
-                <EmptyRow colSpan={7} title="No sessions yet" hint="Add your first academic session." />
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {(sessions ?? []).map((s) => (
+                  <tr
+                    key={s.id}
+                    className={
+                      s.is_current ? "border-t bg-emerald-50/40 dark:bg-emerald-500/10" : "border-t"
+                    }
+                  >
+                    <td className="p-3">
+                      <div className="font-medium flex items-center gap-2">
+                        {s.name}
+                        {s.is_current && <StatusBadge tone="success" label="Current" />}
+                        {s.promotion_locked && (
+                          <span title="Promotion locked">
+                            <Lock className="size-3.5 text-amber-600" />
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-3 whitespace-nowrap">
+                      {s.start_date ? fmtDate(s.start_date) : "—"} →{" "}
+                      {s.end_date ? fmtDate(s.end_date) : "—"}
+                    </td>
+                    <td className="p-3">
+                      {[s.board, s.curriculum].filter(Boolean).join(" · ") || (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-right">{s.students}</td>
+                    <td className="p-3 text-right">{s.sections}</td>
+                    <td className="p-3">
+                      <StatusBadge
+                        tone={STATUS_TONE[s.status] ?? "neutral"}
+                        label={niceLabel(s.status)}
+                      />
+                    </td>
+                    <td className="p-3 text-right whitespace-nowrap">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Edit ${s.name}`}
+                        onClick={() => openEdit(s)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      {!s.is_current && s.status !== "archived" && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Set ${s.name} current`}
+                          title="Set current"
+                          onClick={() =>
+                            action.mutate({
+                              path: `/academics/sessions/${s.id}/set-current`,
+                              ok: "Current session updated",
+                            } as any)
+                          }
+                        >
+                          <CheckCircle2 className="size-4 text-emerald-600" />
+                        </Button>
+                      )}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Clone ${s.name}`}
+                        title="Clone to a new year"
+                        onClick={() => {
+                          setCloneOf(s);
+                          setCloneName("");
+                        }}
+                      >
+                        <Copy className="size-4" />
+                      </Button>
+                      {s.status !== "archived" && !s.is_current && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Archive ${s.name}`}
+                          title="Archive"
+                          onClick={() =>
+                            action.mutate({
+                              path: `/academics/sessions/${s.id}/status`,
+                              method: "PATCH",
+                              body: { status: "archived" },
+                              ok: "Session archived",
+                            } as any)
+                          }
+                        >
+                          <Archive className="size-4 text-muted-foreground" />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {sessions && sessions.length === 0 && (
+                  <EmptyRow
+                    colSpan={7}
+                    title="No sessions yet"
+                    hint="Add your first academic session."
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 

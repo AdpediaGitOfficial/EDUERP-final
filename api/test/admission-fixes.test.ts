@@ -45,7 +45,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const sid of cleanupStudents) {
-    const s = await prisma.students.findUnique({ where: { id: sid }, select: { profile_id: true } });
+    const s = await prisma.students.findUnique({
+      where: { id: sid },
+      select: { profile_id: true },
+    });
     await prisma.students.delete({ where: { id: sid } }).catch(() => {});
     if (s?.profile_id) {
       await prisma.user_roles.deleteMany({ where: { user_id: s.profile_id } }).catch(() => {});
@@ -100,7 +103,11 @@ describe("admission fix: existing-parent search finds login-less guardians", () 
     if (res.body.parentId) cleanupProfiles.push(res.body.parentId);
 
     // The mother has no portal login but IS linked → must appear in search.
-    const found = await authed("get", `/parents/search?q=${encodeURIComponent(motherName)}`, "admin");
+    const found = await authed(
+      "get",
+      `/parents/search?q=${encodeURIComponent(motherName)}`,
+      "admin",
+    );
     expect(found.status).toBe(200);
     const mother = found.body.matches.find((m: any) => m.fullName === motherName);
     expect(mother).toBeTruthy();

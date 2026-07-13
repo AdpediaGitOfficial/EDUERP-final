@@ -77,7 +77,14 @@ function StudentCategoriesPage() {
     setOpen(true);
   };
   const onDelete = async (c: Category) => {
-    if (!(await confirm({ title: "Delete category?", description: c.name, confirmText: "Delete", destructive: true })))
+    if (
+      !(await confirm({
+        title: "Delete category?",
+        description: c.name,
+        confirmText: "Delete",
+        destructive: true,
+      }))
+    )
       return;
     remove.mutate(c.id);
   };
@@ -128,10 +135,20 @@ function StudentCategoriesPage() {
                     <td className="p-3 font-medium">{c.name}</td>
                     <td className="p-3">
                       <div className="flex items-center justify-end gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => openEdit(c)} aria-label={`Edit ${c.name}`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => openEdit(c)}
+                          aria-label={`Edit ${c.name}`}
+                        >
                           <Pencil className="size-4" />
                         </Button>
-                        <Button size="icon" variant="ghost" onClick={() => onDelete(c)} aria-label={`Delete ${c.name}`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => onDelete(c)}
+                          aria-label={`Delete ${c.name}`}
+                        >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
                       </div>

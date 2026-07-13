@@ -77,7 +77,12 @@ function Page() {
     queryKey: ["academic-classes-all"],
     queryFn: () => apiGet<ClassRow[]>("/classes"),
   });
-  const { data: slots, isLoading, isError, refetch } = useQuery({
+  const {
+    data: slots,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["timetable", classId],
     queryFn: () => apiGet<Slot[]>(`/timetable?classId=${classId}`),
     enabled: !!classId,
@@ -96,7 +101,8 @@ function Page() {
     queryFn: () => apiGet<Room[]>("/academics/rooms"),
   });
 
-  const classLabel = (c: ClassRow) => `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
+  const classLabel = (c: ClassRow) =>
+    `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
   const byDay = useMemo(() => {
     const map = new Map<number, Slot[]>();
     for (const s of slots ?? []) {
@@ -104,7 +110,8 @@ function Page() {
       arr.push(s);
       map.set(s.dayOfWeek, arr);
     }
-    for (const arr of map.values()) arr.sort((a, b) => hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
+    for (const arr of map.values())
+      arr.sort((a, b) => hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
     return map;
   }, [slots]);
 
@@ -123,7 +130,8 @@ function Page() {
           room: form.room || undefined,
         }),
       });
-      if (!res || !res.ok) return { hasConflict: false, conflicts: { teacher: [], room: [], class: [] } };
+      if (!res || !res.ok)
+        return { hasConflict: false, conflicts: { teacher: [], room: [], class: [] } };
       return res.json();
     },
     enabled: open && !!classId && form.start_time < form.end_time,
@@ -195,11 +203,19 @@ function Page() {
       </div>
 
       {!classId ? (
-        <EmptyState icon={CalendarClock} title="Pick a class" hint="Select a class-section to build its weekly timetable." />
+        <EmptyState
+          icon={CalendarClock}
+          title="Pick a class"
+          hint="Select a class-section to build its weekly timetable."
+        />
       ) : isError ? (
-        <Card className="rounded-2xl"><QueryError onRetry={() => refetch()} /></Card>
+        <Card className="rounded-2xl">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
       ) : isLoading ? (
-        <Card className="rounded-2xl overflow-hidden"><TableSkeleton rows={6} cols={4} /></Card>
+        <Card className="rounded-2xl overflow-hidden">
+          <TableSkeleton rows={6} cols={4} />
+        </Card>
       ) : (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
           {DAYS.map((d) => {
@@ -212,13 +228,20 @@ function Page() {
                 ) : (
                   <div className="space-y-2">
                     {daySlots.map((s) => (
-                      <div key={s.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                      <div
+                        key={s.id}
+                        className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+                      >
                         <div className="text-xs font-mono text-muted-foreground w-24 shrink-0">
                           {hhmm(s.startTime)}–{hhmm(s.endTime)}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium truncate">{s.subjectName ?? subjectName(s.subjectId) ?? "—"}</div>
-                          {s.room && <div className="text-xs text-muted-foreground">Room {s.room}</div>}
+                          <div className="font-medium truncate">
+                            {s.subjectName ?? subjectName(s.subjectId) ?? "—"}
+                          </div>
+                          {s.room && (
+                            <div className="text-xs text-muted-foreground">Room {s.room}</div>
+                          )}
                         </div>
                         <Button
                           size="icon"
@@ -246,7 +269,10 @@ function Page() {
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <Label>Day</Label>
-              <Select value={form.day_of_week} onValueChange={(v) => setForm({ ...form, day_of_week: v })}>
+              <Select
+                value={form.day_of_week}
+                onValueChange={(v) => setForm({ ...form, day_of_week: v })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -262,15 +288,26 @@ function Page() {
             <div />
             <div>
               <Label>Start</Label>
-              <Input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} />
+              <Input
+                type="time"
+                value={form.start_time}
+                onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+              />
             </div>
             <div>
               <Label>End</Label>
-              <Input type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
+              <Input
+                type="time"
+                value={form.end_time}
+                onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+              />
             </div>
             <div>
               <Label>Subject</Label>
-              <Select value={form.subject_id || undefined} onValueChange={(v) => setForm({ ...form, subject_id: v })}>
+              <Select
+                value={form.subject_id || undefined}
+                onValueChange={(v) => setForm({ ...form, subject_id: v })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
@@ -285,7 +322,10 @@ function Page() {
             </div>
             <div>
               <Label>Teacher</Label>
-              <Select value={form.teacher_id || undefined} onValueChange={(v) => setForm({ ...form, teacher_id: v })}>
+              <Select
+                value={form.teacher_id || undefined}
+                onValueChange={(v) => setForm({ ...form, teacher_id: v })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
@@ -300,7 +340,10 @@ function Page() {
             </div>
             <div className="col-span-2">
               <Label>Room</Label>
-              <Select value={form.room || undefined} onValueChange={(v) => setForm({ ...form, room: v })}>
+              <Select
+                value={form.room || undefined}
+                onValueChange={(v) => setForm({ ...form, room: v })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
@@ -322,9 +365,15 @@ function Page() {
                 <p className="font-medium text-amber-800">Scheduling conflict</p>
                 <p className="text-xs text-amber-700">
                   {[
-                    ...(conflictCheck.conflicts.teacher.length ? [`Teacher: ${conflictCheck.conflicts.teacher[0]}`] : []),
-                    ...(conflictCheck.conflicts.room.length ? [`Room: ${conflictCheck.conflicts.room[0]}`] : []),
-                    ...(conflictCheck.conflicts.class.length ? [`Class: ${conflictCheck.conflicts.class[0]}`] : []),
+                    ...(conflictCheck.conflicts.teacher.length
+                      ? [`Teacher: ${conflictCheck.conflicts.teacher[0]}`]
+                      : []),
+                    ...(conflictCheck.conflicts.room.length
+                      ? [`Room: ${conflictCheck.conflicts.room[0]}`]
+                      : []),
+                    ...(conflictCheck.conflicts.class.length
+                      ? [`Class: ${conflictCheck.conflicts.class[0]}`]
+                      : []),
                   ].join(" · ")}
                 </p>
               </div>

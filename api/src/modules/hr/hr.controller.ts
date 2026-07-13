@@ -154,7 +154,8 @@ class EmployeeSalaryDto extends SalaryComponentsDto {
 
 class LoanDto {
   @IsUUID() staff_id: string;
-  @IsOptional() @IsIn(["advance", "personal", "emergency", "festival", "vehicle", "housing"])
+  @IsOptional()
+  @IsIn(["advance", "personal", "emergency", "festival", "vehicle", "housing"])
   loan_type?: string;
   @IsNumber() principal: number;
   @IsOptional() @IsNumber() interest_rate?: number;
@@ -344,11 +345,7 @@ export class HrController {
   }
 
   @Get("payroll/runs/:id/payslip.pdf")
-  async payslipPdf(
-    @CurrentUser() actor: AuthUser,
-    @Param("id") id: string,
-    @Res() res: Response,
-  ) {
+  async payslipPdf(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Res() res: Response) {
     const r = await this.hr.payslipData(actor, id);
     streamPayslipPdf(res, {
       schoolName: process.env.SCHOOL_NAME || "Greenwood International School",

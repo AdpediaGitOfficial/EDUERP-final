@@ -88,13 +88,19 @@ function Page() {
     queryKey: ["academic-classes-all"],
     queryFn: () => apiGet<ClassRow[]>("/classes"),
   });
-  const { data: subjects, isLoading, isError, refetch } = useQuery({
+  const {
+    data: subjects,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["academic-subjects", classFilter],
     queryFn: () =>
       apiGet<Subject[]>(`/subjects${classFilter !== "all" ? `?classId=${classFilter}` : ""}`),
   });
 
-  const classLabel = (c: ClassRow) => `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
+  const classLabel = (c: ClassRow) =>
+    `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
   const filtered = useMemo(
     () =>
       (subjects ?? []).filter((s) => {
@@ -224,67 +230,77 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={8} />
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left">
-              <tr>
-                <th className="p-3 font-medium">Subject</th>
-                <th className="p-3 font-medium">Class</th>
-                <th className="p-3 font-medium">Category</th>
-                <th className="p-3 font-medium">Type</th>
-                <th className="p-3 font-medium text-right">Periods/wk</th>
-                <th className="p-3 font-medium text-right">Pass / Max</th>
-                <th className="p-3 font-medium">Active</th>
-                <th className="p-3 font-medium text-right">Edit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((s) => (
-                <tr key={s.id} className={s.isActive ? "border-t" : "border-t opacity-50"}>
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
-                      {s.color && (
-                        <span
-                          className="inline-block size-3 rounded-full shrink-0"
-                          style={{ background: s.color }}
-                        />
-                      )}
-                      <span className="font-medium">{s.name}</span>
-                      {s.labRequired && <FlaskConical className="size-3.5 text-teal-600" />}
-                    </div>
-                    <div className="text-xs text-muted-foreground font-mono">{s.code ?? "—"}</div>
-                  </td>
-                  <td className="p-3">{s.className ?? "—"}</td>
-                  <td className="p-3">{s.category ?? "—"}</td>
-                  <td className="p-3">
-                    <StatusBadge tone={TYPE_TONE[s.subjectType] ?? "neutral"} label={niceLabel(s.subjectType)} />
-                    <span className="ml-1 text-xs text-muted-foreground">{niceLabel(s.nature)}</span>
-                  </td>
-                  <td className="p-3 text-right">{s.weeklyPeriods}</td>
-                  <td className="p-3 text-right">
-                    {s.passMarks} / {s.maxMarks}
-                  </td>
-                  <td className="p-3">
-                    <Switch checked={s.isActive} onCheckedChange={() => toggleActive.mutate(s)} />
-                  </td>
-                  <td className="p-3 text-right">
-                    <Button size="icon" variant="ghost" aria-label={`Edit ${s.name}`} onClick={() => openEdit(s)}>
-                      <Pencil className="size-4" />
-                    </Button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-left">
+                <tr>
+                  <th className="p-3 font-medium">Subject</th>
+                  <th className="p-3 font-medium">Class</th>
+                  <th className="p-3 font-medium">Category</th>
+                  <th className="p-3 font-medium">Type</th>
+                  <th className="p-3 font-medium text-right">Periods/wk</th>
+                  <th className="p-3 font-medium text-right">Pass / Max</th>
+                  <th className="p-3 font-medium">Active</th>
+                  <th className="p-3 font-medium text-right">Edit</th>
                 </tr>
-              ))}
-              {filtered.length === 0 && (
-                <EmptyRow
-                  colSpan={8}
-                  icon={BookOpen}
-                  title="No subjects found"
-                  hint="Add a subject or pick a different class."
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.map((s) => (
+                  <tr key={s.id} className={s.isActive ? "border-t" : "border-t opacity-50"}>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        {s.color && (
+                          <span
+                            className="inline-block size-3 rounded-full shrink-0"
+                            style={{ background: s.color }}
+                          />
+                        )}
+                        <span className="font-medium">{s.name}</span>
+                        {s.labRequired && <FlaskConical className="size-3.5 text-teal-600" />}
+                      </div>
+                      <div className="text-xs text-muted-foreground font-mono">{s.code ?? "—"}</div>
+                    </td>
+                    <td className="p-3">{s.className ?? "—"}</td>
+                    <td className="p-3">{s.category ?? "—"}</td>
+                    <td className="p-3">
+                      <StatusBadge
+                        tone={TYPE_TONE[s.subjectType] ?? "neutral"}
+                        label={niceLabel(s.subjectType)}
+                      />
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        {niceLabel(s.nature)}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right">{s.weeklyPeriods}</td>
+                    <td className="p-3 text-right">
+                      {s.passMarks} / {s.maxMarks}
+                    </td>
+                    <td className="p-3">
+                      <Switch checked={s.isActive} onCheckedChange={() => toggleActive.mutate(s)} />
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Edit ${s.name}`}
+                        onClick={() => openEdit(s)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <EmptyRow
+                    colSpan={8}
+                    icon={BookOpen}
+                    title="No subjects found"
+                    hint="Add a subject or pick a different class."
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -319,15 +335,24 @@ function Page() {
               <Label>
                 Name <span className="text-red-500">*</span>
               </Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
             </div>
             <div>
               <Label>Code</Label>
-              <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+              <Input
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+              />
             </div>
             <div>
               <Label>Short name</Label>
-              <Input value={form.short_name} onChange={(e) => setForm({ ...form, short_name: e.target.value })} />
+              <Input
+                value={form.short_name}
+                onChange={(e) => setForm({ ...form, short_name: e.target.value })}
+              />
             </div>
             <div>
               <Label>Category</Label>
@@ -339,7 +364,10 @@ function Page() {
             </div>
             <div>
               <Label>Type</Label>
-              <Select value={form.subject_type} onValueChange={(v) => setForm({ ...form, subject_type: v })}>
+              <Select
+                value={form.subject_type}
+                onValueChange={(v) => setForm({ ...form, subject_type: v })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -365,31 +393,58 @@ function Page() {
             </div>
             <div>
               <Label>Credits</Label>
-              <Input type="number" value={form.credits} onChange={(e) => setForm({ ...form, credits: e.target.value })} />
+              <Input
+                type="number"
+                value={form.credits}
+                onChange={(e) => setForm({ ...form, credits: e.target.value })}
+              />
             </div>
             <div>
               <Label>Weekly periods</Label>
-              <Input type="number" value={form.weekly_periods} onChange={(e) => setForm({ ...form, weekly_periods: e.target.value })} />
+              <Input
+                type="number"
+                value={form.weekly_periods}
+                onChange={(e) => setForm({ ...form, weekly_periods: e.target.value })}
+              />
             </div>
             <div>
               <Label>Pass marks</Label>
-              <Input type="number" value={form.pass_marks} onChange={(e) => setForm({ ...form, pass_marks: e.target.value })} />
+              <Input
+                type="number"
+                value={form.pass_marks}
+                onChange={(e) => setForm({ ...form, pass_marks: e.target.value })}
+              />
             </div>
             <div>
               <Label>Max marks</Label>
-              <Input type="number" value={form.max_marks} onChange={(e) => setForm({ ...form, max_marks: e.target.value })} />
+              <Input
+                type="number"
+                value={form.max_marks}
+                onChange={(e) => setForm({ ...form, max_marks: e.target.value })}
+              />
             </div>
             <div>
               <Label>Department</Label>
-              <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+              <Input
+                value={form.department}
+                onChange={(e) => setForm({ ...form, department: e.target.value })}
+              />
             </div>
             <div>
               <Label>Colour</Label>
-              <Input type="color" value={form.color || "#6366f1"} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-9 p-1" />
+              <Input
+                type="color"
+                value={form.color || "#6366f1"}
+                onChange={(e) => setForm({ ...form, color: e.target.value })}
+                className="h-9 p-1"
+              />
             </div>
             <div className="col-span-2 flex items-center justify-between rounded-lg border px-3 py-2">
               <Label>Lab required</Label>
-              <Switch checked={form.lab_required} onCheckedChange={(v) => setForm({ ...form, lab_required: v })} />
+              <Switch
+                checked={form.lab_required}
+                onCheckedChange={(v) => setForm({ ...form, lab_required: v })}
+              />
             </div>
           </div>
           <DialogFooter>

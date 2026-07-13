@@ -67,16 +67,21 @@ function DuePage() {
 
   const q = useQuery<DueList>({
     queryKey: ["fees-collection", "due", filters],
-    queryFn: () => apiGet<DueList>(`/fees/collection/students${filtersToQuery(filters, { onlyDue: "1" })}`),
+    queryFn: () =>
+      apiGet<DueList>(`/fees/collection/students${filtersToQuery(filters, { onlyDue: "1" })}`),
   });
 
   const rows = q.data?.rows ?? [];
-  const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.studentId)), [rows, selected]);
+  const selectedRows = useMemo(
+    () => rows.filter((r) => selected.has(r.studentId)),
+    [rows, selected],
+  );
 
   const toggle = (id: string) =>
     setSelected((prev) => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   const toggleAll = () =>
@@ -209,9 +214,7 @@ function DuePage() {
         )}
       </Card>
 
-      {remindFor && (
-        <ReminderModal rows={remindFor} onClose={() => setRemindFor(null)} />
-      )}
+      {remindFor && <ReminderModal rows={remindFor} onClose={() => setRemindFor(null)} />}
     </div>
   );
 }
@@ -224,7 +227,8 @@ function ReminderModal({ rows, onClose }: { rows: DueRow[]; onClose: () => void 
   const toggleChannel = (c: string) =>
     setChannels((prev) => {
       const n = new Set(prev);
-      n.has(c) ? n.delete(c) : n.add(c);
+      if (n.has(c)) n.delete(c);
+      else n.add(c);
       return n;
     });
 
@@ -286,7 +290,9 @@ function ReminderModal({ rows, onClose }: { rows: DueRow[]; onClose: () => void 
                   type="button"
                   onClick={() => toggleChannel(c.value)}
                   className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                    on ? "border-primary bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-muted"
+                    on
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   <Checkbox checked={on} className="pointer-events-none" />
@@ -306,7 +312,8 @@ function ReminderModal({ rows, onClose }: { rows: DueRow[]; onClose: () => void 
             placeholder="Leave blank for the default reminder. Use {name} and {amount} as placeholders."
           />
           <p className="text-[11px] text-muted-foreground">
-            Placeholders <code>{"{name}"}</code> and <code>{"{amount}"}</code> are filled per student.
+            Placeholders <code>{"{name}"}</code> and <code>{"{amount}"}</code> are filled per
+            student.
           </p>
         </div>
 

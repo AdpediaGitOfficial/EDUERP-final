@@ -74,7 +74,12 @@ function Page() {
   const [editing, setEditing] = useState<Room | null>(null);
   const [form, setForm] = useState<any>(EMPTY);
 
-  const { data: rooms, isLoading, isError, refetch } = useQuery({
+  const {
+    data: rooms,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["academic-rooms"],
     queryFn: () => apiGet<Room[]>("/academics/rooms"),
   });
@@ -164,7 +169,12 @@ function Page() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input placeholder="Search rooms…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
+        <Input
+          placeholder="Search rooms…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="max-w-xs"
+        />
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-44">
             <SelectValue />
@@ -191,72 +201,89 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={7} />
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left">
-              <tr>
-                <th className="p-3 font-medium">Room</th>
-                <th className="p-3 font-medium">Type</th>
-                <th className="p-3 font-medium">Location</th>
-                <th className="p-3 font-medium text-right">Capacity</th>
-                <th className="p-3 font-medium">Facilities</th>
-                <th className="p-3 font-medium text-right">Utilisation</th>
-                <th className="p-3 font-medium text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id} className={r.is_active ? "border-t" : "border-t opacity-50"}>
-                  <td className="p-3">
-                    <div className="font-medium">{r.room_number}</div>
-                    {r.name && <div className="text-xs text-muted-foreground">{r.name}</div>}
-                  </td>
-                  <td className="p-3">
-                    <StatusBadge tone={TYPE_TONE[r.room_type] ?? "neutral"} label={niceLabel(r.room_type)} />
-                  </td>
-                  <td className="p-3">
-                    {[r.building, r.floor].filter(Boolean).join(" · ") || "—"}
-                  </td>
-                  <td className="p-3 text-right">{r.capacity}</td>
-                  <td className="p-3">
-                    <div className="flex gap-1">
-                      {r.is_smart && (
-                        <span title="Smart classroom">
-                          <Sparkles className="size-4 text-indigo-600" />
-                        </span>
-                      )}
-                      {r.has_projector && (
-                        <span title="Projector">
-                          <Projector className="size-4 text-teal-600" />
-                        </span>
-                      )}
-                      {!r.is_smart && !r.has_projector && <span className="text-muted-foreground">—</span>}
-                    </div>
-                  </td>
-                  <td className="p-3 text-right whitespace-nowrap">
-                    <span className="text-muted-foreground">{r.assignedClasses} cls · {r.weeklySlots} slots</span>
-                  </td>
-                  <td className="p-3 text-right whitespace-nowrap">
-                    <Button size="icon" variant="ghost" aria-label={`Edit ${r.room_number}`} onClick={() => openEdit(r)}>
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Delete ${r.room_number}`}
-                      onClick={() => remove.mutate(r.id)}
-                    >
-                      <Trash2 className="size-4 text-red-600" />
-                    </Button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-left">
+                <tr>
+                  <th className="p-3 font-medium">Room</th>
+                  <th className="p-3 font-medium">Type</th>
+                  <th className="p-3 font-medium">Location</th>
+                  <th className="p-3 font-medium text-right">Capacity</th>
+                  <th className="p-3 font-medium">Facilities</th>
+                  <th className="p-3 font-medium text-right">Utilisation</th>
+                  <th className="p-3 font-medium text-right">Actions</th>
                 </tr>
-              ))}
-              {filtered.length === 0 && (
-                <EmptyRow colSpan={7} icon={DoorOpen} title="No rooms found" hint="Add a classroom, lab or other space." />
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id} className={r.is_active ? "border-t" : "border-t opacity-50"}>
+                    <td className="p-3">
+                      <div className="font-medium">{r.room_number}</div>
+                      {r.name && <div className="text-xs text-muted-foreground">{r.name}</div>}
+                    </td>
+                    <td className="p-3">
+                      <StatusBadge
+                        tone={TYPE_TONE[r.room_type] ?? "neutral"}
+                        label={niceLabel(r.room_type)}
+                      />
+                    </td>
+                    <td className="p-3">
+                      {[r.building, r.floor].filter(Boolean).join(" · ") || "—"}
+                    </td>
+                    <td className="p-3 text-right">{r.capacity}</td>
+                    <td className="p-3">
+                      <div className="flex gap-1">
+                        {r.is_smart && (
+                          <span title="Smart classroom">
+                            <Sparkles className="size-4 text-indigo-600" />
+                          </span>
+                        )}
+                        {r.has_projector && (
+                          <span title="Projector">
+                            <Projector className="size-4 text-teal-600" />
+                          </span>
+                        )}
+                        {!r.is_smart && !r.has_projector && (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-3 text-right whitespace-nowrap">
+                      <span className="text-muted-foreground">
+                        {r.assignedClasses} cls · {r.weeklySlots} slots
+                      </span>
+                    </td>
+                    <td className="p-3 text-right whitespace-nowrap">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Edit ${r.room_number}`}
+                        onClick={() => openEdit(r)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Delete ${r.room_number}`}
+                        onClick={() => remove.mutate(r.id)}
+                      >
+                        <Trash2 className="size-4 text-red-600" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <EmptyRow
+                    colSpan={7}
+                    icon={DoorOpen}
+                    title="No rooms found"
+                    hint="Add a classroom, lab or other space."
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -270,15 +297,24 @@ function Page() {
               <Label>
                 Room number <span className="text-red-500">*</span>
               </Label>
-              <Input value={form.room_number} onChange={(e) => setForm({ ...form, room_number: e.target.value })} />
+              <Input
+                value={form.room_number}
+                onChange={(e) => setForm({ ...form, room_number: e.target.value })}
+              />
             </div>
             <div>
               <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
             </div>
             <div>
               <Label>Type</Label>
-              <Select value={form.room_type} onValueChange={(v) => setForm({ ...form, room_type: v })}>
+              <Select
+                value={form.room_type}
+                onValueChange={(v) => setForm({ ...form, room_type: v })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -293,27 +329,46 @@ function Page() {
             </div>
             <div>
               <Label>Capacity</Label>
-              <Input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} />
+              <Input
+                type="number"
+                value={form.capacity}
+                onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+              />
             </div>
             <div>
               <Label>Building</Label>
-              <Input value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} />
+              <Input
+                value={form.building}
+                onChange={(e) => setForm({ ...form, building: e.target.value })}
+              />
             </div>
             <div>
               <Label>Floor</Label>
-              <Input value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} />
+              <Input
+                value={form.floor}
+                onChange={(e) => setForm({ ...form, floor: e.target.value })}
+              />
             </div>
             <div className="flex items-center justify-between rounded-lg border px-3 py-2">
               <Label>Smart classroom</Label>
-              <Switch checked={form.is_smart} onCheckedChange={(v) => setForm({ ...form, is_smart: v })} />
+              <Switch
+                checked={form.is_smart}
+                onCheckedChange={(v) => setForm({ ...form, is_smart: v })}
+              />
             </div>
             <div className="flex items-center justify-between rounded-lg border px-3 py-2">
               <Label>Projector</Label>
-              <Switch checked={form.has_projector} onCheckedChange={(v) => setForm({ ...form, has_projector: v })} />
+              <Switch
+                checked={form.has_projector}
+                onCheckedChange={(v) => setForm({ ...form, has_projector: v })}
+              />
             </div>
             <div className="col-span-2 flex items-center justify-between rounded-lg border px-3 py-2">
               <Label>Active</Label>
-              <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
+              <Switch
+                checked={form.is_active}
+                onCheckedChange={(v) => setForm({ ...form, is_active: v })}
+              />
             </div>
           </div>
           <DialogFooter>

@@ -56,7 +56,12 @@ function Page() {
     queryKey: ["teacher-options"],
     queryFn: () => apiGet<TeacherOption[]>("/classes/teacher-options"),
   });
-  const { data: subjects, isLoading, isError, refetch } = useQuery({
+  const {
+    data: subjects,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["academic-subjects", classId],
     queryFn: () => apiGet<Subject[]>(`/subjects?classId=${classId}`),
     enabled: !!classId,
@@ -71,7 +76,8 @@ function Page() {
     queryFn: () => apiGet<Workload>("/academics/teacher-workload"),
   });
 
-  const classLabel = (c: ClassRow) => `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
+  const classLabel = (c: ClassRow) =>
+    `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
 
   const assign = useMutation({
     mutationFn: async ({ subjectId, teacherId }: { subjectId: string; teacherId: string }) => {
@@ -130,13 +136,21 @@ function Page() {
         </div>
 
         {!classId ? (
-          <EmptyState icon={GraduationCap} title="Pick a class" hint="Select a class-section to assign subject teachers." />
+          <EmptyState
+            icon={GraduationCap}
+            title="Pick a class"
+            hint="Select a class-section to assign subject teachers."
+          />
         ) : isError ? (
           <QueryError onRetry={() => refetch()} />
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={4} />
         ) : (subjects ?? []).length === 0 ? (
-          <EmptyState icon={GraduationCap} title="No subjects" hint="Add subjects to this class first." />
+          <EmptyState
+            icon={GraduationCap}
+            title="No subjects"
+            hint="Add subjects to this class first."
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -236,8 +250,12 @@ function Page() {
                   <td className="p-3 text-right">{t.remaining}</td>
                   <td className="p-3">
                     <StatusBadge
-                      tone={t.overloaded ? "danger" : t.scheduledPeriods > 0 ? "success" : "neutral"}
-                      label={t.overloaded ? "Overloaded" : t.scheduledPeriods > 0 ? "Active" : "Free"}
+                      tone={
+                        t.overloaded ? "danger" : t.scheduledPeriods > 0 ? "success" : "neutral"
+                      }
+                      label={
+                        t.overloaded ? "Overloaded" : t.scheduledPeriods > 0 ? "Active" : "Free"
+                      }
                     />
                   </td>
                 </tr>

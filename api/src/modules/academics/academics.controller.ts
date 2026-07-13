@@ -77,7 +77,17 @@ class CalendarEventDto {
   @IsString() @MinLength(1) title: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional()
-  @IsIn(["exam", "event", "ptm", "sports", "annual_day", "vacation", "training", "holiday", "working_day"])
+  @IsIn([
+    "exam",
+    "event",
+    "ptm",
+    "sports",
+    "annual_day",
+    "vacation",
+    "training",
+    "holiday",
+    "working_day",
+  ])
   event_type?: string;
   @IsDateString() start_date: string;
   @IsOptional() @IsDateString() end_date?: string;
@@ -133,7 +143,8 @@ class RoomDto {
   @IsOptional() @IsInt() @Min(1) capacity?: number;
   @IsOptional() @IsString() floor?: string;
   @IsOptional() @IsString() building?: string;
-  @IsOptional() @IsIn(["classroom", "lab", "library", "sports", "auditorium", "activity"])
+  @IsOptional()
+  @IsIn(["classroom", "lab", "library", "sports", "auditorium", "activity"])
   room_type?: string;
   @IsOptional() @IsBoolean() is_smart?: boolean;
   @IsOptional() @IsBoolean() has_projector?: boolean;

@@ -74,30 +74,30 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={6} />
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/40">
-              <tr>
-                {cols.map((c) => (
-                  <th key={c} className="p-2 text-left font-medium">
-                    {c}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, 50).map((r, i) => (
-                <tr key={i} className="border-t">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/40">
+                <tr>
                   {cols.map((c) => (
-                    <td key={c} className="p-2 truncate max-w-[200px]">
-                      {typeof r[c] === "object" ? JSON.stringify(r[c]) : String(r[c] ?? "")}
-                    </td>
+                    <th key={c} className="p-2 text-left font-medium">
+                      {c}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.slice(0, 50).map((r, i) => (
+                  <tr key={i} className="border-t">
+                    {cols.map((c) => (
+                      <td key={c} className="p-2 truncate max-w-[200px]">
+                        {typeof r[c] === "object" ? JSON.stringify(r[c]) : String(r[c] ?? "")}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </>

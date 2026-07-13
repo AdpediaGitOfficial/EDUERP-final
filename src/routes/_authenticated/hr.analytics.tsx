@@ -52,54 +52,54 @@ function Page() {
           <TableSkeleton rows={6} cols={4} />
         </Card>
       ) : (
-      <div className="grid md:grid-cols-2 gap-4 mb-6">
-        <Card className="p-4 rounded-2xl">
-          <div className="text-sm font-semibold mb-3">Department headcount</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={byDept}>
-              <XAxis dataKey="name" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Bar dataKey="count" fill={CHART_INFO} radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-        <Card className="p-4 rounded-2xl">
-          <div className="text-sm font-semibold mb-3">Payroll trend</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={byMonth}>
-              <XAxis dataKey="month" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Line dataKey="total" stroke={CHART_SUCCESS} strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
-        <Card className="p-4 rounded-2xl">
-          <div className="text-sm font-semibold mb-3">Leave types</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={leaveTypes} dataKey="value" nameKey="name" outerRadius={80} label>
-                {leaveTypes.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </Card>
-        <Card className="p-4 rounded-2xl">
-          <div className="text-sm font-semibold mb-3">Recruitment funnel</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={funnel}>
-              <XAxis dataKey="stage" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Bar dataKey="count" fill={chartColor(4)} radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-      </div>
+        <div className="grid md:grid-cols-2 gap-4 mb-6">
+          <Card className="p-4 rounded-2xl">
+            <div className="text-sm font-semibold mb-3">Department headcount</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={byDept}>
+                <XAxis dataKey="name" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="count" fill={CHART_INFO} radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+          <Card className="p-4 rounded-2xl">
+            <div className="text-sm font-semibold mb-3">Payroll trend</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={byMonth}>
+                <XAxis dataKey="month" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip />
+                <Line dataKey="total" stroke={CHART_SUCCESS} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </Card>
+          <Card className="p-4 rounded-2xl">
+            <div className="text-sm font-semibold mb-3">Leave types</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={leaveTypes} dataKey="value" nameKey="name" outerRadius={80} label>
+                  {leaveTypes.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </Card>
+          <Card className="p-4 rounded-2xl">
+            <div className="text-sm font-semibold mb-3">Recruitment funnel</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={funnel}>
+                <XAxis dataKey="stage" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="count" fill={chartColor(4)} radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
       )}
     </>
   );

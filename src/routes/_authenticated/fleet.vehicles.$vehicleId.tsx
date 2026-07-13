@@ -291,9 +291,7 @@ function Page() {
                         <td className="p-3">{money(m.cost)}</td>
                         <td className="p-3">
                           {fmtDate(m.next_due_date)}{" "}
-                          {overdue && (
-                            <StatusBadge tone="danger" label="Overdue" />
-                          )}
+                          {overdue && <StatusBadge tone="danger" label="Overdue" />}
                         </td>
                       </tr>
                     );

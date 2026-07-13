@@ -293,7 +293,9 @@ export class StudentProfileService {
       studentId,
       actor,
       "hostel_updated",
-      data.is_resident ? "Hostel details updated (resident)" : "Hostel details updated (day scholar)",
+      data.is_resident
+        ? "Hostel details updated (resident)"
+        : "Hostel details updated (day scholar)",
     );
     return this.getProfile(actor, studentId);
   }
@@ -473,7 +475,7 @@ export class StudentProfileService {
 
     // Siblings: other students sharing any of this student's linked parents.
     const parentIds = links.map((l) => l.parent_id);
-    let siblings: any[] = [];
+    const siblings: any[] = [];
     if (parentIds.length) {
       const sibLinks = await this.prisma.parent_student.findMany({
         where: { parent_id: { in: parentIds }, student_id: { not: studentId } },
@@ -540,13 +542,16 @@ export class StudentProfileService {
         admissionDate: d(student.admission_date),
       },
       feeSummary: { total, paid, balance: Math.max(total - paid, 0) },
-      behavior: { ...behavior, notes: notes.slice(0, 50).map((n) => ({
-        id: n.id,
-        note: n.note,
-        tone: n.tone,
-        date: d(n.note_date),
-        teacher: teacherNames.get(n.teacher_id) ?? null,
-      })) },
+      behavior: {
+        ...behavior,
+        notes: notes.slice(0, 50).map((n) => ({
+          id: n.id,
+          note: n.note,
+          tone: n.tone,
+          date: d(n.note_date),
+          teacher: teacherNames.get(n.teacher_id) ?? null,
+        })),
+      },
       details: det
         ? {
             firstName: det.first_name,

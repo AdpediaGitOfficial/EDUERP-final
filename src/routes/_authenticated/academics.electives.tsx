@@ -50,7 +50,14 @@ const STATUS_TONE: Record<string, Tone> = {
   waitlisted: "warning",
   dropped: "neutral",
 };
-const EMPTY = { name: "", code: "", description: "", session: "", grade_level: "", seat_capacity: "30" };
+const EMPTY = {
+  name: "",
+  code: "",
+  description: "",
+  session: "",
+  grade_level: "",
+  seat_capacity: "30",
+};
 
 function Page() {
   const [openOffering, setOpenOffering] = useState<string | null>(null);
@@ -63,7 +70,12 @@ function Page() {
 
 function OfferingsList({ onOpen }: { onOpen: (id: string) => void }) {
   const qc = useQueryClient();
-  const { data: offerings, isLoading, isError, refetch } = useQuery({
+  const {
+    data: offerings,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["electives"],
     queryFn: () => apiGet<Offering[]>("/academics/electives"),
   });
@@ -139,57 +151,91 @@ function OfferingsList({ onOpen }: { onOpen: (id: string) => void }) {
         </Button>
       </div>
       {isError ? (
-        <Card className="rounded-2xl"><QueryError onRetry={() => refetch()} /></Card>
+        <Card className="rounded-2xl">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
       ) : isLoading ? (
-        <Card className="rounded-2xl overflow-hidden"><TableSkeleton rows={6} cols={4} /></Card>
+        <Card className="rounded-2xl overflow-hidden">
+          <TableSkeleton rows={6} cols={4} />
+        </Card>
       ) : (
-      <>
-      {offerings && offerings.length === 0 && (
-        <EmptyState icon={Sparkles} title="No electives yet" hint="Create an elective offering with a seat capacity." />
-      )}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(offerings ?? []).map((o) => {
-          const pct = o.seat_capacity > 0 ? Math.min(100, Math.round((o.enrolled / o.seat_capacity) * 100)) : 0;
-          const full = o.seatsLeft === 0;
-          return (
-            <Card key={o.id} className="p-5 rounded-2xl">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="font-semibold">{o.name}</h4>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {o.code ?? "—"} · {o.grade_level ?? "all grades"}
-                  </p>
-                </div>
-                <div className="flex">
-                  <Button size="icon" variant="ghost" aria-label={`Edit ${o.name}`} onClick={() => openEdit(o)}>
-                    <Pencil className="size-4" />
+        <>
+          {offerings && offerings.length === 0 && (
+            <EmptyState
+              icon={Sparkles}
+              title="No electives yet"
+              hint="Create an elective offering with a seat capacity."
+            />
+          )}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(offerings ?? []).map((o) => {
+              const pct =
+                o.seat_capacity > 0
+                  ? Math.min(100, Math.round((o.enrolled / o.seat_capacity) * 100))
+                  : 0;
+              const full = o.seatsLeft === 0;
+              return (
+                <Card key={o.id} className="p-5 rounded-2xl">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-semibold">{o.name}</h4>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {o.code ?? "—"} · {o.grade_level ?? "all grades"}
+                      </p>
+                    </div>
+                    <div className="flex">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Edit ${o.name}`}
+                        onClick={() => openEdit(o)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Delete ${o.name}`}
+                        onClick={() => remove.mutate(o.id)}
+                      >
+                        <Trash2 className="size-4 text-red-600" />
+                      </Button>
+                    </div>
+                  </div>
+                  {o.description && (
+                    <p className="text-sm text-muted-foreground mt-1">{o.description}</p>
+                  )}
+                  <div className="mt-3">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-muted-foreground">
+                        {o.enrolled}/{o.seat_capacity} seats
+                        {o.waitlisted > 0 && ` · ${o.waitlisted} waitlisted`}
+                      </span>
+                      <StatusBadge
+                        tone={full ? "danger" : "success"}
+                        label={full ? "Full" : `${o.seatsLeft} left`}
+                      />
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={full ? "h-full bg-red-500" : "h-full bg-primary"}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 w-full"
+                    onClick={() => onOpen(o.id)}
+                  >
+                    Manage enrolment
                   </Button>
-                  <Button size="icon" variant="ghost" aria-label={`Delete ${o.name}`} onClick={() => remove.mutate(o.id)}>
-                    <Trash2 className="size-4 text-red-600" />
-                  </Button>
-                </div>
-              </div>
-              {o.description && <p className="text-sm text-muted-foreground mt-1">{o.description}</p>}
-              <div className="mt-3">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-muted-foreground">
-                    {o.enrolled}/{o.seat_capacity} seats
-                    {o.waitlisted > 0 && ` · ${o.waitlisted} waitlisted`}
-                  </span>
-                  <StatusBadge tone={full ? "danger" : "success"} label={full ? "Full" : `${o.seatsLeft} left`} />
-                </div>
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div className={full ? "h-full bg-red-500" : "h-full bg-primary"} style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-              <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => onOpen(o.id)}>
-                Manage enrolment
-              </Button>
-            </Card>
-          );
-        })}
-      </div>
-      </>
+                </Card>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -202,27 +248,48 @@ function OfferingsList({ onOpen }: { onOpen: (id: string) => void }) {
               <Label>
                 Name <span className="text-red-500">*</span>
               </Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
             </div>
             <div>
               <Label>Code</Label>
-              <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+              <Input
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+              />
             </div>
             <div>
               <Label>Seat capacity</Label>
-              <Input type="number" value={form.seat_capacity} onChange={(e) => setForm({ ...form, seat_capacity: e.target.value })} />
+              <Input
+                type="number"
+                value={form.seat_capacity}
+                onChange={(e) => setForm({ ...form, seat_capacity: e.target.value })}
+              />
             </div>
             <div>
               <Label>Session</Label>
-              <Input value={form.session} placeholder="2026-2027" onChange={(e) => setForm({ ...form, session: e.target.value })} />
+              <Input
+                value={form.session}
+                placeholder="2026-2027"
+                onChange={(e) => setForm({ ...form, session: e.target.value })}
+              />
             </div>
             <div>
               <Label>Grade eligibility</Label>
-              <Input value={form.grade_level} placeholder="Grade 6-10" onChange={(e) => setForm({ ...form, grade_level: e.target.value })} />
+              <Input
+                value={form.grade_level}
+                placeholder="Grade 6-10"
+                onChange={(e) => setForm({ ...form, grade_level: e.target.value })}
+              />
             </div>
             <div className="col-span-2">
               <Label>Description</Label>
-              <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <Input
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -325,7 +392,12 @@ function EnrollmentView({ offeringId, onBack }: { offeringId: string; onBack: ()
                     </td>
                     <td className="p-3">{fmtDate(e.enrolledAt)}</td>
                     <td className="p-3 text-right">
-                      <Button size="icon" variant="ghost" aria-label={`Drop ${e.studentName}`} onClick={() => drop.mutate(e.id)}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Drop ${e.studentName}`}
+                        onClick={() => drop.mutate(e.id)}
+                      >
                         <X className="size-4 text-red-600" />
                       </Button>
                     </td>
@@ -348,7 +420,11 @@ function EnrollmentView({ offeringId, onBack }: { offeringId: string; onBack: ()
             <UserPlus className="size-4" />
             <h4 className="font-semibold">Enrol a student</h4>
           </div>
-          <Input placeholder="Search by name / admission no…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input
+            placeholder="Search by name / admission no…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
           <div className="mt-2 space-y-1 max-h-[50vh] overflow-y-auto">
             {q.length >= 2 &&
               (search?.rows ?? [])
@@ -369,7 +445,9 @@ function EnrollmentView({ offeringId, onBack }: { offeringId: string; onBack: ()
               <p className="text-xs text-muted-foreground px-1">No matching students.</p>
             )}
             {q.length < 2 && (
-              <p className="text-xs text-muted-foreground px-1">Type at least 2 characters to search.</p>
+              <p className="text-xs text-muted-foreground px-1">
+                Type at least 2 characters to search.
+              </p>
             )}
           </div>
         </Card>

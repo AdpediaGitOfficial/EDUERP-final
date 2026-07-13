@@ -134,12 +134,7 @@ export class StudentsService {
    * a per-class advisory lock so it can't collide with a concurrent transfer or
    * admission; an explicit roll is honoured verbatim. Logs the move.
    */
-  async transfer(
-    actor: AuthUser,
-    studentId: string,
-    toClassId: string,
-    rollNo?: string,
-  ) {
+  async transfer(actor: AuthUser, studentId: string, toClassId: string, rollNo?: string) {
     if (!actor.roles.some((r) => r === "admin" || r === "reception"))
       throw new ForbiddenException("Only admins or reception can transfer students.");
     const student = await this.prisma.students.findUnique({

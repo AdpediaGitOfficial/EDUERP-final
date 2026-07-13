@@ -51,7 +51,16 @@ const TYPE_TONE: Record<string, Tone> = {
   holiday: "neutral",
   working_day: "success",
 };
-const TYPES = ["exam", "event", "ptm", "sports", "annual_day", "vacation", "training", "working_day"];
+const TYPES = [
+  "exam",
+  "event",
+  "ptm",
+  "sports",
+  "annual_day",
+  "vacation",
+  "training",
+  "working_day",
+];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const EMPTY = { title: "", description: "", event_type: "event", start_date: "", end_date: "" };
 
@@ -62,7 +71,12 @@ function Page() {
   const [editing, setEditing] = useState<Event | null>(null);
   const [form, setForm] = useState<any>(EMPTY);
 
-  const { data: events, isLoading, isError, refetch } = useQuery({
+  const {
+    data: events,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["academic-calendar"],
     queryFn: () => apiGet<Event[]>("/academics/calendar"),
   });
@@ -160,11 +174,19 @@ function Page() {
       </div>
 
       {isError ? (
-        <Card className="rounded-2xl"><QueryError onRetry={() => refetch()} /></Card>
+        <Card className="rounded-2xl">
+          <QueryError onRetry={() => refetch()} />
+        </Card>
       ) : isLoading ? (
-        <Card className="rounded-2xl overflow-hidden"><TableSkeleton rows={6} cols={4} /></Card>
+        <Card className="rounded-2xl overflow-hidden">
+          <TableSkeleton rows={6} cols={4} />
+        </Card>
       ) : byMonth.length === 0 ? (
-        <EmptyState icon={CalendarDays} title="No events" hint="Add exams, PTMs, events, vacations and more." />
+        <EmptyState
+          icon={CalendarDays}
+          title="No events"
+          hint="Add exams, PTMs, events, vacations and more."
+        />
       ) : (
         <div className="space-y-4">
           {byMonth.map(([key, list]) => {
@@ -188,18 +210,33 @@ function Page() {
                       <div className="min-w-0 flex-1">
                         <div className="font-medium text-sm truncate">{e.title}</div>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <StatusBadge tone={TYPE_TONE[e.eventType] ?? "neutral"} label={niceLabel(e.eventType)} />
+                          <StatusBadge
+                            tone={TYPE_TONE[e.eventType] ?? "neutral"}
+                            label={niceLabel(e.eventType)}
+                          />
                           {e.endDate && e.endDate.slice(0, 10) !== e.startDate.slice(0, 10) && (
-                            <span className="text-xs text-muted-foreground">→ {fmtDate(e.endDate)}</span>
+                            <span className="text-xs text-muted-foreground">
+                              → {fmtDate(e.endDate)}
+                            </span>
                           )}
                         </div>
                       </div>
                       {e.source === "calendar" && (
                         <div className="flex flex-col">
-                          <Button size="icon" variant="ghost" aria-label={`Edit ${e.title}`} onClick={() => openEdit(e)}>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Edit ${e.title}`}
+                            onClick={() => openEdit(e)}
+                          >
                             <Pencil className="size-3.5" />
                           </Button>
-                          <Button size="icon" variant="ghost" aria-label={`Delete ${e.title}`} onClick={() => remove.mutate(e.id)}>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Delete ${e.title}`}
+                            onClick={() => remove.mutate(e.id)}
+                          >
                             <Trash2 className="size-3.5 text-red-600" />
                           </Button>
                         </div>
@@ -223,11 +260,17 @@ function Page() {
               <Label>
                 Title <span className="text-red-500">*</span>
               </Label>
-              <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <Input
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
             </div>
             <div>
               <Label>Type</Label>
-              <Select value={form.event_type} onValueChange={(v) => setForm({ ...form, event_type: v })}>
+              <Select
+                value={form.event_type}
+                onValueChange={(v) => setForm({ ...form, event_type: v })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -245,15 +288,26 @@ function Page() {
               <Label>
                 Start date <span className="text-red-500">*</span>
               </Label>
-              <Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
+              <Input
+                type="date"
+                value={form.start_date}
+                onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+              />
             </div>
             <div>
               <Label>End date</Label>
-              <Input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+              <Input
+                type="date"
+                value={form.end_date}
+                onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+              />
             </div>
             <div className="col-span-2">
               <Label>Description</Label>
-              <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <Input
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
             </div>
           </div>
           <DialogFooter>

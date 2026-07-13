@@ -103,13 +103,17 @@ export function streamCollectionReceiptPdf(res: Response, d: CollectionReceiptDa
   doc.moveTo(left, doc.y).lineTo(right, doc.y).strokeColor("#e5e7eb").stroke();
   doc.moveDown(0.5);
 
-  const money = (n: number) => new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2 }).format(n);
+  const money = (n: number) =>
+    new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2 }).format(n);
   for (const line of d.lines) {
     const y = doc.y;
     doc.fillColor(ink).fontSize(10).font("Helvetica");
     doc.text(line.feeTitle, cols.fee, y, { width: 250 });
     doc.text(money(line.paying), cols.paying, y, { width: 70, align: "right" });
-    doc.text(line.discount ? money(line.discount) : "—", cols.discount, y, { width: 60, align: "right" });
+    doc.text(line.discount ? money(line.discount) : "—", cols.discount, y, {
+      width: 60,
+      align: "right",
+    });
     doc.text(line.fine ? money(line.fine) : "—", cols.fine, y, { width: 69, align: "right" });
     doc.moveDown(0.7);
   }

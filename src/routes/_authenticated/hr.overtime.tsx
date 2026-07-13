@@ -59,53 +59,53 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={6} />
         ) : (
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40">
-            <tr className="text-left">
-              <th className="p-3">Employee</th>
-              <th className="p-3">Date</th>
-              <th className="p-3">Hours</th>
-              <th className="p-3">Rate ×</th>
-              <th className="p-3">Status</th>
-              <th className="p-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((r: any) => (
-              <tr key={r.id} className="border-t">
-                <td className="p-3">{r.staff?.full_name}</td>
-                <td className="p-3">{fmtDate(r.work_date)}</td>
-                <td className="p-3">{r.hours}</td>
-                <td className="p-3">{r.rate_multiplier}×</td>
-                <td className="p-3">
-                  <Badge className={badgeClass(r.status)}>{niceLabel(r.status)}</Badge>
-                </td>
-                <td className="p-3 text-right whitespace-nowrap">
-                  {r.status === "pending" ? (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => decide.mutate({ id: r.id, status: "approved" })}
-                      >
-                        Approve
-                      </Button>{" "}
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => decide.mutate({ id: r.id, status: "rejected" })}
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </td>
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr className="text-left">
+                <th className="p-3">Employee</th>
+                <th className="p-3">Date</th>
+                <th className="p-3">Hours</th>
+                <th className="p-3">Rate ×</th>
+                <th className="p-3">Status</th>
+                <th className="p-3 text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(data ?? []).map((r: any) => (
+                <tr key={r.id} className="border-t">
+                  <td className="p-3">{r.staff?.full_name}</td>
+                  <td className="p-3">{fmtDate(r.work_date)}</td>
+                  <td className="p-3">{r.hours}</td>
+                  <td className="p-3">{r.rate_multiplier}×</td>
+                  <td className="p-3">
+                    <Badge className={badgeClass(r.status)}>{niceLabel(r.status)}</Badge>
+                  </td>
+                  <td className="p-3 text-right whitespace-nowrap">
+                    {r.status === "pending" ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => decide.mutate({ id: r.id, status: "approved" })}
+                        >
+                          Approve
+                        </Button>{" "}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => decide.mutate({ id: r.id, status: "rejected" })}
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
     </>

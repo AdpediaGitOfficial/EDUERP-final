@@ -411,7 +411,9 @@ function NewAdmissionWizard() {
                 disabled={!f.className}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={f.className ? "Select section" : "Select class first"} />
+                  <SelectValue
+                    placeholder={f.className ? "Select section" : "Select class first"}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {sectionsForClass.map((c) => (
@@ -423,13 +425,24 @@ function NewAdmissionWizard() {
               </Select>
             </Field>
             <Field label="Biometric ID" hint="Optional, hardware-ready">
-              <Input value={f.biometricId} onChange={txt("biometricId")} placeholder="Device User ID" />
+              <Input
+                value={f.biometricId}
+                onChange={txt("biometricId")}
+                placeholder="Device User ID"
+              />
             </Field>
             <Field label="Previous School Name & Details" full>
               <Textarea value={f.previousSchool} onChange={txt("previousSchool")} />
             </Field>
-            <Field label="Opening Due Balance" hint="Flows into the fee ledger as a starting balance">
-              <Input type="number" value={f.openingDueBalance} onChange={txt("openingDueBalance")} />
+            <Field
+              label="Opening Due Balance"
+              hint="Flows into the fee ledger as a starting balance"
+            >
+              <Input
+                type="number"
+                value={f.openingDueBalance}
+                onChange={txt("openingDueBalance")}
+              />
             </Field>
           </div>
         )}
@@ -645,7 +658,11 @@ function NewAdmissionWizard() {
                   required
                   hint="Used for the Parent Portal login"
                 >
-                  <Input type="email" value={f.parentLoginEmail} onChange={txt("parentLoginEmail")} />
+                  <Input
+                    type="email"
+                    value={f.parentLoginEmail}
+                    onChange={txt("parentLoginEmail")}
+                  />
                 </Field>
               </>
             )}

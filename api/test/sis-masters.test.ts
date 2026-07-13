@@ -57,7 +57,9 @@ describe("SIS: student categories", () => {
 
   it("a teacher cannot read or write categories", async () => {
     expect((await authed("get", "/sis/categories", "teacher")).status).toBe(403);
-    expect((await authed("post", "/sis/categories", "teacher").send({ name: "X" })).status).toBe(403);
+    expect((await authed("post", "/sis/categories", "teacher").send({ name: "X" })).status).toBe(
+      403,
+    );
   });
 
   it("admin creates a category and duplicate names (case-insensitive) 409", async () => {

@@ -25,7 +25,12 @@ export const Route = createFileRoute("/_authenticated/hr/departments")({ compone
 function Page() {
   const qc = useQueryClient();
   const confirm = useConfirm();
-  const { data: depts, isLoading, isError, refetch } = useQuery({
+  const {
+    data: depts,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["depts"],
     queryFn: () => apiGet<any[]>("/hr/departments"),
   });
@@ -174,69 +179,69 @@ function Page() {
           <TableSkeleton rows={6} cols={3} />
         </Card>
       ) : (
-      <div className="grid md:grid-cols-3 gap-3 mb-8">
-        {(depts ?? []).map((d: any) => (
-          <Card key={d.id} className="p-4 rounded-2xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="font-medium">{d.name}</div>
-                <div className="text-xs text-muted-foreground">Code {d.code}</div>
+        <div className="grid md:grid-cols-3 gap-3 mb-8">
+          {(depts ?? []).map((d: any) => (
+            <Card key={d.id} className="p-4 rounded-2xl">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="font-medium">{d.name}</div>
+                  <div className="text-xs text-muted-foreground">Code {d.code}</div>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      setDeptForm({
+                        id: d.id,
+                        name: d.name,
+                        code: d.code,
+                        budget: d.budget ?? 0,
+                        description: d.description ?? "",
+                      });
+                      setDeptOpen(true);
+                    }}
+                    aria-label={`Edit department ${d.name}`}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Delete department ${d.name}`}
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: `Delete "${d.name}"?`,
+                          description:
+                            "The department will be removed. Staff records are not deleted but lose this department link.",
+                          confirmText: "Delete",
+                          destructive: true,
+                        })
+                      )
+                        delDept.mutate(d.id);
+                    }}
+                  >
+                    <Trash2 className="size-4 text-red-600" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => {
-                    setDeptForm({
-                      id: d.id,
-                      name: d.name,
-                      code: d.code,
-                      budget: d.budget ?? 0,
-                      description: d.description ?? "",
-                    });
-                    setDeptOpen(true);
-                  }}
-                  aria-label={`Edit department ${d.name}`}
-                >
-                  <Pencil className="size-4" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  aria-label={`Delete department ${d.name}`}
-                  onClick={async () => {
-                    if (
-                      await confirm({
-                        title: `Delete "${d.name}"?`,
-                        description:
-                          "The department will be removed. Staff records are not deleted but lose this department link.",
-                        confirmText: "Delete",
-                        destructive: true,
-                      })
-                    )
-                      delDept.mutate(d.id);
-                  }}
-                >
-                  <Trash2 className="size-4 text-red-600" />
-                </Button>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">Headcount</div>
+                  <div className="font-semibold">{countBy(d.name)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Budget</div>
+                  <div className="font-semibold">{money(d.budget)}</div>
+                </div>
               </div>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <div className="text-xs text-muted-foreground">Headcount</div>
-                <div className="font-semibold">{countBy(d.name)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Budget</div>
-                <div className="font-semibold">{money(d.budget)}</div>
-              </div>
-            </div>
-            {d.description && (
-              <div className="mt-2 text-xs text-muted-foreground">{d.description}</div>
-            )}
-          </Card>
-        ))}
-      </div>
+              {d.description && (
+                <div className="mt-2 text-xs text-muted-foreground">{d.description}</div>
+              )}
+            </Card>
+          ))}
+        </div>
       )}
 
       <h3 className="text-sm font-semibold mb-3">Designations & Salary Grades</h3>

@@ -26,12 +26,13 @@ will **not** add, remove, or change them. If you want a clean production start
 ```bash
 pg_dump "$PROD_DATABASE_URL" -Fc -f backup_$(date +%F_%H%M).dump
 ```
+
 On Supabase you can also take a manual backup / PITR snapshot from the dashboard.
 
 ## 2. Point at the database (direct connection)
 
 Use the **direct / session-mode** connection string (Supabase: Project Settings →
-Database → Connection string → *Session*, port **5432**). Do **not** use the
+Database → Connection string → _Session_, port **5432**). Do **not** use the
 transaction pooler (port 6543) — it can't run DDL.
 
 ```bash
@@ -46,6 +47,7 @@ DATABASE_URL="$DATABASE_URL" api/db/apply-updates.sh
 ```
 
 `apply-updates.sh` (production-safe — no demo data):
+
 1. reports any missing tables (`check-schema.sql`),
 2. applies every migration `>= 20260711240000` in order (additive, idempotent),
 3. runs `reconcile-columns.sql` — a belt-and-braces `ADD COLUMN IF NOT EXISTS`
@@ -56,6 +58,7 @@ Preview without changing anything: `DRY_RUN=1 DATABASE_URL="$DATABASE_URL" api/d
 
 If step 4 still lists a missing table, that migration is older than the default
 cutoff — apply it explicitly, then re-run:
+
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/<that-file>.sql
 # or lower the cutoff to catch everything since your last deploy:

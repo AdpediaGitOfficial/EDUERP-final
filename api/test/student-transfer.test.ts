@@ -47,7 +47,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const sid of cleanup) {
-    const s = await prisma.students.findUnique({ where: { id: sid }, select: { profile_id: true } });
+    const s = await prisma.students.findUnique({
+      where: { id: sid },
+      select: { profile_id: true },
+    });
     await prisma.student_activity_log.deleteMany({ where: { student_id: sid } }).catch(() => {});
     await prisma.student_details.deleteMany({ where: { student_id: sid } }).catch(() => {});
     await prisma.parent_student.deleteMany({ where: { student_id: sid } }).catch(() => {});

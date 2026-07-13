@@ -106,7 +106,8 @@ export class SisService {
     const label = input.label.trim();
     if (!label) throw new ConflictException("Label is required");
     const type = input.fieldType === "dropdown" ? "dropdown" : "text";
-    const options = type === "dropdown" ? (input.options ?? []).map((o) => o.trim()).filter(Boolean) : [];
+    const options =
+      type === "dropdown" ? (input.options ?? []).map((o) => o.trim()).filter(Boolean) : [];
     const row = await this.prisma.student_custom_fields.create({
       data: {
         label,
@@ -121,14 +122,21 @@ export class SisService {
   async updateCustomField(
     actor: AuthUser,
     id: string,
-    input: { label?: string; fieldType?: string; options?: string[]; active?: boolean; sortOrder?: number },
+    input: {
+      label?: string;
+      fieldType?: string;
+      options?: string[];
+      active?: boolean;
+      sortOrder?: number;
+    },
   ) {
     this.requireAdmin(actor);
     const existing = await this.prisma.student_custom_fields.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Field not found");
     const data: Prisma.student_custom_fieldsUpdateInput = { updated_at: new Date() };
     if (input.label !== undefined) data.label = input.label.trim();
-    if (input.fieldType !== undefined) data.field_type = input.fieldType === "dropdown" ? "dropdown" : "text";
+    if (input.fieldType !== undefined)
+      data.field_type = input.fieldType === "dropdown" ? "dropdown" : "text";
     if (input.options !== undefined)
       data.options = input.options.map((o) => o.trim()).filter(Boolean) as Prisma.InputJsonValue;
     if (input.active !== undefined) data.active = input.active;

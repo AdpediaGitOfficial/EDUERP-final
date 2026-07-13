@@ -45,28 +45,28 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={4} />
         ) : (
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40">
-            <tr className="text-left">
-              <th className="p-3">Employee</th>
-              <th className="p-3">Period</th>
-              <th className="p-3">Rating</th>
-              <th className="p-3">Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((r: any) => (
-              <tr key={r.id} className="border-t">
-                <td className="p-3">{r.teacher?.full_name}</td>
-                <td className="p-3">{r.period}</td>
-                <td className="p-3">
-                  <span className="font-semibold">{r.rating}</span> / 5
-                </td>
-                <td className="p-3 text-xs text-muted-foreground">{r.notes}</td>
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr className="text-left">
+                <th className="p-3">Employee</th>
+                <th className="p-3">Period</th>
+                <th className="p-3">Rating</th>
+                <th className="p-3">Notes</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {(data ?? []).map((r: any) => (
+                <tr key={r.id} className="border-t">
+                  <td className="p-3">{r.teacher?.full_name}</td>
+                  <td className="p-3">{r.period}</td>
+                  <td className="p-3">
+                    <span className="font-semibold">{r.rating}</span> / 5
+                  </td>
+                  <td className="p-3 text-xs text-muted-foreground">{r.notes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
     </>

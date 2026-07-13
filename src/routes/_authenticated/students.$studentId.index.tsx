@@ -473,7 +473,9 @@ function ChildDetailPage() {
                   </Badge>
                 ))}
                 {subjects.length > 12 && (
-                  <span className="text-xs text-muted-foreground">+{subjects.length - 12} more</span>
+                  <span className="text-xs text-muted-foreground">
+                    +{subjects.length - 12} more
+                  </span>
                 )}
               </div>
             )}
@@ -555,7 +557,10 @@ function ChildDetailPage() {
             <Button variant="outline" onClick={() => setTransferOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={!toClassId || transferMut.isPending} onClick={() => transferMut.mutate()}>
+            <Button
+              disabled={!toClassId || transferMut.isPending}
+              onClick={() => transferMut.mutate()}
+            >
               {transferMut.isPending ? "Transferring…" : "Confirm transfer"}
             </Button>
           </DialogFooter>

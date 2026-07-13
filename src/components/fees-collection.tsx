@@ -117,12 +117,7 @@ export function FilterBar({
     value.dueDate ||
     value.search;
 
-  const pick = (
-    label: string,
-    key: keyof Filters,
-    items: string[],
-    placeholder: string,
-  ) => (
+  const pick = (label: string, key: keyof Filters, items: string[], placeholder: string) => (
     <div className="space-y-1">
       <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</Label>
       <Select
@@ -164,8 +159,7 @@ export function FilterBar({
         {pick("Class", "className", options?.classNames ?? [], "All classes")}
         {pick("Section", "section", options?.sections ?? [], "All sections")}
         {pick("Fee Category", "category", options?.categories ?? [], "All categories")}
-        {!hideStatus &&
-          pick("Fee Status", "status", options?.statuses ?? [], "All statuses")}
+        {!hideStatus && pick("Fee Status", "status", options?.statuses ?? [], "All statuses")}
         <div className="space-y-1">
           <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
             Due On / Before

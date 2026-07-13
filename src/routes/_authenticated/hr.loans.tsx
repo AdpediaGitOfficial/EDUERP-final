@@ -85,7 +85,12 @@ function Page() {
   const [addOpen, setAddOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const { data: loans, isLoading, isError, refetch } = useQuery({
+  const {
+    data: loans,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["hr-loans"],
     queryFn: () => apiGet<Loan[]>("/hr/loans"),
   });
@@ -211,57 +216,60 @@ function Page() {
         ) : isLoading ? (
           <TableSkeleton rows={6} cols={7} />
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr className="text-left">
-                <th className="p-3 font-medium">Employee</th>
-                <th className="p-3 font-medium">Type</th>
-                <th className="p-3 font-medium text-right">Principal</th>
-                <th className="p-3 font-medium text-right">EMI</th>
-                <th className="p-3 font-medium text-right">Outstanding</th>
-                <th className="p-3 font-medium">Status</th>
-                <th className="p-3 font-medium text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((l) => (
-                <tr
-                  key={l.id}
-                  className="border-t hover:bg-muted/30 cursor-pointer"
-                  onClick={() => setDetailId(l.id)}
-                >
-                  <td className="p-3">
-                    <div className="font-medium">{l.staff?.full_name}</div>
-                    <div className="text-xs text-muted-foreground font-mono">
-                      {l.staff?.employee_code}
-                    </div>
-                  </td>
-                  <td className="p-3">{niceLabel(l.loan_type)}</td>
-                  <td className="p-3 text-right">{money(Number(l.principal))}</td>
-                  <td className="p-3 text-right">{money(l.emi)}</td>
-                  <td className="p-3 text-right font-medium">{money(l.outstanding)}</td>
-                  <td className="p-3">
-                    <StatusBadge tone={STATUS_TONE[l.status] ?? "neutral"} label={niceLabel(l.status)} />
-                  </td>
-                  <td className="p-3 text-right">
-                    <Button size="sm" variant="ghost" onClick={() => setDetailId(l.id)}>
-                      View
-                    </Button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40">
+                <tr className="text-left">
+                  <th className="p-3 font-medium">Employee</th>
+                  <th className="p-3 font-medium">Type</th>
+                  <th className="p-3 font-medium text-right">Principal</th>
+                  <th className="p-3 font-medium text-right">EMI</th>
+                  <th className="p-3 font-medium text-right">Outstanding</th>
+                  <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 font-medium text-right">Action</th>
                 </tr>
-              ))}
-              {filtered.length === 0 && (
-                <EmptyRow
-                  colSpan={7}
-                  icon={HandCoins}
-                  title="No loans found"
-                  hint="Create a loan request to get started."
-                />
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.map((l) => (
+                  <tr
+                    key={l.id}
+                    className="border-t hover:bg-muted/30 cursor-pointer"
+                    onClick={() => setDetailId(l.id)}
+                  >
+                    <td className="p-3">
+                      <div className="font-medium">{l.staff?.full_name}</div>
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {l.staff?.employee_code}
+                      </div>
+                    </td>
+                    <td className="p-3">{niceLabel(l.loan_type)}</td>
+                    <td className="p-3 text-right">{money(Number(l.principal))}</td>
+                    <td className="p-3 text-right">{money(l.emi)}</td>
+                    <td className="p-3 text-right font-medium">{money(l.outstanding)}</td>
+                    <td className="p-3">
+                      <StatusBadge
+                        tone={STATUS_TONE[l.status] ?? "neutral"}
+                        label={niceLabel(l.status)}
+                      />
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button size="sm" variant="ghost" onClick={() => setDetailId(l.id)}>
+                        View
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <EmptyRow
+                    colSpan={7}
+                    icon={HandCoins}
+                    title="No loans found"
+                    hint="Create a loan request to get started."
+                  />
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -458,7 +466,10 @@ function LoanDetailDialog({ id, onClose }: { id: string; onClose: () => void }) 
               />
               <div>
                 <p className="text-xs text-muted-foreground">Status</p>
-                <StatusBadge tone={STATUS_TONE[loan.status] ?? "neutral"} label={niceLabel(loan.status)} />
+                <StatusBadge
+                  tone={STATUS_TONE[loan.status] ?? "neutral"}
+                  label={niceLabel(loan.status)}
+                />
               </div>
             </div>
             {loan.reason && (
@@ -474,11 +485,7 @@ function LoanDetailDialog({ id, onClose }: { id: string; onClose: () => void }) 
                   <Check className="size-4 mr-1" />
                   Approve & disburse
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => decide.mutate("rejected")}
-                >
+                <Button size="sm" variant="outline" onClick={() => decide.mutate("rejected")}>
                   <X className="size-4 mr-1" />
                   Reject
                 </Button>
@@ -502,10 +509,7 @@ function LoanDetailDialog({ id, onClose }: { id: string; onClose: () => void }) 
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                   />
-                  <Button
-                    onClick={() => repay.mutate()}
-                    disabled={!(Number(amount) > 0)}
-                  >
+                  <Button onClick={() => repay.mutate()} disabled={!(Number(amount) > 0)}>
                     Record
                   </Button>
                 </div>

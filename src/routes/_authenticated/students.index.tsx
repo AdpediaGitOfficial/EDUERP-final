@@ -134,7 +134,9 @@ function ParentChildrenList() {
               </div>
             </div>
             <div className="mt-4 text-sm text-muted-foreground">
-              {s.class ? `${s.class.name}${s.class.section ? ` · ${s.class.section}` : ""}` : "No class yet"}
+              {s.class
+                ? `${s.class.name}${s.class.section ? ` · ${s.class.section}` : ""}`
+                : "No class yet"}
             </div>
             <div className="mt-4 flex gap-2">
               <Link to="/students/$studentId/report" params={{ studentId: s.id }}>
@@ -1392,7 +1394,10 @@ function AdminStudentsView() {
 
 /** Parse a simple CSV (comma-separated, optional double-quoted fields). */
 function parseCsv(text: string): Record<string, string>[] {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length);
+  const lines = text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .filter((l) => l.trim().length);
   if (!lines.length) return [];
   const splitLine = (line: string) => {
     const out: string[] = [];
@@ -1459,9 +1464,8 @@ function ImportStudentsDialog({
     const n = name.trim().toLowerCase();
     const s = section.trim().toLowerCase();
     return (
-      classes.find(
-        (c) => c.name.toLowerCase() === n && (c.section ?? "").toLowerCase() === s,
-      ) ?? classes.find((c) => c.name.toLowerCase() === n)
+      classes.find((c) => c.name.toLowerCase() === n && (c.section ?? "").toLowerCase() === s) ??
+      classes.find((c) => c.name.toLowerCase() === n)
     );
   };
 
@@ -1497,9 +1501,7 @@ function ImportStudentsDialog({
           });
           continue;
         }
-        const email =
-          r.guardianemail?.trim() ||
-          `import.${stamp}.${i}@parent.greenwood.test`;
+        const email = r.guardianemail?.trim() || `import.${stamp}.${i}@parent.greenwood.test`;
         try {
           await apiPost("/admissions/admit", {
             classId: cls.id,
@@ -1511,7 +1513,10 @@ function ImportStudentsDialog({
             dob: r.dob || undefined,
             parentMode: "new",
             primaryGuardian: "father",
-            father: { name: r.guardianname || `${name} (Guardian)`, phone: r.guardianphone || undefined },
+            father: {
+              name: r.guardianname || `${name} (Guardian)`,
+              phone: r.guardianphone || undefined,
+            },
             parentLoginEmail: email,
           });
           ok += 1;

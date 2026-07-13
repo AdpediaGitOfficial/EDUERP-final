@@ -48,7 +48,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const sid of createdStudentIds) {
-    const s = await prisma.students.findUnique({ where: { id: sid }, select: { profile_id: true } });
+    const s = await prisma.students.findUnique({
+      where: { id: sid },
+      select: { profile_id: true },
+    });
     await prisma.students.delete({ where: { id: sid } }).catch(() => {});
     if (s?.profile_id) {
       await prisma.user_roles.deleteMany({ where: { user_id: s.profile_id } }).catch(() => {});
