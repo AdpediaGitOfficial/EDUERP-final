@@ -488,10 +488,23 @@ export class AdmissionsService {
    * buttons. The admission number consumes the sequence (so it's reserved and can
    * never collide with a later auto-assignment); the roll is MAX+1 for the class.
    */
+  /**
+   * Preview the next admission / roll number for the admission form — WITHOUT
+   * side effects. The admission number is read from the sequence's current state
+   * (`last_value`/`is_called`) instead of `next_admission_no()`, which would call
+   * `nextval` and burn a number every time the form loads or the section changes,
+   * leaving gaps for abandoned forms. The authoritative numbers are still assigned
+   * atomically inside `admitDirect` (nextval for admission, an advisory-locked
+   * max+1 for roll), so the preview is display-only and the form submits blank.
+   */
   async nextNumbers(actor: AuthUser, classId?: string) {
     this.requireDesk(actor);
     const a = await this.prisma.$queryRaw<{ n: string }[]>`
-      SELECT public.next_admission_no() AS n`;
+      SELECT 'ADM-' || EXTRACT(YEAR FROM CURRENT_DATE)::text || '-' ||
+             LPAD((
+               SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END
+               FROM public.student_admission_seq
+             )::text, 5, '0') AS n`;
     let rollNo: string | null = null;
     if (classId) {
       const r = await this.prisma.$queryRaw<{ n: string }[]>`

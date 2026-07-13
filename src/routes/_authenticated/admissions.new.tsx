@@ -37,7 +37,6 @@ import {
   HeartPulse,
   FolderOpen,
   Search,
-  Wand2,
   Copy,
 } from "lucide-react";
 
@@ -167,24 +166,38 @@ function NewAdmissionWizard() {
     (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       set(k, e.target.value);
 
-  // "Auto" buttons: fetch (and reserve) a real admission / roll number.
-  const [autoBusy, setAutoBusy] = useState<"adm" | "roll" | null>(null);
-  const fillAuto = async (which: "adm" | "roll") => {
-    if (which === "roll" && !f.classId) return toast.error("Select a class & section first.");
-    setAutoBusy(which);
-    try {
-      const q = which === "roll" ? `?classId=${f.classId}` : "";
-      const res = await apiGet<{ admissionNo: string | null; rollNo: string | null }>(
-        `/admissions/next-numbers${q}`,
-      );
-      if (which === "adm" && res.admissionNo) set("admissionNo", res.admissionNo);
-      if (which === "roll" && res.rollNo) set("rollNo", res.rollNo);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate");
-    } finally {
-      setAutoBusy(null);
+  // Admission & roll numbers are system-assigned and shown read-only. We fetch a
+  // NON-reserving preview purely for display; the form submits them blank and the
+  // server assigns the authoritative numbers atomically on admit (nextval for the
+  // admission no, an advisory-locked max+1 for the roll). So `f.admissionNo` /
+  // `f.rollNo` stay empty and the previews never burn a sequence value.
+  const [preview, setPreview] = useState<{ adm: string; roll: string }>({ adm: "", roll: "" });
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<{ admissionNo: string | null }>("/admissions/next-numbers")
+      .then((res) => {
+        if (!cancelled && res.admissionNo) setPreview((p) => ({ ...p, adm: res.admissionNo! }));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (!f.classId) {
+      setPreview((p) => ({ ...p, roll: "" }));
+      return;
     }
-  };
+    let cancelled = false;
+    apiGet<{ rollNo: string | null }>(`/admissions/next-numbers?classId=${f.classId}`)
+      .then((res) => {
+        if (!cancelled) setPreview((p) => ({ ...p, roll: res.rollNo ?? "" }));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [f.classId]);
 
   // De-duplicate fee groups by name for a tidy picker (test data can repeat names).
   const feeOptions = useMemo(() => {
@@ -351,37 +364,25 @@ function NewAdmissionWizard() {
       <Card className="rounded-2xl p-6">
         {step === 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="Admission No" hint="Format ADM-YYYY-NNNNN · use the wand to auto-generate, or leave blank">
-              <div className="flex gap-2">
-                <Input value={f.admissionNo} onChange={txt("admissionNo")} placeholder="ADM-2026-00001" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => fillAuto("adm")}
-                  disabled={autoBusy === "adm"}
-                  title="Auto-generate admission number"
-                  aria-label="Auto-generate admission number"
-                >
-                  <Wand2 className="size-4" />
-                </Button>
-              </div>
+            <Field label="Admission No" hint="System-generated · assigned automatically on admit">
+              <Input
+                value={preview.adm}
+                readOnly
+                tabIndex={-1}
+                placeholder="Auto"
+                aria-label="Admission number (auto-generated)"
+                className="bg-muted text-muted-foreground cursor-not-allowed"
+              />
             </Field>
-            <Field label="Roll Number" hint="Editable · wand auto-numbers per section (pick a class first)">
-              <div className="flex gap-2">
-                <Input value={f.rollNo} onChange={txt("rollNo")} placeholder="Auto" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => fillAuto("roll")}
-                  disabled={autoBusy === "roll"}
-                  title="Auto-generate roll number"
-                  aria-label="Auto-generate roll number"
-                >
-                  <Wand2 className="size-4" />
-                </Button>
-              </div>
+            <Field label="Roll Number" hint="System-generated per section · assigned on admit">
+              <Input
+                value={preview.roll}
+                readOnly
+                tabIndex={-1}
+                placeholder={f.classId ? "Auto" : "Select class first"}
+                aria-label="Roll number (auto-generated)"
+                className="bg-muted text-muted-foreground cursor-not-allowed"
+              />
             </Field>
             <Field label="Admission Date">
               <Input type="date" value={f.admissionDate} onChange={txt("admissionDate")} />
