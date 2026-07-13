@@ -4,6 +4,7 @@
   "private": true,
   "description": "NestJS backend for the Greenwood School ERP (Supabase replacement)",
   "scripts": {
+    "prebuild": "prisma generate",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "start:dev": "ts-node --transpile-only src/main.ts",
@@ -11,6 +12,7 @@
     "prisma:generate": "prisma generate",
     "postinstall": "prisma generate",
     "deploy": "npm run prisma:generate && npm run build",
+    "pretypecheck": "prisma generate",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
