@@ -92,7 +92,9 @@ import { Route as AuthenticatedFleetMaintenanceRouteImport } from './routes/_aut
 import { Route as AuthenticatedFleetFuelRouteImport } from './routes/_authenticated/fleet.fuel'
 import { Route as AuthenticatedFleetAnalyticsRouteImport } from './routes/_authenticated/fleet.analytics'
 import { Route as AuthenticatedFinanceReconciliationRouteImport } from './routes/_authenticated/finance.reconciliation'
+import { Route as AuthenticatedFinancePaymentsRouteImport } from './routes/_authenticated/finance.payments'
 import { Route as AuthenticatedFinanceLedgerRouteImport } from './routes/_authenticated/finance.ledger'
+import { Route as AuthenticatedFinanceFeesRouteImport } from './routes/_authenticated/finance.fees'
 import { Route as AuthenticatedFinanceExpensesRouteImport } from './routes/_authenticated/finance.expenses'
 import { Route as AuthenticatedEssTrainingRouteImport } from './routes/_authenticated/ess.training'
 import { Route as AuthenticatedEssProfileRouteImport } from './routes/_authenticated/ess.profile'
@@ -587,10 +589,22 @@ const AuthenticatedFinanceReconciliationRoute =
     path: '/reconciliation',
     getParentRoute: () => AuthenticatedFinanceRoute,
   } as any)
+const AuthenticatedFinancePaymentsRoute =
+  AuthenticatedFinancePaymentsRouteImport.update({
+    id: '/payments',
+    path: '/payments',
+    getParentRoute: () => AuthenticatedFinanceRoute,
+  } as any)
 const AuthenticatedFinanceLedgerRoute =
   AuthenticatedFinanceLedgerRouteImport.update({
     id: '/ledger',
     path: '/ledger',
+    getParentRoute: () => AuthenticatedFinanceRoute,
+  } as any)
+const AuthenticatedFinanceFeesRoute =
+  AuthenticatedFinanceFeesRouteImport.update({
+    id: '/fees',
+    path: '/fees',
     getParentRoute: () => AuthenticatedFinanceRoute,
   } as any)
 const AuthenticatedFinanceExpensesRoute =
@@ -905,7 +919,9 @@ export interface FileRoutesByFullPath {
   '/ess/profile': typeof AuthenticatedEssProfileRoute
   '/ess/training': typeof AuthenticatedEssTrainingRoute
   '/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
+  '/finance/fees': typeof AuthenticatedFinanceFeesRoute
   '/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
+  '/finance/payments': typeof AuthenticatedFinancePaymentsRoute
   '/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
   '/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
   '/fleet/fuel': typeof AuthenticatedFleetFuelRoute
@@ -1019,7 +1035,9 @@ export interface FileRoutesByTo {
   '/ess/profile': typeof AuthenticatedEssProfileRoute
   '/ess/training': typeof AuthenticatedEssTrainingRoute
   '/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
+  '/finance/fees': typeof AuthenticatedFinanceFeesRoute
   '/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
+  '/finance/payments': typeof AuthenticatedFinancePaymentsRoute
   '/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
   '/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
   '/fleet/fuel': typeof AuthenticatedFleetFuelRoute
@@ -1146,7 +1164,9 @@ export interface FileRoutesById {
   '/_authenticated/ess/profile': typeof AuthenticatedEssProfileRoute
   '/_authenticated/ess/training': typeof AuthenticatedEssTrainingRoute
   '/_authenticated/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
+  '/_authenticated/finance/fees': typeof AuthenticatedFinanceFeesRoute
   '/_authenticated/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
+  '/_authenticated/finance/payments': typeof AuthenticatedFinancePaymentsRoute
   '/_authenticated/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
   '/_authenticated/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
   '/_authenticated/fleet/fuel': typeof AuthenticatedFleetFuelRoute
@@ -1274,7 +1294,9 @@ export interface FileRouteTypes {
     | '/ess/profile'
     | '/ess/training'
     | '/finance/expenses'
+    | '/finance/fees'
     | '/finance/ledger'
+    | '/finance/payments'
     | '/finance/reconciliation'
     | '/fleet/analytics'
     | '/fleet/fuel'
@@ -1388,7 +1410,9 @@ export interface FileRouteTypes {
     | '/ess/profile'
     | '/ess/training'
     | '/finance/expenses'
+    | '/finance/fees'
     | '/finance/ledger'
+    | '/finance/payments'
     | '/finance/reconciliation'
     | '/fleet/analytics'
     | '/fleet/fuel'
@@ -1514,7 +1538,9 @@ export interface FileRouteTypes {
     | '/_authenticated/ess/profile'
     | '/_authenticated/ess/training'
     | '/_authenticated/finance/expenses'
+    | '/_authenticated/finance/fees'
     | '/_authenticated/finance/ledger'
+    | '/_authenticated/finance/payments'
     | '/_authenticated/finance/reconciliation'
     | '/_authenticated/fleet/analytics'
     | '/_authenticated/fleet/fuel'
@@ -2163,11 +2189,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFinanceReconciliationRouteImport
       parentRoute: typeof AuthenticatedFinanceRoute
     }
+    '/_authenticated/finance/payments': {
+      id: '/_authenticated/finance/payments'
+      path: '/payments'
+      fullPath: '/finance/payments'
+      preLoaderRoute: typeof AuthenticatedFinancePaymentsRouteImport
+      parentRoute: typeof AuthenticatedFinanceRoute
+    }
     '/_authenticated/finance/ledger': {
       id: '/_authenticated/finance/ledger'
       path: '/ledger'
       fullPath: '/finance/ledger'
       preLoaderRoute: typeof AuthenticatedFinanceLedgerRouteImport
+      parentRoute: typeof AuthenticatedFinanceRoute
+    }
+    '/_authenticated/finance/fees': {
+      id: '/_authenticated/finance/fees'
+      path: '/fees'
+      fullPath: '/finance/fees'
+      preLoaderRoute: typeof AuthenticatedFinanceFeesRouteImport
       parentRoute: typeof AuthenticatedFinanceRoute
     }
     '/_authenticated/finance/expenses': {
@@ -2582,14 +2622,18 @@ const AuthenticatedEssRouteWithChildren =
 
 interface AuthenticatedFinanceRouteChildren {
   AuthenticatedFinanceExpensesRoute: typeof AuthenticatedFinanceExpensesRoute
+  AuthenticatedFinanceFeesRoute: typeof AuthenticatedFinanceFeesRoute
   AuthenticatedFinanceLedgerRoute: typeof AuthenticatedFinanceLedgerRoute
+  AuthenticatedFinancePaymentsRoute: typeof AuthenticatedFinancePaymentsRoute
   AuthenticatedFinanceReconciliationRoute: typeof AuthenticatedFinanceReconciliationRoute
   AuthenticatedFinanceIndexRoute: typeof AuthenticatedFinanceIndexRoute
 }
 
 const AuthenticatedFinanceRouteChildren: AuthenticatedFinanceRouteChildren = {
   AuthenticatedFinanceExpensesRoute: AuthenticatedFinanceExpensesRoute,
+  AuthenticatedFinanceFeesRoute: AuthenticatedFinanceFeesRoute,
   AuthenticatedFinanceLedgerRoute: AuthenticatedFinanceLedgerRoute,
+  AuthenticatedFinancePaymentsRoute: AuthenticatedFinancePaymentsRoute,
   AuthenticatedFinanceReconciliationRoute:
     AuthenticatedFinanceReconciliationRoute,
   AuthenticatedFinanceIndexRoute: AuthenticatedFinanceIndexRoute,

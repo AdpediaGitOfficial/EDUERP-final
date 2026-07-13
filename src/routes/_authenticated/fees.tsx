@@ -123,7 +123,7 @@ function paymentStatusBadge(s: string) {
   return <Badge className={`${cls[key] || ""} border-0 gap-1`}>{label[key] || s}</Badge>;
 }
 
-function FeesPage() {
+export function FeesPage() {
   const { user } = useCurrentUser();
   if (!user)
     return (
@@ -131,7 +131,8 @@ function FeesPage() {
         <div />
       </AppShell>
     );
-  if (user.primaryRole === "admin") return <AdminFees />;
+  if (user.primaryRole === "admin" || user.primaryRole === "accountant")
+    return <AdminFees />;
   if (user.primaryRole === "parent") return <SelfFees userId={user.id} isParent />;
   return (
     <AppShell>
@@ -145,6 +146,10 @@ function FeesPage() {
 
 function AdminFees() {
   const qc = useQueryClient();
+  // Accountants share this view but can't author fee structures/assignments
+  // (those POSTs are admin-only) — hide the write actions for them.
+  const { user } = useCurrentUser();
+  const isAdmin = user?.primaryRole === "admin";
   const [tab, setTab] = useState("assignments");
   const [openStructure, setOpenStructure] = useState(false);
   const [openAssign, setOpenAssign] = useState(false);
@@ -273,6 +278,7 @@ function AdminFees() {
                 </span>
               )}
             </div>
+            {isAdmin && (
             <Dialog open={openAssign} onOpenChange={setOpenAssign}>
               <DialogTrigger asChild>
                 <Button>
@@ -329,6 +335,7 @@ function AdminFees() {
                 </form>
               </DialogContent>
             </Dialog>
+            )}
           </div>
           <Card className="rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -391,6 +398,7 @@ function AdminFees() {
           <InPersonUpiDialog open={kioskOpen} onClose={() => setKioskOpen(false)} />
         </TabsContent>
         <TabsContent value="structures" className="mt-4 space-y-4">
+          {isAdmin && (
           <div className="flex justify-end">
             <Dialog open={openStructure} onOpenChange={setOpenStructure}>
               <DialogTrigger asChild>
@@ -461,6 +469,7 @@ function AdminFees() {
               </DialogContent>
             </Dialog>
           </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {(structures ?? []).map((s: any) => (
               <Card key={s.id} className="p-5 rounded-2xl">

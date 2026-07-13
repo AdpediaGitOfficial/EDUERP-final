@@ -1,5 +1,4 @@
-import { RequireRole } from "@/components/require-role";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
@@ -16,15 +15,15 @@ async function openReceipt(paymentId: string) {
   else toast.error("Could not open the receipt");
 }
 
+// Payments now live inside Finance. Keep this path as a redirect so old links
+// and bookmarks land on the Finance → Payments tab instead of a standalone page.
 export const Route = createFileRoute("/_authenticated/payments")({
-  component: () => (
-    <RequireRole roles={["admin"]}>
-      <PaymentsPage />
-    </RequireRole>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/finance/payments" });
+  },
 });
 
-function PaymentsPage() {
+export function PaymentsPage() {
   const { data } = useQuery({
     queryKey: ["payments-list"],
     queryFn: async () => {

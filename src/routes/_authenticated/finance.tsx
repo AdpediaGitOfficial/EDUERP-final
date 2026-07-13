@@ -16,8 +16,8 @@ const TABS = [
   { to: "/finance/expenses", label: "Expenses" },
   { to: "/finance/ledger", label: "Ledger" },
   { to: "/finance/reconciliation", label: "Reconciliation" },
-  { to: "/fees", label: "Fees" },
-  { to: "/payments", label: "Payments" },
+  { to: "/finance/fees", label: "Fees" },
+  { to: "/finance/payments", label: "Payments" },
 ];
 
 function Layout() {

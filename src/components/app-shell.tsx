@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -74,8 +74,9 @@ const NAV: NavItem[] = [
   { to: "/gradebook", label: "Gradebook", icon: BookOpenCheck, roles: ["teacher"] },
   { to: "/assignments", label: "Assignments", icon: NotebookPen, roles: ["student"] },
   { to: "/students", label: "My Children", icon: GraduationCap, roles: ["parent"] },
-  { to: "/fees", label: "Fees", icon: Wallet, roles: ["admin", "parent"] },
-  { to: "/payments", label: "Payments", icon: Wallet, roles: ["admin", "accountant"] },
+  // Parents pay their child's fees here. For admin/accountant, Fees & Payments
+  // live inside Finance (Finance → Fees / Payments), not as top-level items.
+  { to: "/fees", label: "Fees", icon: Wallet, roles: ["parent"] },
   { to: "/finance", label: "Finance", icon: Calculator, roles: ["admin", "accountant"] },
   { to: "/hr", label: "HR", icon: Briefcase, roles: ["admin", "hr"] },
   {
@@ -134,7 +135,18 @@ const NAV: NavItem[] = [
   },
 ];
 
+// True once we're already inside an AppShell. A nested AppShell (e.g. a page
+// rendered as a sub-tab of another page like Finance → Fees) then renders only
+// its children, so there's no doubled sidebar/header/padding.
+const AppShellNestedContext = createContext(false);
+
 export function AppShell({ children }: { children: ReactNode }) {
+  const nested = useContext(AppShellNestedContext);
+  if (nested) return <>{children}</>;
+  return <OuterAppShell>{children}</OuterAppShell>;
+}
+
+function OuterAppShell({ children }: { children: ReactNode }) {
   const { user } = useCurrentUser();
   const location = useLocation();
   const navigate = useNavigate();
@@ -213,6 +225,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
+    <AppShellNestedContext.Provider value={true}>
     <div className="h-screen overflow-hidden bg-background text-foreground flex">
       <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground h-screen sticky top-0">
         {brand}
@@ -277,6 +290,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         canSearchStudents={canSearchStudents}
       />
     </div>
+    </AppShellNestedContext.Provider>
   );
 }
 

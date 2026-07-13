@@ -33,7 +33,10 @@ export class FeesService {
 
   /** fee_structures are admin-managed (fs_admin_write); linked-user read (fs_linked_read). */
   async listStructures(actor: AuthUser) {
-    if (!actor.roles.includes("admin")) throw new ForbiddenException();
+    // Read-only view for finance staff (admin + accountant). Authoring structures
+    // stays admin-only (see createStructure / assignStructure).
+    if (!actor.roles.includes("admin") && !actor.roles.includes("accountant"))
+      throw new ForbiddenException();
     const rows = await this.prisma.fee_structures.findMany({
       orderBy: { created_at: "desc" },
       include: { classes: { select: { name: true, section: true } } },

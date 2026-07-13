@@ -172,7 +172,7 @@ export class FeesController {
   }
 
   @Get("fees/structures")
-  @Roles("admin")
+  @Roles("admin", "accountant")
   structures(@CurrentUser() actor: AuthUser) {
     return this.fees.listStructures(actor);
   }
