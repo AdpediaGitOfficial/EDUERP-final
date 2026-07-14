@@ -7,8 +7,6 @@ import { CHART_PRIMARY } from "@/lib/chart";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -32,18 +30,15 @@ import { ArrowRightLeft, Printer, MessageSquare, IdCard as IdCardIcon } from "lu
 import {
   ArrowLeft,
   GraduationCap,
-  CalendarClock,
   TrendingUp,
   Wallet,
   BookOpenCheck,
   ClipboardCheck,
-  NotebookPen,
   CheckCircle2,
   XCircle,
   Clock,
   ChevronLeft,
   ChevronRight,
-  Search,
   LayoutGrid,
   List,
 } from "lucide-react";
@@ -58,7 +53,6 @@ import {
   FileText,
   History,
   Bus,
-  CalendarDays,
   Megaphone,
 } from "lucide-react";
 import {
@@ -68,7 +62,6 @@ import {
   DisciplinaryTab,
   DocumentsTab,
   ActivityTab,
-  ClassTimetableTab,
   NoticesTab,
   SisProfilePanel,
   ProfileInfoTab,
@@ -76,6 +69,7 @@ import {
   CredentialsTab,
   BehaviorTab,
 } from "@/components/student-profile-extras";
+import { StudentFeesInline } from "@/components/student-fees-inline";
 import { UserCircle, Star, IdCard } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/students/$studentId/")({
@@ -101,13 +95,12 @@ function ChildDetailPage() {
   const attendance = (dashboard?.attendance ?? []) as any[];
   const results = (dashboard?.results ?? []) as any[];
   const fees = (dashboard?.fees ?? []) as any[];
-  const assignedHomework = (dashboard?.homework ?? []) as any[];
-  const submissionsAll = (dashboard?.submissions ?? []) as any[];
   const guardians = (dashboard?.guardians ?? []) as any[];
   const { user } = useCurrentUser();
   const qc = useQueryClient();
   const canOpenParentProfile = !!user?.roles.some((r) => r === "admin" || r === "reception");
   const isDesk = canOpenParentProfile;
+  const canCollectFees = !!user?.roles.some((r) => r === "admin" || r === "accountant");
   const classTeacher = dashboard?.classTeacher ?? null;
   const subjects = (dashboard?.subjects ?? []) as any[];
 
@@ -146,69 +139,6 @@ function ChildDetailPage() {
     return d;
   });
   const [attView, setAttView] = useState<"calendar" | "list">("calendar");
-  const [hwSearch, setHwSearch] = useState("");
-  const [hwSubject, setHwSubject] = useState<string>("all");
-  const [hwStatus, setHwStatus] = useState<string>("all");
-  const [hwRange, setHwRange] = useState<string>("all");
-
-  const classId: string | undefined = (student as any)?.classes?.id;
-
-  const homeworkHistory = useMemo(() => {
-    const subMap = new Map<string, any>();
-    for (const s of submissionsAll ?? []) subMap.set(s.homework_id, s);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return ((assignedHomework as any[]) ?? []).map((hw) => {
-      const sub = subMap.get(hw.id);
-      const due = hw.due_date ? new Date(hw.due_date) : null;
-      const submittedAt = sub?.submitted_at ? new Date(sub.submitted_at) : null;
-      let status: "submitted" | "late" | "pending" | "missed" = "pending";
-      if (submittedAt) {
-        status = due && submittedAt > due ? "late" : "submitted";
-      } else if (due && due < today) {
-        status = "missed";
-      }
-      return { hw, sub, status };
-    });
-  }, [assignedHomework, submissionsAll]);
-
-  const hwSubjects = useMemo(() => {
-    const set = new Set<string>();
-    for (const { hw } of homeworkHistory) {
-      const n = hw.subjects?.name;
-      if (n) set.add(n);
-    }
-    return Array.from(set).sort();
-  }, [homeworkHistory]);
-
-  const filteredHomework = useMemo(() => {
-    const now = new Date();
-    const firstThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const firstLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-    const term = hwSearch.trim().toLowerCase();
-    return homeworkHistory.filter(({ hw, status }) => {
-      if (hwSubject !== "all" && hw.subjects?.name !== hwSubject) return false;
-      if (hwStatus !== "all" && status !== hwStatus) return false;
-      if (term && !(hw.title || "").toLowerCase().includes(term)) return false;
-      if (hwRange !== "all" && hw.assigned_date) {
-        const d = new Date(hw.assigned_date);
-        if (hwRange === "this-month" && d < firstThisMonth) return false;
-        if (hwRange === "last-month" && (d < firstLastMonth || d > endLastMonth)) return false;
-      }
-      return true;
-    });
-  }, [homeworkHistory, hwSearch, hwSubject, hwStatus, hwRange]);
-
-  const hwSummary = useMemo(() => {
-    const total = homeworkHistory.length;
-    const submitted = homeworkHistory.filter((h) => h.status === "submitted").length;
-    const pending = homeworkHistory.filter((h) => h.status === "pending").length;
-    const late = homeworkHistory.filter((h) => h.status === "late").length;
-    const missed = homeworkHistory.filter((h) => h.status === "missed").length;
-    const submittedPct = total ? Math.round(((submitted + late) / total) * 100) : 0;
-    return { total, submitted, pending, late, missed, submittedPct };
-  }, [homeworkHistory]);
 
   const attendanceMonthly = useMemo(() => {
     const groups = new Map<
@@ -232,14 +162,6 @@ function ChildDetailPage() {
     }
     return Array.from(groups.values()).sort((x, y) => (x.key < y.key ? 1 : -1));
   }, [attendance]);
-
-  const hwStatusBadge = (s: string) => {
-    if (s === "submitted")
-      return <Badge className="bg-emerald-100 text-emerald-700 border-0">Submitted</Badge>;
-    if (s === "late") return <Badge className="bg-orange-100 text-orange-700 border-0">Late</Badge>;
-    if (s === "missed") return <Badge className="bg-red-100 text-red-700 border-0">Missed</Badge>;
-    return <Badge className="bg-amber-100 text-amber-700 border-0">Pending</Badge>;
-  };
 
   // ----- Attendance helpers (calendar + trend) -----
   const attByDate = useMemo(() => {
@@ -360,18 +282,6 @@ function ChildDetailPage() {
                 : "E";
     return { got, max, pct, grade, count: rows.length };
   }, [results]);
-
-  const feeStats = useMemo(() => {
-    const rows = fees ?? [];
-    const due = rows.reduce((a, r) => a + Number(r.amount_due || 0), 0);
-    const paid = rows.reduce((a, r) => a + Number(r.amount_paid || 0), 0);
-    return {
-      due,
-      paid,
-      outstanding: Math.max(due - paid, 0),
-      pct: due ? Math.round((paid / due) * 100) : 0,
-    };
-  }, [fees]);
 
   const statusBadge = (s: string) => {
     if (s === "present")
@@ -503,9 +413,6 @@ function ChildDetailPage() {
           <Button size="sm" variant="outline" onClick={() => setIdCardOpen(true)}>
             <IdCardIcon className="size-4" /> Issue ID Card
           </Button>
-          <Button size="sm" variant="outline" onClick={() => window.print()}>
-            <Printer className="size-4" /> Print Profile
-          </Button>
           {primaryGuardianEmail ? (
             <Button size="sm" variant="outline" asChild>
               <a href={`mailto:${primaryGuardianEmail}`}>
@@ -636,10 +543,6 @@ function ChildDetailPage() {
             <BookOpenCheck className="size-4 mr-1" />
             Marksheet
           </TabsTrigger>
-          <TabsTrigger value="homework">
-            <NotebookPen className="size-4 mr-1" />
-            Homework
-          </TabsTrigger>
           <TabsTrigger value="fees">
             <Wallet className="size-4 mr-1" />
             Fees
@@ -655,10 +558,6 @@ function ChildDetailPage() {
           <TabsTrigger value="hostel">
             <BedDouble className="size-4 mr-1" />
             Hostel
-          </TabsTrigger>
-          <TabsTrigger value="timetable">
-            <CalendarDays className="size-4 mr-1" />
-            Timetable
           </TabsTrigger>
           <TabsTrigger value="notices">
             <Megaphone className="size-4 mr-1" />
@@ -959,226 +858,12 @@ function ChildDetailPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="homework">
-          {/* Summary strip */}
-          <Card className="rounded-2xl overflow-hidden mb-4">
-            <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-3 text-center bg-muted/40">
-              <div>
-                <div className="text-[11px] uppercase text-muted-foreground">Total</div>
-                <div className="font-semibold text-lg">{hwSummary.total}</div>
-              </div>
-              <div>
-                <div className="text-[11px] uppercase text-emerald-700">Submitted %</div>
-                <div className="font-semibold text-lg text-emerald-700">
-                  {hwSummary.submittedPct}%
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] uppercase text-amber-700">Pending</div>
-                <div className="font-semibold text-lg text-amber-700">{hwSummary.pending}</div>
-              </div>
-              <div>
-                <div className="text-[11px] uppercase text-orange-700">Late</div>
-                <div className="font-semibold text-lg text-orange-700">{hwSummary.late}</div>
-              </div>
-              <div>
-                <div className="text-[11px] uppercase text-red-700">Missed</div>
-                <div className="font-semibold text-lg text-red-700">{hwSummary.missed}</div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Filters */}
-          <Card className="rounded-2xl p-4 mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div className="relative">
-                <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search assignments…"
-                  className="pl-9"
-                  value={hwSearch}
-                  onChange={(e) => setHwSearch(e.target.value)}
-                />
-              </div>
-              <Select value={hwSubject} onValueChange={setHwSubject}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All subjects</SelectItem>
-                  {hwSubjects.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={hwStatus} onValueChange={setHwStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  <SelectItem value="submitted">Submitted</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="late">Late</SelectItem>
-                  <SelectItem value="missed">Missed</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={hwRange} onValueChange={setHwRange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Date range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All time</SelectItem>
-                  <SelectItem value="this-month">This month</SelectItem>
-                  <SelectItem value="last-month">Last month</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </Card>
-
-          {/* Desktop table */}
-          <Card className="rounded-2xl overflow-hidden hidden md:block">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-secondary text-muted-foreground text-left">
-                  <tr>
-                    <th className="p-3 font-medium">Subject</th>
-                    <th className="p-3 font-medium">Assignment</th>
-                    <th className="p-3 font-medium">Assigned</th>
-                    <th className="p-3 font-medium">Due</th>
-                    <th className="p-3 font-medium">Submitted</th>
-                    <th className="p-3 font-medium">Status</th>
-                    <th className="p-3 font-medium">Grade / Remarks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredHomework.map(({ hw, sub, status }, i) => (
-                    <tr key={i} className="border-t">
-                      <td className="p-3">{hw.subjects?.name || "—"}</td>
-                      <td className="p-3 font-medium">{hw.title || "—"}</td>
-                      <td className="p-3 text-muted-foreground">
-                        {hw.assigned_date ? new Date(hw.assigned_date).toLocaleDateString() : "—"}
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {hw.due_date ? new Date(hw.due_date).toLocaleDateString() : "—"}
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {sub?.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : "—"}
-                      </td>
-                      <td className="p-3">{hwStatusBadge(status)}</td>
-                      <td className="p-3 text-muted-foreground">
-                        {sub?.marks != null && (
-                          <span className="text-foreground font-medium mr-2">
-                            {sub.marks}/{hw.max_marks ?? "—"}
-                          </span>
-                        )}
-                        {sub?.remarks || (sub?.marks == null ? "—" : "")}
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredHomework.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                        No homework matches these filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          {/* Mobile stacked cards */}
-          <div className="grid grid-cols-1 gap-3 md:hidden">
-            {filteredHomework.map(({ hw, sub, status }, i) => (
-              <Card key={i} className="rounded-2xl p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-xs text-muted-foreground">{hw.subjects?.name || "—"}</div>
-                    <div className="font-medium truncate">{hw.title || "—"}</div>
-                  </div>
-                  {hwStatusBadge(status)}
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <div className="text-muted-foreground">Assigned</div>
-                    <div>
-                      {hw.assigned_date ? new Date(hw.assigned_date).toLocaleDateString() : "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Due</div>
-                    <div>{hw.due_date ? new Date(hw.due_date).toLocaleDateString() : "—"}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Submitted</div>
-                    <div>
-                      {sub?.submitted_at ? new Date(sub.submitted_at).toLocaleDateString() : "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Grade</div>
-                    <div>{sub?.marks != null ? `${sub.marks}/${hw.max_marks ?? "—"}` : "—"}</div>
-                  </div>
-                </div>
-                {sub?.remarks && (
-                  <div className="mt-2 text-xs text-muted-foreground italic">"{sub.remarks}"</div>
-                )}
-              </Card>
-            ))}
-            {filteredHomework.length === 0 && (
-              <Card className="rounded-2xl p-6 text-center text-muted-foreground text-sm">
-                No homework matches these filters.
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-
         <TabsContent value="fees">
-          <Card className="rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-secondary text-muted-foreground text-left">
-                  <tr>
-                    <th className="p-3 font-medium">Fee</th>
-                    <th className="p-3 font-medium">Term</th>
-                    <th className="p-3 font-medium">Due date</th>
-                    <th className="p-3 font-medium">Amount</th>
-                    <th className="p-3 font-medium">Paid</th>
-                    <th className="p-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {((fees ?? []) as any[]).map((r, i) => (
-                    <tr key={i} className="border-t">
-                      <td className="p-3 font-medium">{r.fee_structures?.name || "—"}</td>
-                      <td className="p-3">{r.fee_structures?.term || "—"}</td>
-                      <td className="p-3 text-muted-foreground">
-                        {r.due_date ? new Date(r.due_date).toLocaleDateString() : "—"}
-                      </td>
-                      <td className="p-3">₹{Number(r.amount_due || 0).toLocaleString("en-IN")}</td>
-                      <td className="p-3">₹{Number(r.amount_paid || 0).toLocaleString("en-IN")}</td>
-                      <td className="p-3">{feeBadge(r.status)}</td>
-                    </tr>
-                  ))}
-                  {((fees ?? []) as any[]).length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                        No fees assigned yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="p-4 border-t flex justify-end">
-              <Link to="/fees">
-                <Button size="sm">Pay fees online</Button>
-              </Link>
-            </div>
-          </Card>
+          <StudentFeesInline
+            studentId={studentId}
+            canCollect={canCollectFees}
+            fallbackFees={fees}
+          />
         </TabsContent>
 
         <TabsContent value="parents">
@@ -1256,9 +941,6 @@ function ChildDetailPage() {
         </TabsContent>
         <TabsContent value="hostel">
           <HostelTab studentId={studentId} />
-        </TabsContent>
-        <TabsContent value="timetable">
-          <ClassTimetableTab studentId={studentId} />
         </TabsContent>
         <TabsContent value="notices">
           <NoticesTab studentId={studentId} />

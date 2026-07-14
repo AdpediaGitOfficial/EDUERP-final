@@ -42,7 +42,6 @@ import {
   Clock,
   Wallet,
   Star,
-  Printer,
   KeyRound,
   Mail,
   IdCard,
@@ -1165,36 +1164,26 @@ export function SisProfilePanel({ studentId }: { studentId: string }) {
                 <Barcode value={admissionNo} height={48} width={1.4} fontSize={11} />
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => window.print()}>
-                <Printer className="size-4" /> Print Profile
-              </Button>
-              {data.canEdit && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy === "student"}
-                    onClick={() => sendPass("student")}
-                  >
-                    <KeyRound className="size-4" /> Send Student Pass
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy === "parent"}
-                    onClick={() => sendPass("parent")}
-                  >
-                    <Mail className="size-4" /> Send Parent Pass
-                  </Button>
-                </>
-              )}
-              <Button asChild size="sm">
-                <Link to="/fees">
-                  <Wallet className="size-4" /> Collect Fees
-                </Link>
-              </Button>
-            </div>
+            {data.canEdit && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy === "student"}
+                  onClick={() => sendPass("student")}
+                >
+                  <KeyRound className="size-4" /> Send Student Pass
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy === "parent"}
+                  onClick={() => sendPass("parent")}
+                >
+                  <Mail className="size-4" /> Send Parent Pass
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
       )}
