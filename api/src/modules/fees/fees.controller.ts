@@ -325,6 +325,20 @@ class UnassignGroupDto {
   studentIds: string[];
 }
 
+class RefundPaymentDto {
+  @IsNumber()
+  @Min(0.01)
+  amount: number;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
+  @IsString()
+  method?: string;
+}
+
 class GenerateChallanDto {
   @IsUUID()
   studentId: string;
@@ -643,5 +657,27 @@ export class FeesController {
   @Roles("admin", "accountant")
   cancelChallan(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.fees.cancelChallan(actor, id);
+  }
+
+  // ==================== Transactions: refunds + cashier-wise ====================
+
+  @Post("payments/:id/refund")
+  @Roles("admin", "accountant")
+  refundPayment(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: RefundPaymentDto,
+  ) {
+    return this.fees.refundPayment(actor, id, dto);
+  }
+
+  @Get("fees/transactions/cashiers")
+  @Roles("admin", "accountant")
+  cashierCollection(
+    @CurrentUser() actor: AuthUser,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.fees.cashierCollection(actor, from, to);
   }
 }

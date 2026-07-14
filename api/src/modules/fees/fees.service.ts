@@ -208,6 +208,7 @@ export class FeesService {
         include: {
           students: { select: { admission_no: true, profiles: { select: { full_name: true } } } },
           fee_assignments: { select: { title: true, status: true } },
+          payment_refunds: { select: { amount: true } },
         },
       }),
     ]);
@@ -281,6 +282,10 @@ export class FeesService {
       proofUrl: p.proof_url,
       notes: p.notes,
       paidAt: p.paid_at,
+      recordedById: p.recorded_by ?? null,
+      refundedAmount: this.round2(
+        (p.payment_refunds ?? []).reduce((s: number, r: any) => s + Number(r.amount), 0),
+      ),
     };
   }
 
@@ -1466,5 +1471,98 @@ export class FeesService {
       data: { status: "cancelled" },
     });
     return { ok: true, status: row.status };
+  }
+
+  // ======================= Transactions: refunds + cashiers =======================
+
+  /** Record a refund against a payment. A fully-refunded payment flips to
+   *  status 'refunded'. Refunds reduce net collection in the reports. */
+  async refundPayment(
+    actor: AuthUser,
+    paymentId: string,
+    dto: { amount: number; reason?: string; method?: string },
+  ) {
+    this.ensureCollector(actor);
+    const payment = await this.prisma.payments.findUnique({
+      where: { id: paymentId },
+      include: { payment_refunds: { select: { amount: true } } },
+    });
+    if (!payment) throw new NotFoundException("Payment not found");
+    const already = payment.payment_refunds.reduce((s, r) => s + Number(r.amount), 0);
+    const available = this.round2(Number(payment.amount) - already);
+    const amount = this.round2(Number(dto.amount));
+    if (amount <= 0) throw new BadRequestException("Refund amount must be positive.");
+    if (amount > available + 0.009)
+      throw new BadRequestException(`Only ${available} is available to refund on this payment.`);
+
+    const refund = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.payment_refunds.create({
+        data: {
+          payment_id: paymentId,
+          amount,
+          reason: dto.reason?.trim() || null,
+          method: dto.method?.trim() || payment.method,
+          refunded_by: actor.id,
+        },
+      });
+      if (already + amount >= Number(payment.amount) - 0.009) {
+        await tx.payments.update({ where: { id: paymentId }, data: { status: "refunded" } });
+      }
+      return r;
+    });
+    return {
+      refundId: refund.id,
+      refundedAmount: this.round2(already + amount),
+      fullyRefunded: already + amount >= Number(payment.amount) - 0.009,
+    };
+  }
+
+  /** Cashier-wise collection: gross collected and refunds per staff member who
+   *  recorded payments, within an optional date range. */
+  async cashierCollection(actor: AuthUser, from?: string, to?: string) {
+    this.ensureCollector(actor);
+    const range: { gte?: Date; lte?: Date } = {};
+    if (from) range.gte = new Date(from);
+    if (to) range.lte = new Date(new Date(to).getTime() + 86_400_000 - 1);
+    const where = from || to ? { paid_at: range } : {};
+
+    const grouped = await this.prisma.payments.groupBy({
+      by: ["recorded_by"],
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const refundGrouped = await this.prisma.payment_refunds.groupBy({
+      by: ["refunded_by"],
+      where: from || to ? { created_at: range } : {},
+      _sum: { amount: true },
+    });
+    const refundByUser = new Map(
+      refundGrouped.map((r) => [r.refunded_by, Number(r._sum.amount ?? 0)]),
+    );
+
+    const ids = grouped.map((g) => g.recorded_by).filter((x): x is string => !!x);
+    const profiles = ids.length
+      ? await this.prisma.profiles.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, full_name: true },
+        })
+      : [];
+    const nameById = new Map(profiles.map((p) => [p.id, p.full_name]));
+
+    return grouped
+      .map((g) => {
+        const gross = this.round2(Number(g._sum.amount ?? 0));
+        const refunds = this.round2(g.recorded_by ? (refundByUser.get(g.recorded_by) ?? 0) : 0);
+        return {
+          cashierId: g.recorded_by,
+          cashierName: g.recorded_by ? (nameById.get(g.recorded_by) ?? "—") : "System / online",
+          count: g._count._all,
+          gross,
+          refunds,
+          net: this.round2(gross - refunds),
+        };
+      })
+      .sort((a, b) => b.gross - a.gross);
   }
 }
