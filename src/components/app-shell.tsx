@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   KeyRound,
+  School,
   BarChart3,
   Search,
   ClipboardCheck,
@@ -61,6 +62,7 @@ const NAV: NavItem[] = [
   { to: "/student-categories", label: "Student Categories", icon: Tags, roles: ["admin"] },
   { to: "/custom-fields", label: "Custom Fields", icon: ListPlus, roles: ["admin"] },
   { to: "/academics", label: "Academics", icon: BookOpen, roles: ["admin"] },
+  { to: "/my-classes", label: "My Classes", icon: School, roles: ["teacher"] },
   { to: "/timetable", label: "Timetable", icon: CalendarDays, roles: ["teacher", "student"] },
   { to: "/attendance", label: "Attendance", icon: ClipboardCheck, roles: ["teacher"] },
   {

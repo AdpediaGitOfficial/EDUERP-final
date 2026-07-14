@@ -27,6 +27,7 @@ import { Route as AuthenticatedReceptionRouteImport } from './routes/_authentica
 import { Route as AuthenticatedProgressHubRouteImport } from './routes/_authenticated/progress-hub'
 import { Route as AuthenticatedPaymentsRouteImport } from './routes/_authenticated/payments'
 import { Route as AuthenticatedParentsRouteImport } from './routes/_authenticated/parents'
+import { Route as AuthenticatedMyClassesRouteImport } from './routes/_authenticated/my-classes'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
 import { Route as AuthenticatedHrRouteImport } from './routes/_authenticated/hr'
 import { Route as AuthenticatedHolidaysRouteImport } from './routes/_authenticated/holidays'
@@ -233,6 +234,11 @@ const AuthenticatedPaymentsRoute = AuthenticatedPaymentsRouteImport.update({
 const AuthenticatedParentsRoute = AuthenticatedParentsRouteImport.update({
   id: '/parents',
   path: '/parents',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMyClassesRoute = AuthenticatedMyClassesRouteImport.update({
+  id: '/my-classes',
+  path: '/my-classes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
@@ -904,6 +910,7 @@ export interface FileRoutesByFullPath {
   '/holidays': typeof AuthenticatedHolidaysRoute
   '/hr': typeof AuthenticatedHrRouteWithChildren
   '/library': typeof AuthenticatedLibraryRoute
+  '/my-classes': typeof AuthenticatedMyClassesRoute
   '/parents': typeof AuthenticatedParentsRouteWithChildren
   '/payments': typeof AuthenticatedPaymentsRoute
   '/progress-hub': typeof AuthenticatedProgressHubRoute
@@ -1028,6 +1035,7 @@ export interface FileRoutesByTo {
   '/gradebook': typeof AuthenticatedGradebookRoute
   '/holidays': typeof AuthenticatedHolidaysRoute
   '/library': typeof AuthenticatedLibraryRoute
+  '/my-classes': typeof AuthenticatedMyClassesRoute
   '/payments': typeof AuthenticatedPaymentsRoute
   '/progress-hub': typeof AuthenticatedProgressHubRoute
   '/reports': typeof AuthenticatedReportsRoute
@@ -1157,6 +1165,7 @@ export interface FileRoutesById {
   '/_authenticated/holidays': typeof AuthenticatedHolidaysRoute
   '/_authenticated/hr': typeof AuthenticatedHrRouteWithChildren
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
+  '/_authenticated/my-classes': typeof AuthenticatedMyClassesRoute
   '/_authenticated/parents': typeof AuthenticatedParentsRouteWithChildren
   '/_authenticated/payments': typeof AuthenticatedPaymentsRoute
   '/_authenticated/progress-hub': typeof AuthenticatedProgressHubRoute
@@ -1291,6 +1300,7 @@ export interface FileRouteTypes {
     | '/holidays'
     | '/hr'
     | '/library'
+    | '/my-classes'
     | '/parents'
     | '/payments'
     | '/progress-hub'
@@ -1415,6 +1425,7 @@ export interface FileRouteTypes {
     | '/gradebook'
     | '/holidays'
     | '/library'
+    | '/my-classes'
     | '/payments'
     | '/progress-hub'
     | '/reports'
@@ -1543,6 +1554,7 @@ export interface FileRouteTypes {
     | '/_authenticated/holidays'
     | '/_authenticated/hr'
     | '/_authenticated/library'
+    | '/_authenticated/my-classes'
     | '/_authenticated/parents'
     | '/_authenticated/payments'
     | '/_authenticated/progress-hub'
@@ -1783,6 +1795,13 @@ declare module '@tanstack/react-router' {
       path: '/parents'
       fullPath: '/parents'
       preLoaderRoute: typeof AuthenticatedParentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/my-classes': {
+      id: '/_authenticated/my-classes'
+      path: '/my-classes'
+      fullPath: '/my-classes'
+      preLoaderRoute: typeof AuthenticatedMyClassesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/library': {
@@ -2939,6 +2958,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHolidaysRoute: typeof AuthenticatedHolidaysRoute
   AuthenticatedHrRoute: typeof AuthenticatedHrRouteWithChildren
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
+  AuthenticatedMyClassesRoute: typeof AuthenticatedMyClassesRoute
   AuthenticatedParentsRoute: typeof AuthenticatedParentsRouteWithChildren
   AuthenticatedPaymentsRoute: typeof AuthenticatedPaymentsRoute
   AuthenticatedProgressHubRoute: typeof AuthenticatedProgressHubRoute
@@ -2980,6 +3000,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHolidaysRoute: AuthenticatedHolidaysRoute,
   AuthenticatedHrRoute: AuthenticatedHrRouteWithChildren,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
+  AuthenticatedMyClassesRoute: AuthenticatedMyClassesRoute,
   AuthenticatedParentsRoute: AuthenticatedParentsRouteWithChildren,
   AuthenticatedPaymentsRoute: AuthenticatedPaymentsRoute,
   AuthenticatedProgressHubRoute: AuthenticatedProgressHubRoute,
