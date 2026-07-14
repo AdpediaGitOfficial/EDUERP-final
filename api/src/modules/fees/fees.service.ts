@@ -1565,4 +1565,98 @@ export class FeesService {
       })
       .sort((a, b) => b.gross - a.gross);
   }
+
+  // ============================ Reports ============================
+
+  /** Collection grouped by day, month or class within an optional date range. */
+  async collectionReport(
+    actor: AuthUser,
+    opts: { groupBy?: string; from?: string; to?: string },
+  ) {
+    this.ensureCollector(actor);
+    const groupBy = ["day", "month", "class"].includes(opts.groupBy ?? "")
+      ? (opts.groupBy as string)
+      : "day";
+    const range: { gte?: Date; lte?: Date } = {};
+    if (opts.from) range.gte = new Date(opts.from);
+    if (opts.to) range.lte = new Date(new Date(opts.to).getTime() + 86_400_000 - 1);
+    const payments = await this.prisma.payments.findMany({
+      where: { status: "successful", ...(opts.from || opts.to ? { paid_at: range } : {}) },
+      select: {
+        amount: true,
+        paid_at: true,
+        students: { select: { classes: { select: { name: true, section: true } } } },
+      },
+    });
+    const bucket = new Map<string, { key: string; label: string; count: number; amount: number }>();
+    for (const p of payments) {
+      let key: string;
+      let label: string;
+      if (groupBy === "month") {
+        key = p.paid_at.toISOString().slice(0, 7);
+        label = p.paid_at.toLocaleString("en-US", { month: "short", year: "numeric" });
+      } else if (groupBy === "class") {
+        const c = p.students?.classes;
+        key = c ? `${c.name}${c.section ? " · " + c.section : ""}` : "Unassigned";
+        label = key;
+      } else {
+        key = p.paid_at.toISOString().slice(0, 10);
+        label = key;
+      }
+      const b = bucket.get(key) ?? { key, label, count: 0, amount: 0 };
+      b.count += 1;
+      b.amount += Number(p.amount);
+      bucket.set(key, b);
+    }
+    const rows = Array.from(bucket.values())
+      .map((b) => ({ ...b, amount: this.round2(b.amount) }))
+      .sort((a, b) => (groupBy === "class" ? b.amount - a.amount : a.key < b.key ? -1 : 1));
+    return {
+      groupBy,
+      rows,
+      total: this.round2(rows.reduce((s, r) => s + r.amount, 0)),
+      count: rows.reduce((s, r) => s + r.count, 0),
+    };
+  }
+
+  /** Per fee-group: assigned, collected and outstanding across all students. */
+  async feeGroupReport(actor: AuthUser) {
+    this.ensureCollector(actor);
+    const grouped = await this.prisma.fee_assignments.groupBy({
+      by: ["group_id"],
+      where: { group_id: { not: null } },
+      _sum: { amount_due: true, amount_paid: true },
+      _count: { _all: true },
+    });
+    const ids = grouped.map((g) => g.group_id).filter((x): x is string => !!x);
+    const groups = ids.length
+      ? await this.prisma.fee_groups.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const nameById = new Map(groups.map((g) => [g.id, g.name]));
+    const rows = grouped
+      .map((g) => {
+        const assigned = this.round2(Number(g._sum.amount_due ?? 0));
+        const collected = this.round2(Number(g._sum.amount_paid ?? 0));
+        return {
+          groupId: g.group_id,
+          groupName: g.group_id ? (nameById.get(g.group_id) ?? "—") : "—",
+          lines: g._count._all,
+          assigned,
+          collected,
+          outstanding: this.round2(assigned - collected),
+        };
+      })
+      .sort((a, b) => b.outstanding - a.outstanding);
+    return {
+      rows,
+      totals: {
+        assigned: this.round2(rows.reduce((s, r) => s + r.assigned, 0)),
+        collected: this.round2(rows.reduce((s, r) => s + r.collected, 0)),
+        outstanding: this.round2(rows.reduce((s, r) => s + r.outstanding, 0)),
+      },
+    };
+  }
 }

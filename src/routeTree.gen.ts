@@ -93,6 +93,7 @@ import { Route as AuthenticatedFleetTrackingRouteImport } from './routes/_authen
 import { Route as AuthenticatedFleetMaintenanceRouteImport } from './routes/_authenticated/fleet.maintenance'
 import { Route as AuthenticatedFleetFuelRouteImport } from './routes/_authenticated/fleet.fuel'
 import { Route as AuthenticatedFleetAnalyticsRouteImport } from './routes/_authenticated/fleet.analytics'
+import { Route as AuthenticatedFinanceReportsRouteImport } from './routes/_authenticated/finance.reports'
 import { Route as AuthenticatedFinanceReconciliationRouteImport } from './routes/_authenticated/finance.reconciliation'
 import { Route as AuthenticatedFinancePaymentsRouteImport } from './routes/_authenticated/finance.payments'
 import { Route as AuthenticatedFinanceLedgerRouteImport } from './routes/_authenticated/finance.ledger'
@@ -602,6 +603,12 @@ const AuthenticatedFleetAnalyticsRoute =
     path: '/analytics',
     getParentRoute: () => AuthenticatedFleetRoute,
   } as any)
+const AuthenticatedFinanceReportsRoute =
+  AuthenticatedFinanceReportsRouteImport.update({
+    id: '/reports',
+    path: '/reports',
+    getParentRoute: () => AuthenticatedFinanceRoute,
+  } as any)
 const AuthenticatedFinanceReconciliationRoute =
   AuthenticatedFinanceReconciliationRouteImport.update({
     id: '/reconciliation',
@@ -992,6 +999,7 @@ export interface FileRoutesByFullPath {
   '/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
   '/finance/payments': typeof AuthenticatedFinancePaymentsRoute
   '/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
+  '/finance/reports': typeof AuthenticatedFinanceReportsRoute
   '/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
   '/fleet/fuel': typeof AuthenticatedFleetFuelRoute
   '/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
@@ -1117,6 +1125,7 @@ export interface FileRoutesByTo {
   '/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
   '/finance/payments': typeof AuthenticatedFinancePaymentsRoute
   '/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
+  '/finance/reports': typeof AuthenticatedFinanceReportsRoute
   '/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
   '/fleet/fuel': typeof AuthenticatedFleetFuelRoute
   '/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
@@ -1255,6 +1264,7 @@ export interface FileRoutesById {
   '/_authenticated/finance/ledger': typeof AuthenticatedFinanceLedgerRoute
   '/_authenticated/finance/payments': typeof AuthenticatedFinancePaymentsRoute
   '/_authenticated/finance/reconciliation': typeof AuthenticatedFinanceReconciliationRoute
+  '/_authenticated/finance/reports': typeof AuthenticatedFinanceReportsRoute
   '/_authenticated/fleet/analytics': typeof AuthenticatedFleetAnalyticsRoute
   '/_authenticated/fleet/fuel': typeof AuthenticatedFleetFuelRoute
   '/_authenticated/fleet/maintenance': typeof AuthenticatedFleetMaintenanceRoute
@@ -1394,6 +1404,7 @@ export interface FileRouteTypes {
     | '/finance/ledger'
     | '/finance/payments'
     | '/finance/reconciliation'
+    | '/finance/reports'
     | '/fleet/analytics'
     | '/fleet/fuel'
     | '/fleet/maintenance'
@@ -1519,6 +1530,7 @@ export interface FileRouteTypes {
     | '/finance/ledger'
     | '/finance/payments'
     | '/finance/reconciliation'
+    | '/finance/reports'
     | '/fleet/analytics'
     | '/fleet/fuel'
     | '/fleet/maintenance'
@@ -1656,6 +1668,7 @@ export interface FileRouteTypes {
     | '/_authenticated/finance/ledger'
     | '/_authenticated/finance/payments'
     | '/_authenticated/finance/reconciliation'
+    | '/_authenticated/finance/reports'
     | '/_authenticated/fleet/analytics'
     | '/_authenticated/fleet/fuel'
     | '/_authenticated/fleet/maintenance'
@@ -2311,6 +2324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFleetAnalyticsRouteImport
       parentRoute: typeof AuthenticatedFleetRoute
     }
+    '/_authenticated/finance/reports': {
+      id: '/_authenticated/finance/reports'
+      path: '/reports'
+      fullPath: '/finance/reports'
+      preLoaderRoute: typeof AuthenticatedFinanceReportsRouteImport
+      parentRoute: typeof AuthenticatedFinanceRoute
+    }
     '/_authenticated/finance/reconciliation': {
       id: '/_authenticated/finance/reconciliation'
       path: '/reconciliation'
@@ -2826,6 +2846,7 @@ interface AuthenticatedFinanceRouteChildren {
   AuthenticatedFinanceLedgerRoute: typeof AuthenticatedFinanceLedgerRoute
   AuthenticatedFinancePaymentsRoute: typeof AuthenticatedFinancePaymentsRoute
   AuthenticatedFinanceReconciliationRoute: typeof AuthenticatedFinanceReconciliationRoute
+  AuthenticatedFinanceReportsRoute: typeof AuthenticatedFinanceReportsRoute
   AuthenticatedFinanceIndexRoute: typeof AuthenticatedFinanceIndexRoute
 }
 
@@ -2842,6 +2863,7 @@ const AuthenticatedFinanceRouteChildren: AuthenticatedFinanceRouteChildren = {
   AuthenticatedFinancePaymentsRoute: AuthenticatedFinancePaymentsRoute,
   AuthenticatedFinanceReconciliationRoute:
     AuthenticatedFinanceReconciliationRoute,
+  AuthenticatedFinanceReportsRoute: AuthenticatedFinanceReportsRoute,
   AuthenticatedFinanceIndexRoute: AuthenticatedFinanceIndexRoute,
 }
 

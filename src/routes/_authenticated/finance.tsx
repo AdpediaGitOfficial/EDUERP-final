@@ -25,6 +25,7 @@ const NAV: TabItem[] = [
       { to: "/finance/fees", label: "Fee Structures" },
     ],
   },
+  { to: "/finance/reports", label: "Reports" },
   { to: "/finance/expenses", label: "Expenses" },
   { to: "/finance/ledger", label: "Ledger" },
   { to: "/finance/reconciliation", label: "Reconciliation" },

@@ -680,4 +680,23 @@ export class FeesController {
   ) {
     return this.fees.cashierCollection(actor, from, to);
   }
+
+  // ============================ Reports ============================
+
+  @Get("fees/reports/collection")
+  @Roles("admin", "accountant")
+  collectionReport(
+    @CurrentUser() actor: AuthUser,
+    @Query("groupBy") groupBy?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.fees.collectionReport(actor, { groupBy, from, to });
+  }
+
+  @Get("fees/reports/fee-groups")
+  @Roles("admin", "accountant")
+  feeGroupReport(@CurrentUser() actor: AuthUser) {
+    return this.fees.feeGroupReport(actor);
+  }
 }
