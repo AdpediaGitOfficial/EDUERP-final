@@ -36,7 +36,16 @@ import {
   Menu,
   Tags,
   ListPlus,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { apiLogout } from "@/lib/api/client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
@@ -241,49 +250,90 @@ function OuterAppShell({ children }: { children: ReactNode }) {
         </aside>
         <div className="flex-1 flex flex-col min-w-0 h-screen">
           <header className="h-16 shrink-0 flex items-center gap-3 sm:gap-4 px-4 lg:px-8 border-b bg-card sticky top-0 z-20">
-            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger asChild>
-                <button
-                  aria-label="Open menu"
-                  className="lg:hidden size-11 shrink-0 -ml-1 rounded-lg grid place-items-center hover:bg-secondary text-foreground"
+            {/* Left group: menu + search — flex-1 so the right cluster is pinned to the corner. */}
+            <div className="flex flex-1 items-center gap-3 sm:gap-4 min-w-0">
+              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                <SheetTrigger asChild>
+                  <button
+                    aria-label="Open menu"
+                    className="lg:hidden size-11 shrink-0 -ml-1 rounded-lg grid place-items-center hover:bg-secondary text-foreground"
+                  >
+                    <Menu className="size-5" />
+                  </button>
+                </SheetTrigger>
+                <SheetContent
+                  side="left"
+                  className="p-0 w-72 bg-sidebar text-sidebar-foreground flex flex-col"
                 >
-                  <Menu className="size-5" />
-                </button>
-              </SheetTrigger>
-              <SheetContent
-                side="left"
-                className="p-0 w-72 bg-sidebar text-sidebar-foreground flex flex-col"
+                  <SheetHeader className="sr-only">
+                    <SheetTitle>Navigation</SheetTitle>
+                  </SheetHeader>
+                  {brand}
+                  {navList}
+                  {footer}
+                </SheetContent>
+              </Sheet>
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="flex-1 min-w-0 max-w-xl relative h-10 pl-10 pr-3 rounded-lg bg-secondary text-sm text-left text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 flex items-center justify-between"
               >
-                <SheetHeader className="sr-only">
-                  <SheetTitle>Navigation</SheetTitle>
-                </SheetHeader>
-                {brand}
-                {navList}
-                {footer}
-              </SheetContent>
-            </Sheet>
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              className="flex-1 min-w-0 max-w-xl relative h-10 pl-10 pr-3 rounded-lg bg-secondary text-sm text-left text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 flex items-center justify-between"
-            >
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <span className="truncate">Search pages or students…</span>
-              <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                ⌘K
-              </kbd>
-            </button>
-            <NotificationsBell />
-            <div className="flex items-center gap-2 shrink-0 min-w-0">
-              <div className="size-9 shrink-0 rounded-lg bg-secondary text-secondary-foreground grid place-items-center text-sm font-semibold">
-                {initials}
-              </div>
-              <div className="hidden sm:block leading-tight min-w-0 max-w-[10rem]">
-                <div className="text-sm font-medium truncate">{user?.fullName}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {role ? ROLE_LABEL[role] : ""}
-                </div>
-              </div>
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <span className="truncate">Search pages or students…</span>
+                <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  ⌘K
+                </kbd>
+              </button>
+            </div>
+
+            {/* Right group: notifications + account menu, pinned to the corner. */}
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <NotificationsBell />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    aria-label="Account menu"
+                    className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-1.5 sm:pr-2 hover:bg-secondary outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors"
+                  >
+                    <div className="size-9 shrink-0 rounded-lg bg-primary text-primary-foreground grid place-items-center text-sm font-semibold">
+                      {initials}
+                    </div>
+                    <div className="hidden sm:block leading-tight min-w-0 max-w-[10rem] text-left">
+                      <div className="text-sm font-medium truncate">{user?.fullName}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {role ? ROLE_LABEL[role] : ""}
+                      </div>
+                    </div>
+                    <ChevronDown className="hidden sm:block size-4 text-muted-foreground" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuLabel className="flex items-center gap-2.5 py-2">
+                    <div className="size-9 shrink-0 rounded-lg bg-primary text-primary-foreground grid place-items-center text-sm font-semibold">
+                      {initials}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{user?.fullName}</div>
+                      <div className="text-xs font-normal text-muted-foreground truncate">
+                        {user?.email ?? (role ? ROLE_LABEL[role] : "")}
+                      </div>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link to="/account" className="cursor-pointer">
+                      <KeyRound className="size-4" /> Account &amp; password
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={signOut}
+                    className="cursor-pointer text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400"
+                  >
+                    <LogOut className="size-4" /> Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </header>
           <main className="flex-1 min-h-0 p-4 sm:p-6 lg:p-8 overflow-y-auto overflow-x-hidden">
