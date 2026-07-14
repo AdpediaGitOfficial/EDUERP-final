@@ -23,6 +23,9 @@ import { format } from "date-fns";
 import { Check, X, Clock, FileText, Search, Users, Save, RotateCcw } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/attendance")({
+  validateSearch: (search: Record<string, unknown>): { classId?: string } => ({
+    classId: typeof search.classId === "string" ? search.classId : undefined,
+  }),
   component: AttendancePage,
 });
 
@@ -77,7 +80,8 @@ const initials = (name?: string) =>
 function AttendancePage() {
   const { user } = useCurrentUser();
   const qc = useQueryClient();
-  const [classId, setClassId] = useState<string>("");
+  const { classId: classIdParam } = Route.useSearch();
+  const [classId, setClassId] = useState<string>(classIdParam ?? "");
   const [date, setDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [marks, setMarks] = useState<Record<string, Status>>({});
   const [initial, setInitial] = useState<Record<string, Status>>({});
@@ -96,8 +100,9 @@ function AttendancePage() {
     },
   });
 
+  // Default to the deep-linked class if valid, otherwise the first class.
   useEffect(() => {
-    if (!classId && classes && classes.length) setClassId(classes[0].id);
+    if (classes?.length && !classes.some((c) => c.id === classId)) setClassId(classes[0].id);
   }, [classes, classId]);
 
   const { data: students } = useQuery({

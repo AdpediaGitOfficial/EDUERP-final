@@ -28,14 +28,18 @@ import { format } from "date-fns";
 import { Plus } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/gradebook")({
+  validateSearch: (search: Record<string, unknown>): { classId?: string } => ({
+    classId: typeof search.classId === "string" ? search.classId : undefined,
+  }),
   component: GradebookPage,
 });
 
 function GradebookPage() {
   const { user } = useCurrentUser();
   const qc = useQueryClient();
+  const { classId: classIdParam } = Route.useSearch();
   const isAdmin = (user?.roles ?? []).includes("admin");
-  const [classId, setClassId] = useState<string>("");
+  const [classId, setClassId] = useState<string>(classIdParam ?? "");
   const [examId, setExamId] = useState<string>("");
   const [openNew, setOpenNew] = useState(false);
   const [newSubjectId, setNewSubjectId] = useState<string>("");
@@ -57,8 +61,9 @@ function GradebookPage() {
       return rows.map((r) => ({ id: r.classId, name: r.name, section: r.section }));
     },
   });
+  // Default to the deep-linked class if valid, otherwise the first class.
   useEffect(() => {
-    if (!classId && classes?.length) setClassId(classes[0].id);
+    if (classes?.length && !classes.some((c) => c.id === classId)) setClassId(classes[0].id);
   }, [classes, classId]);
 
   const { data: subjects } = useQuery({

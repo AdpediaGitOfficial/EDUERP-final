@@ -142,12 +142,12 @@ function MyClassesPage() {
 
                   <div className="mt-4 flex flex-wrap gap-2 pt-1">
                     <Button asChild size="sm" className="flex-1">
-                      <Link to="/attendance">
+                      <Link to="/attendance" search={{ classId: c.id }}>
                         <ClipboardCheck className="size-4" /> Attendance
                       </Link>
                     </Button>
                     <Button asChild size="sm" variant="outline" className="flex-1">
-                      <Link to="/gradebook">
+                      <Link to="/gradebook" search={{ classId: c.id }}>
                         <BookOpenCheck className="size-4" /> Grades
                       </Link>
                     </Button>
