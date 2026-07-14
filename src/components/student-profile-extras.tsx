@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from "@/lib/api/client";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { HouseCell, HouseBadge } from "@/routes/_authenticated/houses";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1260,8 +1262,21 @@ function StatCard({
 /** Grouped Profile tab: academic, personal, contact, parents, health, bank, address. */
 export function ProfileInfoTab({ studentId }: { studentId: string }) {
   const { data } = useSisProfile(studentId);
+  const { user } = useCurrentUser();
   if (!data) return <Card className="rounded-2xl p-6 text-sm text-muted-foreground">Loading…</Card>;
   const h = data.header ?? {};
+  const canAllocateHouse =
+    !!user && ["admin", "reception", "teacher"].some((r) => user.roles.includes(r as never));
+  const houseNode = canAllocateHouse ? (
+    <HouseCell
+      studentId={studentId}
+      house={h.houseId ? { id: h.houseId, name: h.house, color: h.houseColor ?? null } : null}
+    />
+  ) : h.house ? (
+    <HouseBadge name={h.house} color={h.houseColor} />
+  ) : (
+    "—"
+  );
   const d = data.details ?? {};
   const m = data.medical ?? {};
   const guardians = data.guardians ?? [];
@@ -1279,7 +1294,7 @@ export function ProfileInfoTab({ studentId }: { studentId: string }) {
             ["Admission Date", fmtDate(h.admissionDate)],
             ["Biometric ID", d.biometricId],
             ["Category", d.category],
-            ["House", h.house],
+            ["House", houseNode],
             ["Academic Year", h.academicYear],
           ]}
         />

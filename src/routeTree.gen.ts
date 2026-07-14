@@ -30,6 +30,7 @@ import { Route as AuthenticatedParentsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedMyClassesRouteImport } from './routes/_authenticated/my-classes'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
 import { Route as AuthenticatedHrRouteImport } from './routes/_authenticated/hr'
+import { Route as AuthenticatedHousesRouteImport } from './routes/_authenticated/houses'
 import { Route as AuthenticatedHolidaysRouteImport } from './routes/_authenticated/holidays'
 import { Route as AuthenticatedGradebookRouteImport } from './routes/_authenticated/gradebook'
 import { Route as AuthenticatedFleetRouteImport } from './routes/_authenticated/fleet'
@@ -256,6 +257,11 @@ const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
 const AuthenticatedHrRoute = AuthenticatedHrRouteImport.update({
   id: '/hr',
   path: '/hr',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedHousesRoute = AuthenticatedHousesRouteImport.update({
+  id: '/houses',
+  path: '/houses',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedHolidaysRoute = AuthenticatedHolidaysRouteImport.update({
@@ -957,6 +963,7 @@ export interface FileRoutesByFullPath {
   '/fleet': typeof AuthenticatedFleetRouteWithChildren
   '/gradebook': typeof AuthenticatedGradebookRoute
   '/holidays': typeof AuthenticatedHolidaysRoute
+  '/houses': typeof AuthenticatedHousesRoute
   '/hr': typeof AuthenticatedHrRouteWithChildren
   '/library': typeof AuthenticatedLibraryRoute
   '/my-classes': typeof AuthenticatedMyClassesRoute
@@ -1090,6 +1097,7 @@ export interface FileRoutesByTo {
   '/fees': typeof AuthenticatedFeesRoute
   '/gradebook': typeof AuthenticatedGradebookRoute
   '/holidays': typeof AuthenticatedHolidaysRoute
+  '/houses': typeof AuthenticatedHousesRoute
   '/library': typeof AuthenticatedLibraryRoute
   '/my-classes': typeof AuthenticatedMyClassesRoute
   '/payments': typeof AuthenticatedPaymentsRoute
@@ -1226,6 +1234,7 @@ export interface FileRoutesById {
   '/_authenticated/fleet': typeof AuthenticatedFleetRouteWithChildren
   '/_authenticated/gradebook': typeof AuthenticatedGradebookRoute
   '/_authenticated/holidays': typeof AuthenticatedHolidaysRoute
+  '/_authenticated/houses': typeof AuthenticatedHousesRoute
   '/_authenticated/hr': typeof AuthenticatedHrRouteWithChildren
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
   '/_authenticated/my-classes': typeof AuthenticatedMyClassesRoute
@@ -1368,6 +1377,7 @@ export interface FileRouteTypes {
     | '/fleet'
     | '/gradebook'
     | '/holidays'
+    | '/houses'
     | '/hr'
     | '/library'
     | '/my-classes'
@@ -1501,6 +1511,7 @@ export interface FileRouteTypes {
     | '/fees'
     | '/gradebook'
     | '/holidays'
+    | '/houses'
     | '/library'
     | '/my-classes'
     | '/payments'
@@ -1636,6 +1647,7 @@ export interface FileRouteTypes {
     | '/_authenticated/fleet'
     | '/_authenticated/gradebook'
     | '/_authenticated/holidays'
+    | '/_authenticated/houses'
     | '/_authenticated/hr'
     | '/_authenticated/library'
     | '/_authenticated/my-classes'
@@ -1907,6 +1919,13 @@ declare module '@tanstack/react-router' {
       path: '/hr'
       fullPath: '/hr'
       preLoaderRoute: typeof AuthenticatedHrRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/houses': {
+      id: '/_authenticated/houses'
+      path: '/houses'
+      fullPath: '/houses'
+      preLoaderRoute: typeof AuthenticatedHousesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/holidays': {
@@ -3110,6 +3129,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedFleetRoute: typeof AuthenticatedFleetRouteWithChildren
   AuthenticatedGradebookRoute: typeof AuthenticatedGradebookRoute
   AuthenticatedHolidaysRoute: typeof AuthenticatedHolidaysRoute
+  AuthenticatedHousesRoute: typeof AuthenticatedHousesRoute
   AuthenticatedHrRoute: typeof AuthenticatedHrRouteWithChildren
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
   AuthenticatedMyClassesRoute: typeof AuthenticatedMyClassesRoute
@@ -3152,6 +3172,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFleetRoute: AuthenticatedFleetRouteWithChildren,
   AuthenticatedGradebookRoute: AuthenticatedGradebookRoute,
   AuthenticatedHolidaysRoute: AuthenticatedHolidaysRoute,
+  AuthenticatedHousesRoute: AuthenticatedHousesRoute,
   AuthenticatedHrRoute: AuthenticatedHrRouteWithChildren,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
   AuthenticatedMyClassesRoute: AuthenticatedMyClassesRoute,

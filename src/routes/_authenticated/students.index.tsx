@@ -50,7 +50,9 @@ import {
   SlidersHorizontal,
   Tags,
   ListPlus,
+  Home,
 } from "lucide-react";
+import { HouseCell } from "./houses";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -226,6 +228,7 @@ function AdminStudentsList() {
         class_id: s.class?.id ?? null,
         profiles: { full_name: s.fullName, email: s.email },
         classes: s.class ? { name: s.class.name, section: s.class.section } : null,
+        house: s.house ?? null,
       }));
     },
   });
@@ -338,6 +341,11 @@ function AdminStudentsList() {
                       <ListPlus className="size-4" /> Custom Fields
                     </Link>
                   </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/houses" className="cursor-pointer">
+                      <Home className="size-4" /> Student Houses
+                    </Link>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               <Dialog open={open} onOpenChange={setOpen}>
@@ -442,6 +450,7 @@ function AdminStudentsList() {
                     <th className="p-3 font-medium">Roll</th>
                     <th className="p-3 font-medium">Student</th>
                     <th className="p-3 font-medium">Gender</th>
+                    <th className="p-3 font-medium">House</th>
                     <th className="p-3 font-medium">Grade & Section</th>
                     <th className="p-3 font-medium">Attendance</th>
                     <th className="p-3 font-medium">Performance</th>
@@ -481,6 +490,9 @@ function AdminStudentsList() {
                           </div>
                         </td>
                         <td className="p-3 capitalize text-muted-foreground">{s.gender ?? "—"}</td>
+                        <td className="p-3">
+                          <HouseCell studentId={s.id} house={s.house ?? null} />
+                        </td>
                         <td className="p-3">
                           {s.classes?.name}
                           {s.classes?.section && ` · ${s.classes.section}`}
