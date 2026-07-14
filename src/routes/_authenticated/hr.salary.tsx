@@ -43,6 +43,7 @@ type Components = {
   pt_enabled: boolean;
   tds_enabled: boolean;
   tds_amount: number;
+  tds_is_percent: boolean;
 };
 type Template = Components & {
   id: string;
@@ -88,7 +89,8 @@ function preview(c: Components): Breakdown {
   const pf = c.pf_enabled ? round2(basic * PF_RATE) : 0;
   const esi = c.esi_enabled && gross <= ESI_CEILING ? round2(gross * ESI_RATE) : 0;
   const pt = c.pt_enabled ? PT_FLAT : 0;
-  const tds = c.tds_enabled ? Math.max(0, Number(c.tds_amount) || 0) : 0;
+  const tdsRaw = Math.max(0, Number(c.tds_amount) || 0);
+  const tds = c.tds_enabled ? round2(c.tds_is_percent ? (gross * tdsRaw) / 100 : tdsRaw) : 0;
   const otherDeductions = round2(deductions.reduce((s, d) => s + (Number(d.amount) || 0), 0));
   const totalDeductions = round2(pf + esi + pt + tds + otherDeductions);
   return {
@@ -113,6 +115,7 @@ const EMPTY_COMPONENTS: Components = {
   pt_enabled: true,
   tds_enabled: false,
   tds_amount: 0,
+  tds_is_percent: false,
 };
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -208,13 +211,30 @@ function StatutoryToggles({
           <Switch checked={c.tds_enabled} onCheckedChange={(v) => set({ tds_enabled: v })} />
         </div>
         {c.tds_enabled && (
-          <Input
-            type="number"
-            className="mt-2 h-8"
-            placeholder="Monthly TDS amount"
-            value={c.tds_amount || ""}
-            onChange={(e) => set({ tds_amount: Number(e.target.value) })}
-          />
+          <div className="mt-2 flex items-center gap-2">
+            <Select
+              value={c.tds_is_percent ? "percent" : "fixed"}
+              onValueChange={(v) => set({ tds_is_percent: v === "percent" })}
+            >
+              <SelectTrigger className="h-8 w-32" aria-label="TDS mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fixed">Fixed ₹</SelectItem>
+                <SelectItem value="percent">% of gross</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              className="h-8 flex-1"
+              placeholder={c.tds_is_percent ? "TDS % of gross" : "Monthly TDS amount"}
+              value={c.tds_amount || ""}
+              onChange={(e) => set({ tds_amount: Number(e.target.value) })}
+            />
+            <span className="text-sm text-muted-foreground w-4">
+              {c.tds_is_percent ? "%" : "₹"}
+            </span>
+          </div>
         )}
       </div>
     </div>
@@ -292,6 +312,7 @@ function TemplatesTab() {
       pt_enabled: t.pt_enabled,
       tds_enabled: t.tds_enabled,
       tds_amount: Number(t.tds_amount),
+      tds_is_percent: t.tds_is_percent ?? false,
     });
     setOpen(true);
   };
@@ -522,6 +543,7 @@ function SetSalaryTab() {
             pt_enabled: s.pt_enabled,
             tds_enabled: s.tds_enabled,
             tds_amount: Number(s.tds_amount),
+            tds_is_percent: s.tds_is_percent ?? false,
           }
         : EMPTY_COMPONENTS,
     );
@@ -541,6 +563,7 @@ function SetSalaryTab() {
       pt_enabled: t.pt_enabled,
       tds_enabled: t.tds_enabled,
       tds_amount: Number(t.tds_amount),
+      tds_is_percent: t.tds_is_percent ?? false,
     });
   };
 
@@ -568,8 +591,116 @@ function SetSalaryTab() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  // Bulk-assign a template to everyone who has no salary structure yet —
+  // optionally scoped to a single department.
+  const { data: coverage } = useQuery({
+    queryKey: ["payroll-coverage"],
+    queryFn: () =>
+      apiGet<{
+        activeStaff: number;
+        withSalary: number;
+        withoutSalary: number;
+        byDepartment: { department: string; withoutSalary: number }[];
+      }>("/hr/payroll/coverage"),
+  });
+  const [bulkTpl, setBulkTpl] = useState<string>("");
+  const [bulkDept, setBulkDept] = useState<string>("__all__");
+  const [bulkEff, setBulkEff] = useState(new Date().toISOString().slice(0, 10));
+  const bulkAssign = useMutation({
+    mutationFn: async () => {
+      if (!bulkTpl) throw new Error("Pick a template first");
+      const res = await apiFetch("/hr/salary/bulk-assign", {
+        method: "POST",
+        body: JSON.stringify({
+          templateId: bulkTpl,
+          effectiveFrom: bulkEff,
+          ...(bulkDept === "__all__" ? {} : { department: bulkDept }),
+        }),
+      });
+      if (!res || !res.ok) {
+        const b = res ? await res.json().catch(() => null) : null;
+        throw new Error(b?.message ?? "Could not assign salaries");
+      }
+      return res.json();
+    },
+    onSuccess: (r: any) => {
+      toast.success(`Assigned salary to ${r.assigned} staff${r.skipped ? `, ${r.skipped} skipped` : ""}`);
+      qc.invalidateQueries({ queryKey: ["payroll-coverage"] });
+      qc.invalidateQueries({ queryKey: ["employee-salary", staffId] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const without = coverage?.withoutSalary ?? 0;
+  const scopeCount =
+    bulkDept === "__all__"
+      ? without
+      : (coverage?.byDepartment.find((d) => d.department === bulkDept)?.withoutSalary ?? 0);
+
   return (
-    <div className="grid lg:grid-cols-[320px_1fr] gap-4">
+    <div className="space-y-4">
+      {without > 0 && (
+        <Card className="rounded-2xl p-4 border-amber-300/60 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h3 className="font-semibold text-amber-900 dark:text-amber-200">
+                {without} of {coverage?.activeStaff} staff have no salary set
+              </h3>
+              <p className="text-sm text-amber-800/80 dark:text-amber-200/70">
+                Assign a template to everyone without a structure so they flow into payroll.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[10rem]">
+                <Label className="text-xs">Scope</Label>
+                <Select value={bulkDept} onValueChange={setBulkDept}>
+                  <SelectTrigger aria-label="Bulk scope">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All departments ({without})</SelectItem>
+                    {(coverage?.byDepartment ?? []).map((d) => (
+                      <SelectItem key={d.department} value={d.department}>
+                        {d.department} ({d.withoutSalary})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-[12rem]">
+                <Label className="text-xs">Template</Label>
+                <Select value={bulkTpl} onValueChange={setBulkTpl}>
+                  <SelectTrigger aria-label="Bulk template">
+                    <SelectValue placeholder="Choose template…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(templates ?? []).map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Effective from</Label>
+                <Input
+                  type="date"
+                  value={bulkEff}
+                  onChange={(e) => setBulkEff(e.target.value)}
+                  aria-label="Bulk effective from"
+                />
+              </div>
+              <Button
+                onClick={() => bulkAssign.mutate()}
+                disabled={!bulkTpl || scopeCount === 0 || bulkAssign.isPending}
+              >
+                {bulkAssign.isPending ? "Assigning…" : `Assign to ${scopeCount}`}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+      <div className="grid lg:grid-cols-[320px_1fr] gap-4">
       {/* Employee picker */}
       <Card className="rounded-2xl p-3 h-fit">
         <Input
@@ -735,6 +866,7 @@ function SetSalaryTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

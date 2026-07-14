@@ -108,7 +108,9 @@ describe("student profile: disciplinary + activity log", () => {
     const row = res.body.disciplinary.find((r: any) => r.description === "Vitest incident");
     expect(row).toBeTruthy();
     incidentId = row.id;
-    expect(res.body.activity.length).toBeGreaterThan(beforeCount);
+    // The activity feed grows by one — unless it's already at its display cap
+    // (the endpoint returns the most recent 100), where it stays pinned at 100.
+    expect(res.body.activity.length).toBeGreaterThanOrEqual(Math.min(beforeCount + 1, 100));
   });
 
   it("admin can resolve then delete the incident", async () => {

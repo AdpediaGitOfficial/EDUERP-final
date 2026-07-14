@@ -59,6 +59,7 @@ export interface SalaryComponentsInput {
   pt_enabled?: boolean;
   tds_enabled?: boolean;
   tds_amount?: number;
+  tds_is_percent?: boolean;
 }
 export interface SalaryTemplateInput extends SalaryComponentsInput {
   name: string;
@@ -348,6 +349,12 @@ export class HrService {
   private round2(n: number) {
     return Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
   }
+  /** TDS: flat rupees, or a percentage of gross when isPercent is true. */
+  private computeTds(enabled: boolean, amount: number, isPercent: boolean, gross: number) {
+    if (!enabled) return 0;
+    const a = Math.max(0, Number(amount) || 0);
+    return this.round2(isPercent ? (gross * a) / 100 : a);
+  }
 
   /**
    * Generate (or refresh) payroll for a month. One run per active staff member
@@ -430,7 +437,12 @@ export class HrService {
       const pf = struct.pf_enabled ? Math.min(basic, 15000) * 0.12 : 0;
       const esi = struct.esi_enabled && gross <= 21000 ? gross * 0.0075 : 0;
       const pt = struct.pt_enabled ? (gross > 15000 ? 200 : 0) : 0;
-      const tds = struct.tds_enabled ? Number(struct.tds_amount || 0) : 0;
+      const tds = this.computeTds(
+        struct.tds_enabled,
+        Number(struct.tds_amount || 0),
+        (struct as { tds_is_percent?: boolean }).tds_is_percent ?? false,
+        gross,
+      );
       const statutory = pf + esi + pt + tds;
       const other = sumJson(struct.deductions) + (emiByStaff.get(st.id) ?? 0);
       const unpaidDays = Math.min(unpaidDaysByStaff.get(st.id) ?? 0, daysInMonth);
@@ -893,6 +905,7 @@ export class HrService {
     pt_enabled: boolean;
     tds_enabled: boolean;
     tds_amount: unknown;
+    tds_is_percent?: boolean;
   }) {
     const basic = Math.max(0, Number(row.basic ?? 0));
     const earnings = this.lineItems(row.earnings);
@@ -906,7 +919,13 @@ export class HrService {
         ? round(gross * HrService.ESI_RATE)
         : 0;
     const pt = row.pt_enabled ? HrService.PT_FLAT : 0;
-    const tds = row.tds_enabled ? Math.max(0, Number(row.tds_amount ?? 0)) : 0;
+    // TDS is either a flat rupee amount or a percentage of gross.
+    const tds = this.computeTds(
+      row.tds_enabled,
+      Number(row.tds_amount ?? 0),
+      row.tds_is_percent ?? false,
+      gross,
+    );
     const otherDeductions = round(deductions.reduce((s, d) => s + d.amount, 0));
     const totalDeductions = round(pf + esi + pt + tds + otherDeductions);
     const net = round(gross - totalDeductions);
@@ -934,6 +953,7 @@ export class HrService {
       pt_enabled: input.pt_enabled ?? true,
       tds_enabled: input.tds_enabled ?? false,
       tds_amount: input.tds_amount ?? 0,
+      tds_is_percent: input.tds_is_percent ?? false,
     };
   }
 
@@ -1050,6 +1070,139 @@ export class HrService {
       }),
     ]);
     return { ok: true };
+  }
+
+  /**
+   * Salary coverage — how many active staff have / don't have a structure.
+   * Drives the "N staff have no salary set → they won't be paid" banner.
+   */
+  async payrollCoverage(actor: AuthUser) {
+    if (!this.canReadPayroll(actor)) throw new ForbiddenException();
+    const [activeStaff, withSalary, byDeptActive, byDeptWith] = await Promise.all([
+      this.prisma.staff.count({ where: { status: "active" } }),
+      this.prisma.hr_salary_structures.count({ where: { staff: { status: "active" } } }),
+      this.prisma.staff.groupBy({
+        by: ["department"],
+        where: { status: "active" },
+        _count: { _all: true },
+      }),
+      this.prisma.staff.groupBy({
+        by: ["department"],
+        where: { status: "active", salary_structure: { isNot: null } },
+        _count: { _all: true },
+      }),
+    ]);
+    const withMap = new Map(byDeptWith.map((d) => [d.department, d._count._all]));
+    const byDepartment = byDeptActive
+      .map((d) => {
+        const active = d._count._all;
+        const withS = withMap.get(d.department) ?? 0;
+        return {
+          department: d.department,
+          activeStaff: active,
+          withSalary: withS,
+          withoutSalary: Math.max(0, active - withS),
+        };
+      })
+      .filter((d) => d.withoutSalary > 0)
+      .sort((a, b) => b.withoutSalary - a.withoutSalary);
+    return {
+      activeStaff,
+      withSalary,
+      withoutSalary: Math.max(0, activeStaff - withSalary),
+      byDepartment,
+    };
+  }
+
+  /**
+   * Assign a salary template to every active staff member who has no structure
+   * yet — the one-click way to make payroll functional at scale. Copies the
+   * template's components verbatim; existing structures are left untouched.
+   */
+  async bulkAssignSalary(
+    actor: AuthUser,
+    templateId: string,
+    effectiveFrom?: string,
+    department?: string,
+  ) {
+    this.requireHr(actor);
+    const tpl = await this.prisma.hr_salary_templates.findUnique({ where: { id: templateId } });
+    if (!tpl) throw new BadRequestException("Unknown salary template");
+    const missing = await this.prisma.staff.findMany({
+      where: {
+        status: "active",
+        salary_structure: { is: null },
+        ...(department ? { department } : {}),
+      },
+      select: { id: true },
+    });
+    if (missing.length === 0) return { assigned: 0, skipped: 0 };
+    const eff = effectiveFrom ? new Date(effectiveFrom) : new Date();
+    const base = {
+      template_id: tpl.id,
+      effective_from: eff,
+      basic: tpl.basic,
+      earnings: tpl.earnings as Prisma.InputJsonValue,
+      deductions: tpl.deductions as Prisma.InputJsonValue,
+      pf_enabled: tpl.pf_enabled,
+      esi_enabled: tpl.esi_enabled,
+      pt_enabled: tpl.pt_enabled,
+      tds_enabled: tpl.tds_enabled,
+      tds_amount: tpl.tds_amount,
+      tds_is_percent: tpl.tds_is_percent,
+    };
+    const res = await this.prisma.hr_salary_structures.createMany({
+      data: missing.map((s) => ({ staff_id: s.id, ...base })),
+      skipDuplicates: true, // a concurrent assign for the same staff is skipped, not an error
+    });
+    return { assigned: res.count, skipped: missing.length - res.count };
+  }
+
+  /**
+   * Cross-month salary dues — every *pending* (unpaid) payroll run, with a
+   * summary of who is owed and how much. Powers the "Salary Pending / Dues"
+   * view. Paying uses the existing payPayrollRun endpoint.
+   */
+  async payrollDues(actor: AuthUser, opts: { department?: string } = {}) {
+    if (!this.canReadPayroll(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.payroll_runs.findMany({
+      where: {
+        status: "pending",
+        ...(opts.department ? { staff: { department: opts.department } } : {}),
+      },
+      include: {
+        staff: {
+          select: { full_name: true, employee_code: true, department: true, designation: true },
+        },
+      },
+      orderBy: [{ month: "asc" }, { staff: { full_name: "asc" } }],
+    });
+    const staffSet = new Set<string>();
+    let totalDue = 0;
+    let oldestMonth: Date | null = null;
+    const items = rows.map((r) => {
+      staffSet.add(r.staff_id);
+      totalDue += Number(r.net_salary || 0);
+      if (!oldestMonth || r.month < oldestMonth) oldestMonth = r.month;
+      return {
+        id: r.id,
+        staffName: r.staff?.full_name ?? null,
+        employeeCode: r.staff?.employee_code ?? null,
+        department: r.staff?.department ?? null,
+        designation: r.staff?.designation ?? null,
+        month: r.month,
+        netSalary: r.net_salary,
+      };
+    });
+    return {
+      summary: {
+        totalDue: this.round2(totalDue),
+        runCount: items.length,
+        staffCount: staffSet.size,
+        oldestMonth,
+      },
+      rows: items,
+    };
   }
 
   // ── Loans & advances: request → approve → disburse → repay ──────────────────

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/lib/api/client";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { apiGet, apiFetch } from "@/lib/api/client";
 import { CHART_PRIMARY, CHART_MUTED } from "@/lib/chart";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { RequireRole } from "@/components/require-role";
@@ -9,8 +9,25 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { ArrowLeft, ClipboardCheck, Download, MessageSquare, UserPlus, Users } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   BarChart,
@@ -264,11 +281,10 @@ function ClassDetailPage() {
                 <ClipboardCheck className="size-4" /> Attendance
               </Link>
             </Button>
-            <Button asChild>
-              <Link to="/students">
-                <UserPlus className="size-4" /> Add student
-              </Link>
-            </Button>
+            <AddStudentDialog
+              classId={classId}
+              className={`${cls.name}${cls.section ? ` · ${cls.section}` : ""}`}
+            />
           </div>
         }
       />
@@ -648,5 +664,225 @@ function ClassDetailPage() {
         </TabsContent>
       </Tabs>
     </AppShell>
+  );
+}
+
+/* ─────────────────── Add student (in-page, scoped to this class) ─────────────────── */
+type ParentMatch = { id: string; fullName: string; phone?: string | null; email?: string | null };
+
+function AddStudentDialog({ classId, className }: { classId: string; className: string }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [gender, setGender] = useState<string>("");
+  const [dob, setDob] = useState("");
+  const [parentMode, setParentMode] = useState<"new" | "existing">("new");
+  // new parent
+  const [parentName, setParentName] = useState("");
+  const [parentPhone, setParentPhone] = useState("");
+  const [parentEmail, setParentEmail] = useState("");
+  // existing parent
+  const [pq, setPq] = useState("");
+  const [existingParentId, setExistingParentId] = useState("");
+
+  const reset = () => {
+    setFirstName("");
+    setLastName("");
+    setGender("");
+    setDob("");
+    setParentMode("new");
+    setParentName("");
+    setParentPhone("");
+    setParentEmail("");
+    setPq("");
+    setExistingParentId("");
+  };
+
+  const { data: parentSearch } = useQuery({
+    queryKey: ["class-add-parent-search", pq],
+    queryFn: () => apiGet<{ matches: ParentMatch[] }>(`/parents/search?q=${encodeURIComponent(pq)}`),
+    enabled: parentMode === "existing" && pq.trim().length >= 2,
+  });
+
+  const add = useMutation({
+    mutationFn: async () => {
+      if (!firstName.trim()) throw new Error("Enter the student's first name");
+      if (parentMode === "new" && !parentName.trim())
+        throw new Error("Enter a parent/guardian name");
+      if (parentMode === "new" && !parentEmail.trim())
+        throw new Error("A parent login email is required for a new parent");
+      if (parentMode === "existing" && !existingParentId)
+        throw new Error("Pick an existing parent");
+      const body: Record<string, unknown> = {
+        classId,
+        firstName: firstName.trim(),
+        lastName: lastName.trim() || undefined,
+        gender: gender || undefined,
+        dob: dob || undefined,
+        parentMode,
+      };
+      if (parentMode === "new") {
+        body.primaryGuardian = "father";
+        body.father = { name: parentName.trim(), phone: parentPhone.trim() || undefined };
+        body.parentLoginEmail = parentEmail.trim();
+      } else {
+        body.existingParentId = existingParentId;
+      }
+      const res = await apiFetch("/admissions/admit", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      if (!res || !res.ok) {
+        const b = res ? await res.json().catch(() => null) : null;
+        throw new Error(b?.message ?? "Could not add the student");
+      }
+      return res.json();
+    },
+    onSuccess: (r: any) => {
+      toast.success(`Added to ${className}${r?.rollNo ? ` · Roll ${r.rollNo}` : ""}`);
+      qc.invalidateQueries({ queryKey: ["class-detail-bundle", classId] });
+      setOpen(false);
+      reset();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button>
+          <UserPlus className="size-4" /> Add student
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add student to {className}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>First name *</Label>
+              <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus />
+            </div>
+            <div>
+              <Label>Last name</Label>
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            </div>
+            <div>
+              <Label>Gender</Label>
+              <Select value={gender} onValueChange={setGender}>
+                <SelectTrigger aria-label="Gender">
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Date of birth</Label>
+              <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="rounded-lg border p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-sm font-medium">Parent / guardian</span>
+              <div className="ml-auto flex gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={parentMode === "new" ? "default" : "outline"}
+                  onClick={() => setParentMode("new")}
+                >
+                  New
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={parentMode === "existing" ? "default" : "outline"}
+                  onClick={() => setParentMode("existing")}
+                >
+                  Existing
+                </Button>
+              </div>
+            </div>
+
+            {parentMode === "new" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Label>Name *</Label>
+                  <Input value={parentName} onChange={(e) => setParentName(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Phone</Label>
+                  <Input value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Login email *</Label>
+                  <Input
+                    type="email"
+                    value={parentEmail}
+                    onChange={(e) => setParentEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <Input
+                  placeholder="Search parent by name, phone or email…"
+                  value={pq}
+                  onChange={(e) => {
+                    setPq(e.target.value);
+                    setExistingParentId("");
+                  }}
+                />
+                {pq.trim().length >= 2 && (
+                  <div className="mt-2 max-h-40 overflow-y-auto rounded-md border divide-y">
+                    {(parentSearch?.matches ?? []).map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setExistingParentId(m.id)}
+                        className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted ${
+                          existingParentId === m.id ? "bg-primary/10" : ""
+                        }`}
+                      >
+                        <div className="font-medium">{m.fullName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {[m.phone, m.email].filter(Boolean).join(" · ") || "—"}
+                        </div>
+                      </button>
+                    ))}
+                    {(parentSearch?.matches ?? []).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">No matches.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => add.mutate()} disabled={add.isPending}>
+            {add.isPending ? "Adding…" : "Add student"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

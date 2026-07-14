@@ -103,9 +103,17 @@ describe("students scoping (Phase 4: RLS -> service-layer translation)", () => {
       .set("Authorization", `Bearer ${tokens.teacher}`);
     expect(res.status).toBe(200);
     expect(res.body.total).toBeGreaterThan(0);
-    expect(res.body.total).toBeLessThan(1000); // a fraction of 5212, not the whole school
+    expect(res.body.total).toBeLessThan(1000); // a fraction of the school, not all of it
     const classIds = new Set(res.body.rows.map((r: any) => r.class?.id));
-    expect(classIds.size).toBeLessThanOrEqual(7); // teacher has 7 assigned classes
+
+    // Scope invariant (seed-independent): every class the teacher can see
+    // students from must be one of their own assigned classes.
+    const assigned = await request(http)
+      .get(`/api/teachers/${users.teacher.id}/classes`)
+      .set("Authorization", `Bearer ${tokens.teacher}`);
+    const assignedIds = new Set((assigned.body ?? []).map((c: any) => c.classId));
+    expect(assignedIds.size).toBeGreaterThan(0);
+    for (const cid of classIds) if (cid) expect(assignedIds.has(cid)).toBe(true);
   });
 
   it("parent sees exactly their linked children (students_parent_read)", async () => {

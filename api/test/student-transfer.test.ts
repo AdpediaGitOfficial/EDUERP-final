@@ -40,9 +40,22 @@ beforeAll(async () => {
     const res = await request(http).post("/api/auth/login").send({ email: e, password: PASSWORD });
     tokens[role] = res.body.accessToken;
   }
-  const classes = await prisma.classes.findMany({ take: 2, select: { id: true } });
-  classA = classes[0].id;
-  classB = classes[1]?.id ?? classes[0].id;
+  // A transfer must stay within the SAME grade (section change only), so pick two
+  // sections of one grade rather than the first two arbitrary classes.
+  const all = await prisma.classes.findMany({ select: { id: true, name: true } });
+  const gradeOf = (n: string | null) => {
+    const m = /(\d{1,2})/.exec(n ?? "");
+    return m ? m[1] : (n ?? "");
+  };
+  const byGrade = new Map<string, string[]>();
+  for (const c of all) {
+    const g = gradeOf(c.name);
+    if (!byGrade.has(g)) byGrade.set(g, []);
+    byGrade.get(g)!.push(c.id);
+  }
+  const pair = [...byGrade.values()].find((ids) => ids.length >= 2);
+  classA = pair ? pair[0] : all[0].id;
+  classB = pair ? pair[1] : (all[1]?.id ?? all[0].id);
 });
 
 afterAll(async () => {
@@ -64,6 +77,16 @@ afterAll(async () => {
   await prisma.$executeRaw`DELETE FROM auth.users WHERE email LIKE ${"tr." + "%" + S + "%@student.greenwood.test"}`.catch(
     () => {},
   );
+  // Also remove the parent accounts admit() created (trp.<S>.*@p.test) so they
+  // don't accumulate across re-runs against the same persistent DB.
+  const parentLike = "trp." + S + ".%@p.test";
+  await prisma.$executeRaw`DELETE FROM public.user_roles WHERE user_id IN (SELECT id FROM auth.users WHERE email LIKE ${parentLike})`.catch(
+    () => {},
+  );
+  await prisma.$executeRaw`DELETE FROM public.profiles WHERE id IN (SELECT id FROM auth.users WHERE email LIKE ${parentLike})`.catch(
+    () => {},
+  );
+  await prisma.$executeRaw`DELETE FROM auth.users WHERE email LIKE ${parentLike}`.catch(() => {});
   await app?.close();
 });
 

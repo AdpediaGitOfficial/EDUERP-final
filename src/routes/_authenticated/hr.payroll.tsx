@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -27,7 +27,16 @@ import {
 } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/confirm-dialog";
 import { money } from "@/lib/module-util";
-import { ArrowLeft, Play, Eye, Pencil, IndianRupee, FileText } from "lucide-react";
+import {
+  ArrowLeft,
+  Play,
+  Eye,
+  Pencil,
+  IndianRupee,
+  FileText,
+  AlertTriangle,
+  Wallet,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/hr/payroll")({ component: Page });
 
@@ -69,6 +78,25 @@ type DetailRow = {
   netSalary: number;
   status: string;
   payDate: string | null;
+};
+type Coverage = { activeStaff: number; withSalary: number; withoutSalary: number };
+type DueRow = {
+  id: string;
+  staffName: string | null;
+  employeeCode: string | null;
+  department: string | null;
+  designation: string | null;
+  month: string;
+  netSalary: number;
+};
+type Dues = {
+  summary: {
+    totalDue: number;
+    runCount: number;
+    staffCount: number;
+    oldestMonth: string | null;
+  };
+  rows: DueRow[];
 };
 
 function Page() {
@@ -124,6 +152,7 @@ function RunList({ onOpen }: { onOpen: (year: number, month: number) => void }) 
 
   return (
     <>
+      <CoverageBanner />
       <Card className="rounded-2xl p-5 mb-6">
         <h3 className="font-semibold mb-4">Generate new payroll</h3>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
@@ -231,7 +260,142 @@ function RunList({ onOpen }: { onOpen: (year: number, month: number) => void }) 
           </div>
         )}
       </Card>
+
+      <DuesSection />
     </>
+  );
+}
+
+/* ─────────────────────── Coverage banner ─────────────────────── */
+function CoverageBanner() {
+  const { data } = useQuery({
+    queryKey: ["payroll-coverage"],
+    queryFn: () => apiGet<Coverage>("/hr/payroll/coverage"),
+  });
+  if (!data || data.withoutSalary === 0) return null;
+  return (
+    <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+        <div>
+          <div className="font-semibold">
+            {data.withoutSalary} of {data.activeStaff} active staff have no salary set
+          </div>
+          <div className="text-sm opacity-90">
+            They will be skipped when you generate payroll. Assign a salary structure so they get
+            paid.
+          </div>
+        </div>
+      </div>
+      <Button asChild variant="outline" className="shrink-0 border-amber-400">
+        <Link to="/hr/salary">Set salaries</Link>
+      </Button>
+    </div>
+  );
+}
+
+/* ─────────────────────── Salary dues (pending) ─────────────────────── */
+function DuesSection() {
+  const qc = useQueryClient();
+  const confirm = useConfirm();
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["payroll-dues"],
+    queryFn: () => apiGet<Dues>("/hr/payroll/dues"),
+  });
+
+  const pay = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiFetch(`/hr/payroll/runs/${id}/pay`, { method: "PATCH" });
+      if (!res || !res.ok) throw new Error("Could not record the payment");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success("Marked as paid");
+      qc.invalidateQueries({ queryKey: ["payroll-dues"] });
+      qc.invalidateQueries({ queryKey: ["payroll-months"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const monthLabel = (iso: string) => {
+    const d = new Date(iso);
+    return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  };
+
+  return (
+    <Card className="rounded-2xl overflow-hidden mt-6">
+      <div className="p-4 border-b flex items-center gap-2">
+        <Wallet className="size-4" />
+        <span className="font-semibold">Salary pending &amp; dues</span>
+        {data && data.summary.runCount > 0 && (
+          <span className="ml-auto text-sm text-muted-foreground">
+            <span className="font-semibold text-foreground">{money(data.summary.totalDue)}</span> due
+            · {data.summary.staffCount} staff · {data.summary.runCount} run
+            {data.summary.runCount === 1 ? "" : "s"}
+            {data.summary.oldestMonth ? ` · since ${monthLabel(data.summary.oldestMonth)}` : ""}
+          </span>
+        )}
+      </div>
+      {isError ? (
+        <QueryError onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <TableSkeleton rows={4} cols={5} />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-left">
+              <tr>
+                <th className="p-3 font-medium">Employee</th>
+                <th className="p-3 font-medium">Department</th>
+                <th className="p-3 font-medium">Month</th>
+                <th className="p-3 font-medium text-right">Net payable</th>
+                <th className="p-3 font-medium text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.rows ?? []).map((r) => (
+                <tr key={r.id} className="border-t hover:bg-muted/30">
+                  <td className="p-3">
+                    <div className="font-medium">{r.staffName}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {r.employeeCode ?? ""}
+                      {r.designation ? ` · ${r.designation}` : ""}
+                    </div>
+                  </td>
+                  <td className="p-3 text-muted-foreground">{r.department ?? "—"}</td>
+                  <td className="p-3">{monthLabel(r.month)}</td>
+                  <td className="p-3 text-right font-medium">{money(Number(r.netSalary))}</td>
+                  <td className="p-3 text-right">
+                    <Button
+                      size="sm"
+                      aria-label={`Pay ${r.staffName}`}
+                      disabled={pay.isPending}
+                      onClick={() =>
+                        confirm({
+                          title: `Pay ${r.staffName}?`,
+                          description: `${monthLabel(r.month)} · ${money(Number(r.netSalary))}`,
+                          confirmText: "Mark paid",
+                        }).then((ok) => ok && pay.mutate(r.id))
+                      }
+                    >
+                      <IndianRupee className="size-4 mr-1" />
+                      Pay
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {data && data.rows.length === 0 && (
+                <EmptyRow
+                  colSpan={5}
+                  title="No pending salaries"
+                  hint="Every generated payroll run has been paid."
+                />
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 
