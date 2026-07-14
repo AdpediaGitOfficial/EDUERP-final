@@ -1,10 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { QueryError, StatCardsSkeleton } from "@/components/query-states";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch, apiGet } from "@/lib/api/client";
-import { CHART, CHART_SUCCESS, CHART_DANGER, CHART_INFO, chartColor } from "@/lib/chart";
+import {
+  CHART,
+  CHART_PRIMARY,
+  CHART_SUCCESS,
+  CHART_DANGER,
+  CHART_INFO,
+  chartColor,
+} from "@/lib/chart";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KpiTile, SectionLabel } from "@/components/dashboard/kpi";
@@ -19,7 +28,7 @@ import {
   CardLoading,
 } from "@/components/dashboard/module-card";
 import { inr, inrShort } from "@/lib/money";
-import { Package, Bus } from "lucide-react";
+import { Package, Bus, ChevronDown } from "lucide-react";
 import {
   UserPlus,
   CalendarPlus,
@@ -70,6 +79,56 @@ const DONUT_COLORS = CHART;
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
+
+type Period = "today" | "month" | "term";
+
+/** Date window + grouping for the period-driven Collections analytics. */
+function periodRange(period: Period) {
+  const now = new Date();
+  const y = now.getFullYear();
+  const mo = now.getMonth();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  if (period === "today") return { from: iso(now), to: iso(now), groupBy: "day", label: "today" };
+  if (period === "term") {
+    const from = mo < 6 ? new Date(y, 0, 1) : new Date(y, 6, 1);
+    return { from: iso(from), to: iso(now), groupBy: "month", label: "this term" };
+  }
+  return { from: iso(new Date(y, mo, 1)), to: iso(now), groupBy: "day", label: "this month" };
+}
+
+/** Academic-year pill + Today / This Month / This Term segmented control. */
+function PeriodControl({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+  const y = new Date().getFullYear();
+  const opts: { k: Period; label: string }[] = [
+    { k: "today", label: "Today" },
+    { k: "month", label: "This Month" },
+    { k: "term", label: "This Term" },
+  ];
+  return (
+    <div className="flex items-center gap-2">
+      <div className="hidden items-center gap-1.5 rounded-xl border bg-card px-3 py-1.5 text-xs font-medium shadow-sm sm:flex">
+        <CalendarPlus className="size-3.5 text-muted-foreground" />
+        {y}–{y + 1}
+      </div>
+      <div className="inline-flex rounded-full border bg-card p-0.5 shadow-sm">
+        {opts.map((o) => (
+          <button
+            key={o.k}
+            onClick={() => onChange(o.k)}
+            className={cn(
+              "rounded-full px-3 py-1.5 text-xs font-semibold transition",
+              value === o.k
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StatCard({
   label,
@@ -150,6 +209,46 @@ function AdminDashboard({ fullName }: { fullName: string }) {
   } = useQuery({
     queryKey: ["admin-dashboard"],
     queryFn: () => apiGet<any>("/reports/admin-dashboard"),
+  });
+
+  // Period control (Today / Month / Term) + collapsible Analytics, both remembered.
+  const [period, setPeriod] = useState<Period>("month");
+  const [analyticsOpen, setAnalyticsOpen] = useState(true);
+  useEffect(() => {
+    try {
+      const p = localStorage.getItem("dash-period");
+      if (p === "today" || p === "month" || p === "term") setPeriod(p);
+      if (localStorage.getItem("dash-analytics") === "0") setAnalyticsOpen(false);
+    } catch {
+      /* SSR / no storage */
+    }
+  }, []);
+  const changePeriod = (p: Period) => {
+    setPeriod(p);
+    try {
+      localStorage.setItem("dash-period", p);
+    } catch {
+      /* ignore */
+    }
+  };
+  const toggleAnalytics = () =>
+    setAnalyticsOpen((o) => {
+      const next = !o;
+      try {
+        localStorage.setItem("dash-analytics", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+
+  const range = periodRange(period);
+  const { data: coll } = useQuery({
+    queryKey: ["dash-collections", period],
+    queryFn: () =>
+      apiGet<{ rows: { label: string; amount: number; count: number }[]; total: number; count: number }>(
+        `/fees/reports/collection?groupBy=${range.groupBy}&from=${range.from}&to=${range.to}`,
+      ),
   });
 
   // Single comprehensive endpoint (ports the ~13 client-side aggregations).
@@ -239,6 +338,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
       <PageHeader
         title={`Welcome ${fullName.split(" ")[0]}`}
         subtitle="Overview of your school's operations."
+        action={<PeriodControl value={period} onChange={changePeriod} />}
       />
       {/* KPI command strip — dense, analytics-driven, with deltas and live/critical chips.
           2→4→8 columns by width so a laptop (sidebar in view) gets a clean 4×2 grid
@@ -338,11 +438,55 @@ function AdminDashboard({ fullName }: { fullName: string }) {
         <QuickAction to="/holidays" icon={CalendarPlus} label="Add Holiday" />
       </div>
 
-      {/* Charts row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-        <Card className="p-4 rounded-2xl lg:col-span-2">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-medium">Revenue vs Expenses (6 months)</div>
+      {/* Analytics — collapsible; the header period control drives the Collections view. */}
+      <div className="mt-8 mb-3 flex items-center justify-between">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Analytics
+        </div>
+        <button
+          onClick={toggleAnalytics}
+          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          {analyticsOpen ? "Hide" : "Show"}
+          <ChevronDown
+            className={cn("size-4 transition-transform", !analyticsOpen && "-rotate-90")}
+          />
+        </button>
+      </div>
+
+      {analyticsOpen && (
+        <div className="space-y-4">
+          {/* Collections — driven by the period control */}
+          <Card className="p-4 rounded-2xl">
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-medium capitalize">Collections — {range.label}</div>
+              <div className="text-xs text-muted-foreground">
+                {money(coll?.total ?? 0)} · {coll?.count ?? 0} payment
+                {(coll?.count ?? 0) !== 1 ? "s" : ""}
+              </div>
+            </div>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={coll?.rows ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                  <XAxis
+                    dataKey="label"
+                    fontSize={11}
+                    tickFormatter={(v) => (range.groupBy === "day" ? String(v).slice(5) : v)}
+                  />
+                  <YAxis fontSize={11} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} width={54} />
+                  <Tooltip formatter={(v: any) => money(Number(v))} />
+                  <Bar dataKey="amount" fill={CHART_PRIMARY} radius={[6, 6, 0, 0]} name="Collected" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          {/* Charts row 1 */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <Card className="p-4 rounded-2xl lg:col-span-2">
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-medium">Revenue vs Expenses (6 months)</div>
             <div className="text-xs text-muted-foreground">
               Successful payments vs operating expenses
             </div>
@@ -513,9 +657,11 @@ function AdminDashboard({ fullName }: { fullName: string }) {
           </div>
         </Card>
       </div>
+        </div>
+      )}
 
       {/* Info panels */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6 mb-6">
         <Card className="p-4 rounded-2xl">
           <div className="flex items-center justify-between mb-3">
             <div className="font-medium flex items-center gap-2">
@@ -543,42 +689,6 @@ function AdminDashboard({ fullName }: { fullName: string }) {
             ))}
             {(!upcoming || upcoming.length === 0) && (
               <li className="text-sm text-muted-foreground">No upcoming holidays.</li>
-            )}
-          </ul>
-        </Card>
-
-        <Card className="p-4 rounded-2xl">
-          <div className="flex items-center justify-between mb-3">
-            <div className="font-medium flex items-center gap-2">
-              <AlertTriangle className="size-4 text-amber-600" />
-              Top fee defaulters
-            </div>
-            <Link to="/fees" className="text-xs text-primary hover:underline">
-              View all
-            </Link>
-          </div>
-          <ul className="space-y-2 text-sm">
-            {(defaulters ?? []).map((d: any) => (
-              <li
-                key={d.id}
-                className="flex items-center justify-between border-b last:border-0 pb-2 last:pb-0"
-              >
-                <div>
-                  <div className="font-medium truncate">{d.name}</div>
-                  <div className="text-xs text-muted-foreground">{d.days} days overdue</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="font-semibold text-amber-700">{money(d.amount)}</div>
-                  <Button asChild size="sm" variant="outline" className="h-7 px-2">
-                    <Link to="/communication">
-                      <Send className="size-3" />
-                    </Link>
-                  </Button>
-                </div>
-              </li>
-            ))}
-            {(!defaulters || defaulters.length === 0) && (
-              <li className="text-sm text-muted-foreground">No overdue accounts.</li>
             )}
           </ul>
         </Card>
