@@ -591,6 +591,30 @@ export class FeesService {
     const pageSize = Math.min(opts.pageSize ?? 50, 200);
     const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
 
+    // Report summary across the whole filtered set (demand / collected /
+    // discount / outstanding) for the Search Due Fees cards.
+    const [agg, discountAgg] = await Promise.all([
+      this.prisma.fee_assignments.aggregate({
+        where,
+        _sum: { amount_due: true, amount_paid: true },
+      }),
+      this.prisma.payments.aggregate({
+        where: { fee_assignments: where },
+        _sum: { discount: true },
+      }),
+    ]);
+    const demand = this.round2(Number(agg._sum.amount_due ?? 0));
+    const collected = this.round2(Number(agg._sum.amount_paid ?? 0));
+    const discount = this.round2(Number(discountAgg._sum.discount ?? 0));
+    const studentsDue = rows.filter((r) => r.due > 0.009).length;
+    const summary = {
+      studentsDue,
+      totalDemand: demand,
+      collected,
+      discount,
+      outstanding: this.round2(demand - collected),
+    };
+
     const students = await this.prisma.students.findMany({
       where: { id: { in: pageRows.map((r) => r.studentId) } },
       select: {
@@ -611,6 +635,7 @@ export class FeesService {
       page,
       pageSize,
       totals: { due: totalsDue, students: total },
+      summary,
       rows: pageRows.map((r) => {
         const s = byId.get(r.studentId);
         const cls = s?.classes;

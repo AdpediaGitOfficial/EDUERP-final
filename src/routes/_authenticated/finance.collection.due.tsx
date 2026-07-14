@@ -15,6 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError, TableSkeleton } from "@/components/query-states";
 import { downloadCsv } from "@/lib/module-util";
@@ -49,8 +56,36 @@ type DueRow = {
 type DueList = {
   total: number;
   totals: { due: number; students: number };
+  summary?: {
+    studentsDue: number;
+    totalDemand: number;
+    collected: number;
+    discount: number;
+    outstanding: number;
+  };
   rows: DueRow[];
 };
+
+// Due-date windows → the last date a fee is "due by" (due_date <= value).
+const DUE_WINDOWS = [
+  { value: "all", label: "Full Due (All Time)" },
+  { value: "this-month", label: "Due This Month" },
+  { value: "this-quarter", label: "Due This Quarter" },
+  { value: "next-6m", label: "Due Next 6 Months" },
+  { value: "custom", label: "Custom Demand Date" },
+] as const;
+
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+function windowToDate(w: string): string {
+  const now = new Date();
+  if (w === "this-month") return iso(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  if (w === "this-quarter") {
+    const q = Math.floor(now.getMonth() / 3);
+    return iso(new Date(now.getFullYear(), q * 3 + 3, 0));
+  }
+  if (w === "next-6m") return iso(new Date(now.getFullYear(), now.getMonth() + 6, now.getDate()));
+  return "";
+}
 
 const CHANNELS = [
   { value: "sms", label: "SMS", icon: Smartphone },
@@ -61,9 +96,15 @@ const CHANNELS = [
 
 function DuePage() {
   const [filters, setFilters] = useState<Filters>({ ...emptyFilters });
+  const [dueWindow, setDueWindow] = useState<string>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [remindFor, setRemindFor] = useState<DueRow[] | null>(null);
   const { data: options } = useFilterOptions();
+
+  const applyWindow = (w: string) => {
+    setDueWindow(w);
+    if (w !== "custom") setFilters((f) => ({ ...f, dueDate: windowToDate(w) }));
+  };
 
   const q = useQuery<DueList>({
     queryKey: ["fees-collection", "due", filters],
@@ -97,14 +138,41 @@ function DuePage() {
         action={<CollectionSubNav active="due" />}
       />
 
-      <div className="grid gap-3 sm:grid-cols-3 mb-4">
-        <CollectStat label="Students with dues" value={String(q.data?.totals.students ?? 0)} />
-        <CollectStat label="Total outstanding" value={inr(q.data?.totals.due ?? 0)} tone="danger" />
-        <CollectStat label="Selected" value={String(selected.size)} />
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-5 mb-4">
+        <CollectStat label="Students (Due)" value={String(q.data?.summary?.studentsDue ?? 0)} />
+        <CollectStat label="Total Demand" value={inr(q.data?.summary?.totalDemand ?? 0)} />
+        <CollectStat
+          label="Collected"
+          value={inr(q.data?.summary?.collected ?? 0)}
+          tone="success"
+        />
+        <CollectStat label="Discount" value={inr(q.data?.summary?.discount ?? 0)} />
+        <CollectStat
+          label="Outstanding"
+          value={inr(q.data?.summary?.outstanding ?? 0)}
+          tone="danger"
+        />
       </div>
 
-      <div className="mb-4">
-        <FilterBar value={filters} onChange={setFilters} options={options} />
+      <div className="mb-4 flex flex-col lg:flex-row lg:items-end gap-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Filter due date</Label>
+          <Select value={dueWindow} onValueChange={applyWindow}>
+            <SelectTrigger className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DUE_WINDOWS.map((w) => (
+                <SelectItem key={w.value} value={w.value}>
+                  {w.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1">
+          <FilterBar value={filters} onChange={setFilters} options={options} />
+        </div>
       </div>
 
       <Card className="overflow-hidden">
