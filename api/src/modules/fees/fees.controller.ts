@@ -376,6 +376,33 @@ class GenerateChallanDto {
   notes?: string;
 }
 
+class RequestConcessionDto {
+  @IsUUID()
+  studentId: string;
+
+  @IsOptional()
+  @IsUUID()
+  feeAssignmentId?: string;
+
+  @IsOptional()
+  @IsIn(["flat", "percent"])
+  type?: "flat" | "percent";
+
+  @IsNumber()
+  @Min(0.01)
+  value: number;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+class ReviewConcessionDto {
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
 class SendRemindersDto {
   @IsArray()
   @ArrayNotEmpty()
@@ -713,6 +740,40 @@ export class FeesController {
   @Roles("admin", "accountant")
   feeGroupReport(@CurrentUser() actor: AuthUser) {
     return this.fees.feeGroupReport(actor);
+  }
+
+  // ============================ Concessions ============================
+
+  @Get("fees/concessions")
+  @Roles("admin", "accountant")
+  listConcessions(@CurrentUser() actor: AuthUser, @Query("status") status?: string) {
+    return this.fees.listConcessions(actor, status);
+  }
+
+  @Post("fees/concessions")
+  @Roles("admin", "accountant")
+  requestConcession(@CurrentUser() actor: AuthUser, @Body() dto: RequestConcessionDto) {
+    return this.fees.requestConcession(actor, dto);
+  }
+
+  @Patch("fees/concessions/:id/approve")
+  @Roles("admin")
+  approveConcession(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: ReviewConcessionDto,
+  ) {
+    return this.fees.reviewConcession(actor, id, true, dto.note);
+  }
+
+  @Patch("fees/concessions/:id/reject")
+  @Roles("admin")
+  rejectConcession(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Body() dto: ReviewConcessionDto,
+  ) {
+    return this.fees.reviewConcession(actor, id, false, dto.note);
   }
 
   // ============================ Carry Forward ============================

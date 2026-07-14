@@ -101,6 +101,7 @@ import { Route as AuthenticatedFinanceFeesRouteImport } from './routes/_authenti
 import { Route as AuthenticatedFinanceFeeTypesRouteImport } from './routes/_authenticated/finance.fee-types'
 import { Route as AuthenticatedFinanceFeeGroupsRouteImport } from './routes/_authenticated/finance.fee-groups'
 import { Route as AuthenticatedFinanceExpensesRouteImport } from './routes/_authenticated/finance.expenses'
+import { Route as AuthenticatedFinanceConcessionsRouteImport } from './routes/_authenticated/finance.concessions'
 import { Route as AuthenticatedFinanceCollectionRouteImport } from './routes/_authenticated/finance.collection'
 import { Route as AuthenticatedFinanceChallansRouteImport } from './routes/_authenticated/finance.challans'
 import { Route as AuthenticatedFinanceCarryForwardRouteImport } from './routes/_authenticated/finance.carry-forward'
@@ -652,6 +653,12 @@ const AuthenticatedFinanceExpensesRoute =
     path: '/expenses',
     getParentRoute: () => AuthenticatedFinanceRoute,
   } as any)
+const AuthenticatedFinanceConcessionsRoute =
+  AuthenticatedFinanceConcessionsRouteImport.update({
+    id: '/concessions',
+    path: '/concessions',
+    getParentRoute: () => AuthenticatedFinanceRoute,
+  } as any)
 const AuthenticatedFinanceCollectionRoute =
   AuthenticatedFinanceCollectionRouteImport.update({
     id: '/collection',
@@ -1000,6 +1007,7 @@ export interface FileRoutesByFullPath {
   '/finance/carry-forward': typeof AuthenticatedFinanceCarryForwardRoute
   '/finance/challans': typeof AuthenticatedFinanceChallansRoute
   '/finance/collection': typeof AuthenticatedFinanceCollectionRouteWithChildren
+  '/finance/concessions': typeof AuthenticatedFinanceConcessionsRoute
   '/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
   '/finance/fee-groups': typeof AuthenticatedFinanceFeeGroupsRoute
   '/finance/fee-types': typeof AuthenticatedFinanceFeeTypesRoute
@@ -1127,6 +1135,7 @@ export interface FileRoutesByTo {
   '/finance/carry-forward': typeof AuthenticatedFinanceCarryForwardRoute
   '/finance/challans': typeof AuthenticatedFinanceChallansRoute
   '/finance/collection': typeof AuthenticatedFinanceCollectionRouteWithChildren
+  '/finance/concessions': typeof AuthenticatedFinanceConcessionsRoute
   '/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
   '/finance/fee-groups': typeof AuthenticatedFinanceFeeGroupsRoute
   '/finance/fee-types': typeof AuthenticatedFinanceFeeTypesRoute
@@ -1267,6 +1276,7 @@ export interface FileRoutesById {
   '/_authenticated/finance/carry-forward': typeof AuthenticatedFinanceCarryForwardRoute
   '/_authenticated/finance/challans': typeof AuthenticatedFinanceChallansRoute
   '/_authenticated/finance/collection': typeof AuthenticatedFinanceCollectionRouteWithChildren
+  '/_authenticated/finance/concessions': typeof AuthenticatedFinanceConcessionsRoute
   '/_authenticated/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
   '/_authenticated/finance/fee-groups': typeof AuthenticatedFinanceFeeGroupsRoute
   '/_authenticated/finance/fee-types': typeof AuthenticatedFinanceFeeTypesRoute
@@ -1408,6 +1418,7 @@ export interface FileRouteTypes {
     | '/finance/carry-forward'
     | '/finance/challans'
     | '/finance/collection'
+    | '/finance/concessions'
     | '/finance/expenses'
     | '/finance/fee-groups'
     | '/finance/fee-types'
@@ -1535,6 +1546,7 @@ export interface FileRouteTypes {
     | '/finance/carry-forward'
     | '/finance/challans'
     | '/finance/collection'
+    | '/finance/concessions'
     | '/finance/expenses'
     | '/finance/fee-groups'
     | '/finance/fee-types'
@@ -1674,6 +1686,7 @@ export interface FileRouteTypes {
     | '/_authenticated/finance/carry-forward'
     | '/_authenticated/finance/challans'
     | '/_authenticated/finance/collection'
+    | '/_authenticated/finance/concessions'
     | '/_authenticated/finance/expenses'
     | '/_authenticated/finance/fee-groups'
     | '/_authenticated/finance/fee-types'
@@ -2393,6 +2406,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFinanceExpensesRouteImport
       parentRoute: typeof AuthenticatedFinanceRoute
     }
+    '/_authenticated/finance/concessions': {
+      id: '/_authenticated/finance/concessions'
+      path: '/concessions'
+      fullPath: '/finance/concessions'
+      preLoaderRoute: typeof AuthenticatedFinanceConcessionsRouteImport
+      parentRoute: typeof AuthenticatedFinanceRoute
+    }
     '/_authenticated/finance/collection': {
       id: '/_authenticated/finance/collection'
       path: '/collection'
@@ -2860,6 +2880,7 @@ interface AuthenticatedFinanceRouteChildren {
   AuthenticatedFinanceCarryForwardRoute: typeof AuthenticatedFinanceCarryForwardRoute
   AuthenticatedFinanceChallansRoute: typeof AuthenticatedFinanceChallansRoute
   AuthenticatedFinanceCollectionRoute: typeof AuthenticatedFinanceCollectionRouteWithChildren
+  AuthenticatedFinanceConcessionsRoute: typeof AuthenticatedFinanceConcessionsRoute
   AuthenticatedFinanceExpensesRoute: typeof AuthenticatedFinanceExpensesRoute
   AuthenticatedFinanceFeeGroupsRoute: typeof AuthenticatedFinanceFeeGroupsRoute
   AuthenticatedFinanceFeeTypesRoute: typeof AuthenticatedFinanceFeeTypesRoute
@@ -2877,6 +2898,7 @@ const AuthenticatedFinanceRouteChildren: AuthenticatedFinanceRouteChildren = {
   AuthenticatedFinanceChallansRoute: AuthenticatedFinanceChallansRoute,
   AuthenticatedFinanceCollectionRoute:
     AuthenticatedFinanceCollectionRouteWithChildren,
+  AuthenticatedFinanceConcessionsRoute: AuthenticatedFinanceConcessionsRoute,
   AuthenticatedFinanceExpensesRoute: AuthenticatedFinanceExpensesRoute,
   AuthenticatedFinanceFeeGroupsRoute: AuthenticatedFinanceFeeGroupsRoute,
   AuthenticatedFinanceFeeTypesRoute: AuthenticatedFinanceFeeTypesRoute,

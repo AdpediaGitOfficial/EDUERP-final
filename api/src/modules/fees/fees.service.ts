@@ -1751,4 +1751,161 @@ export class FeesService {
       },
     };
   }
+
+  // ==================== Concessions (approval workflow) ====================
+
+  private async studentOutstanding(studentId: string, feeAssignmentId?: string | null) {
+    const rows = await this.prisma.fee_assignments.findMany({
+      where: { student_id: studentId, ...(feeAssignmentId ? { id: feeAssignmentId } : {}) },
+      select: { amount_due: true, amount_paid: true },
+    });
+    return this.round2(
+      rows.reduce((s, a) => s + (Number(a.amount_due) - Number(a.amount_paid)), 0),
+    );
+  }
+
+  /** Reduce a student's outstanding by `amount`, on one line or greedily across
+   *  their pending lines (newest first). Returns the amount actually applied. */
+  private async applyConcession(
+    tx: Prisma.TransactionClient,
+    studentId: string,
+    feeAssignmentId: string | null,
+    amount: number,
+  ) {
+    let remaining = this.round2(amount);
+    const lines = await tx.fee_assignments.findMany({
+      where: { student_id: studentId, ...(feeAssignmentId ? { id: feeAssignmentId } : {}) },
+      orderBy: { due_date: "desc" },
+    });
+    for (const a of lines) {
+      if (remaining <= 0.009) break;
+      const paid = Number(a.amount_paid);
+      const bal = this.round2(Number(a.amount_due) - paid);
+      if (bal <= 0.009) continue;
+      const cut = Math.min(bal, remaining);
+      const newDue = this.round2(Number(a.amount_due) - cut);
+      const status = newDue - paid <= 0.009 ? "paid" : paid > 0 ? "partial" : "pending";
+      await tx.fee_assignments.update({
+        where: { id: a.id },
+        data: { amount_due: newDue, status: status as never },
+      });
+      remaining = this.round2(remaining - cut);
+    }
+    return this.round2(amount - remaining);
+  }
+
+  private concessionRow(c: any, nameById: Map<string, string>) {
+    return {
+      id: c.id,
+      studentId: c.student_id,
+      studentName: c.students?.profiles?.full_name ?? null,
+      admissionNo: c.students?.admission_no ?? null,
+      feeAssignmentId: c.fee_assignment_id,
+      type: c.type,
+      value: Number(c.value),
+      amount: Number(c.amount),
+      reason: c.reason,
+      status: c.status,
+      requestedBy: c.requested_by ? (nameById.get(c.requested_by) ?? null) : null,
+      reviewedBy: c.reviewed_by ? (nameById.get(c.reviewed_by) ?? null) : null,
+      reviewNote: c.review_note,
+      reviewedAt: c.reviewed_at,
+      createdAt: c.created_at,
+    };
+  }
+
+  async requestConcession(
+    actor: AuthUser,
+    dto: {
+      studentId: string;
+      feeAssignmentId?: string;
+      type?: string;
+      value: number;
+      reason?: string;
+    },
+  ) {
+    this.ensureCollector(actor);
+    const student = await this.prisma.students.findUnique({
+      where: { id: dto.studentId },
+      select: { id: true },
+    });
+    if (!student) throw new NotFoundException("Student not found");
+    const type = dto.type === "percent" ? "percent" : "flat";
+    const base = await this.studentOutstanding(dto.studentId, dto.feeAssignmentId ?? null);
+    let amount =
+      type === "percent" ? this.round2((Number(dto.value) / 100) * base) : this.round2(Number(dto.value));
+    amount = Math.min(amount, base);
+    if (amount <= 0)
+      throw new BadRequestException("Nothing to discount — the concession amount is zero.");
+    const row = await this.prisma.fee_concessions.create({
+      data: {
+        student_id: dto.studentId,
+        fee_assignment_id: dto.feeAssignmentId ?? null,
+        type,
+        value: this.round2(Number(dto.value)),
+        amount,
+        reason: dto.reason?.trim() || null,
+        status: "pending",
+        requested_by: actor.id,
+      },
+      include: { students: { select: { admission_no: true, profiles: { select: { full_name: true } } } } },
+    });
+    return this.concessionRow(row, new Map());
+  }
+
+  async listConcessions(actor: AuthUser, status?: string) {
+    this.ensureCollector(actor);
+    const rows = await this.prisma.fee_concessions.findMany({
+      where: status ? { status } : {},
+      orderBy: { created_at: "desc" },
+      include: { students: { select: { admission_no: true, profiles: { select: { full_name: true } } } } },
+    });
+    const ids = Array.from(
+      new Set(rows.flatMap((r) => [r.requested_by, r.reviewed_by]).filter((x): x is string => !!x)),
+    );
+    const profiles = ids.length
+      ? await this.prisma.profiles.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, full_name: true },
+        })
+      : [];
+    const nameById = new Map(profiles.map((p) => [p.id, p.full_name]));
+    return rows.map((r) => this.concessionRow(r, nameById));
+  }
+
+  async reviewConcession(actor: AuthUser, id: string, approve: boolean, note?: string) {
+    this.ensureCollector(actor);
+    const c = await this.prisma.fee_concessions.findUnique({ where: { id } });
+    if (!c) throw new NotFoundException("Concession not found");
+    if (c.status !== "pending") throw new BadRequestException("This concession is already reviewed.");
+
+    if (!approve) {
+      await this.prisma.fee_concessions.update({
+        where: { id },
+        data: {
+          status: "rejected",
+          reviewed_by: actor.id,
+          reviewed_at: new Date(),
+          review_note: note?.trim() || null,
+        },
+      });
+      return { status: "rejected", applied: 0 };
+    }
+
+    const applied = await this.prisma.$transaction(async (tx) => {
+      const a = await this.applyConcession(tx, c.student_id, c.fee_assignment_id, Number(c.amount));
+      await tx.fee_concessions.update({
+        where: { id },
+        data: {
+          status: "approved",
+          amount: a,
+          reviewed_by: actor.id,
+          reviewed_at: new Date(),
+          review_note: note?.trim() || null,
+        },
+      });
+      return a;
+    });
+    return { status: "approved", applied };
+  }
 }
