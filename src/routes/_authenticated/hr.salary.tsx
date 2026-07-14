@@ -43,6 +43,7 @@ type Components = {
   pt_enabled: boolean;
   tds_enabled: boolean;
   tds_amount: number;
+  tds_is_percent: boolean;
 };
 type Template = Components & {
   id: string;
@@ -88,7 +89,8 @@ function preview(c: Components): Breakdown {
   const pf = c.pf_enabled ? round2(basic * PF_RATE) : 0;
   const esi = c.esi_enabled && gross <= ESI_CEILING ? round2(gross * ESI_RATE) : 0;
   const pt = c.pt_enabled ? PT_FLAT : 0;
-  const tds = c.tds_enabled ? Math.max(0, Number(c.tds_amount) || 0) : 0;
+  const tdsRaw = Math.max(0, Number(c.tds_amount) || 0);
+  const tds = c.tds_enabled ? round2(c.tds_is_percent ? (gross * tdsRaw) / 100 : tdsRaw) : 0;
   const otherDeductions = round2(deductions.reduce((s, d) => s + (Number(d.amount) || 0), 0));
   const totalDeductions = round2(pf + esi + pt + tds + otherDeductions);
   return {
@@ -113,6 +115,7 @@ const EMPTY_COMPONENTS: Components = {
   pt_enabled: true,
   tds_enabled: false,
   tds_amount: 0,
+  tds_is_percent: false,
 };
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -208,13 +211,30 @@ function StatutoryToggles({
           <Switch checked={c.tds_enabled} onCheckedChange={(v) => set({ tds_enabled: v })} />
         </div>
         {c.tds_enabled && (
-          <Input
-            type="number"
-            className="mt-2 h-8"
-            placeholder="Monthly TDS amount"
-            value={c.tds_amount || ""}
-            onChange={(e) => set({ tds_amount: Number(e.target.value) })}
-          />
+          <div className="mt-2 flex items-center gap-2">
+            <Select
+              value={c.tds_is_percent ? "percent" : "fixed"}
+              onValueChange={(v) => set({ tds_is_percent: v === "percent" })}
+            >
+              <SelectTrigger className="h-8 w-32" aria-label="TDS mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fixed">Fixed ₹</SelectItem>
+                <SelectItem value="percent">% of gross</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              className="h-8 flex-1"
+              placeholder={c.tds_is_percent ? "TDS % of gross" : "Monthly TDS amount"}
+              value={c.tds_amount || ""}
+              onChange={(e) => set({ tds_amount: Number(e.target.value) })}
+            />
+            <span className="text-sm text-muted-foreground w-4">
+              {c.tds_is_percent ? "%" : "₹"}
+            </span>
+          </div>
         )}
       </div>
     </div>
@@ -292,6 +312,7 @@ function TemplatesTab() {
       pt_enabled: t.pt_enabled,
       tds_enabled: t.tds_enabled,
       tds_amount: Number(t.tds_amount),
+      tds_is_percent: t.tds_is_percent ?? false,
     });
     setOpen(true);
   };
@@ -522,6 +543,7 @@ function SetSalaryTab() {
             pt_enabled: s.pt_enabled,
             tds_enabled: s.tds_enabled,
             tds_amount: Number(s.tds_amount),
+            tds_is_percent: s.tds_is_percent ?? false,
           }
         : EMPTY_COMPONENTS,
     );
@@ -541,6 +563,7 @@ function SetSalaryTab() {
       pt_enabled: t.pt_enabled,
       tds_enabled: t.tds_enabled,
       tds_amount: Number(t.tds_amount),
+      tds_is_percent: t.tds_is_percent ?? false,
     });
   };
 
@@ -568,21 +591,31 @@ function SetSalaryTab() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Bulk-assign a template to everyone who has no salary structure yet.
+  // Bulk-assign a template to everyone who has no salary structure yet —
+  // optionally scoped to a single department.
   const { data: coverage } = useQuery({
     queryKey: ["payroll-coverage"],
-    queryFn: () => apiGet<{ activeStaff: number; withSalary: number; withoutSalary: number }>(
-      "/hr/payroll/coverage",
-    ),
+    queryFn: () =>
+      apiGet<{
+        activeStaff: number;
+        withSalary: number;
+        withoutSalary: number;
+        byDepartment: { department: string; withoutSalary: number }[];
+      }>("/hr/payroll/coverage"),
   });
   const [bulkTpl, setBulkTpl] = useState<string>("");
+  const [bulkDept, setBulkDept] = useState<string>("__all__");
   const [bulkEff, setBulkEff] = useState(new Date().toISOString().slice(0, 10));
   const bulkAssign = useMutation({
     mutationFn: async () => {
       if (!bulkTpl) throw new Error("Pick a template first");
       const res = await apiFetch("/hr/salary/bulk-assign", {
         method: "POST",
-        body: JSON.stringify({ templateId: bulkTpl, effectiveFrom: bulkEff }),
+        body: JSON.stringify({
+          templateId: bulkTpl,
+          effectiveFrom: bulkEff,
+          ...(bulkDept === "__all__" ? {} : { department: bulkDept }),
+        }),
       });
       if (!res || !res.ok) {
         const b = res ? await res.json().catch(() => null) : null;
@@ -598,6 +631,10 @@ function SetSalaryTab() {
     onError: (e: any) => toast.error(e.message),
   });
   const without = coverage?.withoutSalary ?? 0;
+  const scopeCount =
+    bulkDept === "__all__"
+      ? without
+      : (coverage?.byDepartment.find((d) => d.department === bulkDept)?.withoutSalary ?? 0);
 
   return (
     <div className="space-y-4">
@@ -613,6 +650,22 @@ function SetSalaryTab() {
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[10rem]">
+                <Label className="text-xs">Scope</Label>
+                <Select value={bulkDept} onValueChange={setBulkDept}>
+                  <SelectTrigger aria-label="Bulk scope">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All departments ({without})</SelectItem>
+                    {(coverage?.byDepartment ?? []).map((d) => (
+                      <SelectItem key={d.department} value={d.department}>
+                        {d.department} ({d.withoutSalary})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="min-w-[12rem]">
                 <Label className="text-xs">Template</Label>
                 <Select value={bulkTpl} onValueChange={setBulkTpl}>
@@ -639,9 +692,9 @@ function SetSalaryTab() {
               </div>
               <Button
                 onClick={() => bulkAssign.mutate()}
-                disabled={!bulkTpl || bulkAssign.isPending}
+                disabled={!bulkTpl || scopeCount === 0 || bulkAssign.isPending}
               >
-                {bulkAssign.isPending ? "Assigning…" : `Assign to all ${without}`}
+                {bulkAssign.isPending ? "Assigning…" : `Assign to ${scopeCount}`}
               </Button>
             </div>
           </div>

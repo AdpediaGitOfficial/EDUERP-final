@@ -140,6 +140,7 @@ class SalaryComponentsDto {
   @IsOptional() @IsBoolean() pt_enabled?: boolean;
   @IsOptional() @IsBoolean() tds_enabled?: boolean;
   @IsOptional() @IsNumber() tds_amount?: number;
+  @IsOptional() @IsBoolean() tds_is_percent?: boolean;
 }
 class SalaryTemplateDto extends SalaryComponentsDto {
   @IsString() @MinLength(1) name: string;
@@ -154,6 +155,7 @@ class EmployeeSalaryDto extends SalaryComponentsDto {
 class BulkAssignSalaryDto {
   @IsUUID() templateId: string;
   @IsOptional() @IsDateString() effectiveFrom?: string;
+  @IsOptional() @IsString() department?: string;
 }
 
 class LoanDto {
@@ -470,7 +472,7 @@ export class HrController {
 
   @Post("salary/bulk-assign")
   bulkAssignSalary(@CurrentUser() actor: AuthUser, @Body() dto: BulkAssignSalaryDto) {
-    return this.hr.bulkAssignSalary(actor, dto.templateId, dto.effectiveFrom);
+    return this.hr.bulkAssignSalary(actor, dto.templateId, dto.effectiveFrom, dto.department);
   }
 
   @Get("payroll/coverage")
