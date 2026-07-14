@@ -18,6 +18,7 @@ export class ProgressController {
   constructor(@Inject(ProgressService) private readonly progress: ProgressService) {}
 
   @Get("students")
+  @RequirePermission("reports.view")
   students(@CurrentUser() actor: AuthUser) {
     return this.progress.students(actor);
   }
