@@ -300,6 +300,30 @@ class CloneFeeGroupDto {
   name?: string;
 }
 
+class AssignGroupDto {
+  @IsUUID()
+  groupId: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID("all", { each: true })
+  studentIds: string[];
+
+  @IsOptional()
+  @IsDateString()
+  demandDate?: string;
+}
+
+class UnassignGroupDto {
+  @IsUUID()
+  groupId: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID("all", { each: true })
+  studentIds: string[];
+}
+
 class SendRemindersDto {
   @IsArray()
   @ArrayNotEmpty()
@@ -527,5 +551,25 @@ export class FeesController {
   @Roles("admin")
   deleteFeeGroup(@Param("id") id: string) {
     return this.fees.deleteFeeGroup(id);
+  }
+
+  // ============================ Fee Assignments (group) ============================
+
+  @Get("fees/assign/students")
+  @Roles("admin")
+  assignRoster(@Query("classId") classId: string, @Query("groupId") groupId?: string) {
+    return this.fees.assignRoster(classId, groupId);
+  }
+
+  @Post("fees/assign/group")
+  @Roles("admin")
+  assignGroup(@Body() dto: AssignGroupDto) {
+    return this.fees.assignGroup(dto.groupId, dto.studentIds, dto.demandDate);
+  }
+
+  @Post("fees/assign/unassign")
+  @Roles("admin")
+  unassignGroup(@Body() dto: UnassignGroupDto) {
+    return this.fees.unassignGroup(dto.groupId, dto.studentIds);
   }
 }

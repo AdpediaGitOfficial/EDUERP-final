@@ -653,13 +653,26 @@ export class StudentsService {
         },
       }),
       this.prisma.fee_assignments.findMany({
-        where: { student_id: studentId },
+        // Demand date gating: staff see everything, but parents/students only
+        // see a fee once its "show to parents on" date has arrived.
+        where: {
+          student_id: studentId,
+          ...(actor.roles.some((r) => r === "admin" || r === "accountant" || r === "reception")
+            ? {}
+            : {
+                OR: [
+                  { demand_date: null },
+                  { demand_date: { lte: new Date(new Date().toISOString().slice(0, 10)) } },
+                ],
+              }),
+        },
         orderBy: { due_date: "asc" },
         select: {
           amount_due: true,
           amount_paid: true,
           status: true,
           due_date: true,
+          demand_date: true,
           fee_structures: { select: { name: true, term: true } },
         },
       }),

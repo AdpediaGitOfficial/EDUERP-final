@@ -1164,4 +1164,91 @@ export class FeesService {
     await this.prisma.fee_groups.delete({ where: { id } });
     return { ok: true };
   }
+
+  // ======================= Fee Assignments (group-based) =======================
+
+  /** Roster of active students in a class, flagged with whether a group is
+   *  already assigned to them. */
+  async assignRoster(classId: string, groupId?: string) {
+    if (!classId) throw new BadRequestException("classId is required");
+    const students = await this.prisma.students.findMany({
+      where: { class_id: classId, status: "active" },
+      select: {
+        id: true,
+        admission_no: true,
+        roll_no: true,
+        profiles: { select: { full_name: true } },
+      },
+      orderBy: [{ roll_no: "asc" }],
+    });
+    let assigned = new Set<string>();
+    if (groupId && students.length) {
+      const existing = await this.prisma.fee_assignments.findMany({
+        where: { group_id: groupId, student_id: { in: students.map((s) => s.id) } },
+        select: { student_id: true },
+        distinct: ["student_id"],
+      });
+      assigned = new Set(existing.map((e) => e.student_id));
+    }
+    return students.map((s) => ({
+      studentId: s.id,
+      admissionNo: s.admission_no,
+      rollNo: s.roll_no,
+      name: s.profiles?.full_name ?? null,
+      assigned: assigned.has(s.id),
+    }));
+  }
+
+  /** Expand a fee group's components into per-student fee lines. Students who
+   *  already carry the group are skipped so re-running is safe. */
+  async assignGroup(groupId: string, studentIds: string[], demandDate?: string) {
+    const group = await this.prisma.fee_groups.findUnique({
+      where: { id: groupId },
+      include: { fee_group_components: { orderBy: { sort_order: "asc" } } },
+    });
+    if (!group) throw new NotFoundException("Fee group not found");
+    if (!group.fee_group_components.length)
+      throw new BadRequestException("This fee group has no components to assign.");
+
+    const already = await this.prisma.fee_assignments.findMany({
+      where: { group_id: groupId, student_id: { in: studentIds } },
+      select: { student_id: true },
+      distinct: ["student_id"],
+    });
+    const skip = new Set(already.map((a) => a.student_id));
+    const toAssign = studentIds.filter((id) => !skip.has(id));
+
+    const demand = demandDate ? new Date(demandDate) : null;
+    const today = new Date(new Date().toISOString().slice(0, 10));
+    const data = toAssign.flatMap((sid) =>
+      group.fee_group_components.map((c) => ({
+        student_id: sid,
+        structure_id: null,
+        group_id: groupId,
+        fee_type_id: c.fee_type_id,
+        title: c.label,
+        amount_due: c.amount,
+        amount_paid: new Prisma.Decimal(0),
+        fine_amount: c.fine_amount,
+        due_date: c.due_date ?? demand ?? today,
+        demand_date: demand ?? c.demand_date ?? null,
+        status: "pending" as const,
+      })),
+    );
+    if (data.length) await this.prisma.fee_assignments.createMany({ data });
+    return { assigned: toAssign.length, skipped: skip.size, lines: data.length };
+  }
+
+  /** Remove a group's assignments from students. Paid lines are protected. */
+  async unassignGroup(groupId: string, studentIds: string[]) {
+    const [protectedPaid, removed] = await this.prisma.$transaction([
+      this.prisma.fee_assignments.count({
+        where: { group_id: groupId, student_id: { in: studentIds }, amount_paid: { gt: 0 } },
+      }),
+      this.prisma.fee_assignments.deleteMany({
+        where: { group_id: groupId, student_id: { in: studentIds }, amount_paid: 0 },
+      }),
+    ]);
+    return { removed: removed.count, protectedPaid };
+  }
 }
