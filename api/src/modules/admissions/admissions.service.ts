@@ -111,6 +111,23 @@ export class AdmissionsService {
     return { total, page, pageSize, rows: rows.map((r) => this.shape(r)) };
   }
 
+  /** Count of enquiries per pipeline stage — powers the admissions funnel on
+   *  the admin dashboard. Returns every stage (incl. rejected) with a count. */
+  async stageCounts(actor: AuthUser) {
+    this.requireDesk(actor);
+    const grouped = await this.prisma.admission_enquiries.groupBy({
+      by: ["stage"],
+      _count: { _all: true },
+    });
+    const byStage = new Map(grouped.map((g) => [g.stage, g._count._all]));
+    const stages = [...STAGES, "rejected"].map((stage) => ({
+      stage,
+      count: byStage.get(stage) ?? 0,
+    }));
+    const total = grouped.reduce((s, g) => s + g._count._all, 0);
+    return { stages, total };
+  }
+
   async get(actor: AuthUser, id: string) {
     this.requireDesk(actor);
     const a = await this.prisma.admission_enquiries.findUnique({ where: { id } });

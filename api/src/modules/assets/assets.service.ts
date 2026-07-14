@@ -77,9 +77,11 @@ export class AssetsService {
 
     const stats = { total: 0, in_use: 0, available: 0, repair: 0, retired: 0, disposed: 0 };
     const catCount = new Map<string, number>();
+    let totalValue = 0;
     for (const a of assets) {
       stats.total++;
       if (a.status in stats) (stats as Record<string, number>)[a.status]++;
+      totalValue += Number(a.current_value ?? a.purchase_price ?? 0);
       const key = a.category || "Uncategorized";
       catCount.set(key, (catCount.get(key) ?? 0) + 1);
     }
@@ -117,7 +119,7 @@ export class AssetsService {
       .sort((a, b) => (a.when < b.when ? 1 : -1))
       .slice(0, 10);
 
-    return { stats, topCategories, recentActivity };
+    return { stats, totalValue, topCategories, recentActivity };
   }
 
   // ---- Registry ------------------------------------------------------------

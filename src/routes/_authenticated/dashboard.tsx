@@ -8,7 +8,18 @@ import { CHART, CHART_SUCCESS, CHART_DANGER, CHART_INFO, chartColor } from "@/li
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KpiTile, SectionLabel } from "@/components/dashboard/kpi";
-import { inrShort } from "@/lib/money";
+import {
+  ModuleCard,
+  StatTrio,
+  MeterRow,
+  InfoRow,
+  MiniBars,
+  Funnel,
+  CardAlert,
+  CardLoading,
+} from "@/components/dashboard/module-card";
+import { inr, inrShort } from "@/lib/money";
+import { Package, Bus } from "lucide-react";
 import {
   UserPlus,
   CalendarPlus,
@@ -177,9 +188,6 @@ function AdminDashboard({ fullName }: { fullName: string }) {
   const defaulters = dash?.defaulters as any[] | undefined;
   const activity = dash?.activity as { at: string; text: string; tone: string }[] | undefined;
 
-  const netPosition =
-    (data?.collectedMonth ?? 0) - (extras?.expenseMonth ?? 0) - (extras?.payrollMonth ?? 0);
-  const netPositive = netPosition >= 0;
   const effDelta = (efficiency?.thisPct ?? 0) - (efficiency?.lastPct ?? 0);
 
   // KPI command-strip deltas & sparklines (period-over-period movement).
@@ -319,83 +327,15 @@ function AdminDashboard({ fullName }: { fullName: string }) {
           }}
         />
       </div>
+      {/* Module command cards — each a mini-dashboard that deep-links to its module. */}
+      <SectionLabel>Modules</SectionLabel>
+      <ModuleCards dash={dash} defaulters={defaulters} />
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
         <QuickAction to="/users" icon={UserPlus} label="Add User" />
         <QuickAction to="/students" icon={GraduationCap} label="Admit Student" />
         <QuickAction to="/announcements" icon={Megaphone} label="Post Notice" />
         <QuickAction to="/holidays" icon={CalendarPlus} label="Add Holiday" />
-      </div>
-
-      {/* Extended metrics, grouped by domain so the grid isn't one undifferentiated wall. */}
-      <SectionLabel>Finance</SectionLabel>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <MiniCard
-          icon={Wallet}
-          label="Expenses (month)"
-          value={money(extras?.expenseMonth ?? 0)}
-          sub="operating"
-          href="/finance/expenses"
-        />
-        <MiniCard
-          icon={netPositive ? TrendingUp : TrendingDown}
-          label="Net Position (month)"
-          value={money(netPosition)}
-          sub="revenue − expenses − payroll"
-          href="/finance"
-          tint={netPositive ? "text-emerald-600" : "text-red-600"}
-        />
-        <MiniCard
-          icon={effDelta >= 0 ? TrendingUp : TrendingDown}
-          label="Fee Collection Rate"
-          value={`${(efficiency?.thisPct ?? 0).toFixed(1)}%`}
-          sub={`${effDelta >= 0 ? "+" : ""}${effDelta.toFixed(1)} pts vs last term`}
-          href="/fees"
-          tint={effDelta >= 0 ? "text-emerald-600" : "text-red-600"}
-        />
-      </div>
-
-      <SectionLabel>Staff</SectionLabel>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <MiniCard
-          icon={Users}
-          label="Total Staff"
-          value={String(data?.staffCount ?? 0)}
-          sub="all categories"
-          href="/hr/staff"
-        />
-        <MiniCard
-          icon={CheckCircle2}
-          label="Staff attendance"
-          value={`${(extras?.staffAttPct ?? 0).toFixed(1)}%`}
-          sub={`${extras?.staffAttSampled ?? 0} marked`}
-          href="/hr/attendance"
-        />
-        <MiniCard
-          icon={Briefcase}
-          label="Open positions"
-          value={String(extras?.openJobs ?? 0)}
-          sub="recruitment"
-          href="/hr/recruitment"
-        />
-      </div>
-
-      <SectionLabel>Operations</SectionLabel>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <MiniCard
-          icon={ClipboardCheck}
-          label="Attendance today"
-          value={`${(extras?.attPct ?? 0).toFixed(1)}%`}
-          sub={`${extras?.attSampled ?? 0} marked`}
-          href="/attendance-overview"
-        />
-        <MiniCard
-          icon={MessageSquareWarning}
-          label="Open complaints"
-          value={String(extras?.openComplaints ?? 0)}
-          sub="awaiting response"
-          href="/complaints"
-          tint="text-amber-600"
-        />
       </div>
 
       {/* Charts row 1 */}
@@ -669,6 +609,311 @@ function AdminDashboard({ fullName }: { fullName: string }) {
         </Card>
       </div>
     </>
+  );
+}
+
+/** The module command-card grid. Fees is fed from the admin-dashboard payload;
+ *  the rest each fetch their module's own (admin-scoped) dashboard endpoint. */
+function ModuleCards({ dash, defaulters }: { dash: any; defaulters: any[] | undefined }) {
+  const academics = useQuery({
+    queryKey: ["dash-academics"],
+    queryFn: () => apiGet<any>("/academics/dashboard"),
+  });
+  const hr = useQuery({ queryKey: ["dash-hr"], queryFn: () => apiGet<any>("/hr/dashboard") });
+  const assets = useQuery({
+    queryKey: ["dash-assets"],
+    queryFn: () => apiGet<any>("/assets/dashboard"),
+  });
+  const fleet = useQuery({ queryKey: ["dash-fleet"], queryFn: () => apiGet<any>("/fleet/dashboard") });
+  const adm = useQuery({
+    queryKey: ["dash-admissions"],
+    queryFn: () => apiGet<any>("/admissions/stage-counts"),
+  });
+
+  const fee = dash?.feeSummary;
+  const recent = (dash?.recentPayments ?? []) as any[];
+  const dues = defaulters ?? [];
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {/* Fees & Finance (tabbed) */}
+      <ModuleCard
+        icon={IndianRupee}
+        title="Fees & Finance"
+        to="/finance"
+        tabs={[
+          { key: "ov", label: "Overview" },
+          { key: "rc", label: "Recent" },
+          { key: "du", label: "Dues" },
+        ]}
+      >
+        {(tab) =>
+          tab === "ov" ? (
+            <>
+              <StatTrio
+                items={[
+                  { n: inrShort(fee?.annualDemand ?? 0), k: "Annual demand" },
+                  { n: inrShort(fee?.collected ?? 0), k: "Collected", tone: "good" },
+                  { n: inrShort(fee?.pending ?? 0), k: "Pending", tone: "crit" },
+                ]}
+              />
+              <MeterRow
+                label="Collection progress"
+                value={`${(fee?.collectionPct ?? 0).toFixed(0)}%`}
+                pct={fee?.collectionPct ?? 0}
+              />
+              <CardAlert tone="good">
+                {dash?.collectedToday > 0
+                  ? `✓ Today's collection ${inr(dash.collectedToday)} across ${dash.collectedTodayCount} receipt${dash.collectedTodayCount !== 1 ? "s" : ""}`
+                  : `✓ ${inrShort(fee?.collected ?? 0)} collected of ${inrShort(fee?.annualDemand ?? 0)} demand`}
+              </CardAlert>
+            </>
+          ) : tab === "rc" ? (
+            <PaymentList rows={recent} />
+          ) : (
+            <DuesList rows={dues} />
+          )
+        }
+      </ModuleCard>
+
+      {/* Academics */}
+      <ModuleCard icon={GraduationCap} title="Academics" to="/academics">
+        {academics.isLoading ? (
+          <CardLoading />
+        ) : academics.isError ? (
+          <CardErr />
+        ) : (
+          (() => {
+            const s = academics.data?.stats ?? {};
+            return (
+              <>
+                <StatTrio
+                  items={[
+                    { n: String(s.totalClasses ?? 0), k: "Classes" },
+                    { n: String(s.totalSections ?? 0), k: "Sections" },
+                    { n: String(s.activeSubjects ?? 0), k: "Subjects" },
+                  ]}
+                />
+                <MeterRow
+                  label="Timetable coverage"
+                  value={`${s.timetableCompletion ?? 0}%`}
+                  pct={s.timetableCompletion ?? 0}
+                />
+                <InfoRow label="Student : Teacher ratio" value={`${s.studentTeacherRatio ?? 0} : 1`} />
+                {(s.classesWithoutClassTeacher ?? 0) + (s.classesWithoutTimetable ?? 0) > 0 ? (
+                  <CardAlert tone="warning">
+                    ⚠ {s.classesWithoutClassTeacher ?? 0} without a class teacher ·{" "}
+                    {s.classesWithoutTimetable ?? 0} without timetable
+                  </CardAlert>
+                ) : (
+                  <CardAlert tone="good">✓ All classes staffed &amp; scheduled</CardAlert>
+                )}
+              </>
+            );
+          })()
+        )}
+      </ModuleCard>
+
+      {/* Human Resource */}
+      <ModuleCard icon={Users} title="Human Resource" to="/hr">
+        {hr.isLoading ? (
+          <CardLoading />
+        ) : hr.isError ? (
+          <CardErr />
+        ) : (
+          (() => {
+            const h = hr.data ?? {};
+            const dept = (h.byDepartment ?? []).slice(0, 4);
+            const max = Math.max(1, ...dept.map((d: any) => d.value));
+            return (
+              <>
+                <StatTrio
+                  items={[
+                    { n: String(h.total ?? 0), k: "Headcount" },
+                    { n: String(h.onLeave ?? 0), k: "On leave" },
+                    {
+                      n: String(h.pendingPayroll ?? 0),
+                      k: "Unpaid slips",
+                      tone: h.pendingPayroll > 0 ? "crit" : undefined,
+                    },
+                  ]}
+                />
+                <div className="mb-2 mt-3 text-xs text-muted-foreground">Headcount by department</div>
+                <MiniBars rows={dept.map((d: any) => ({ label: d.name, value: d.value, max }))} />
+              </>
+            );
+          })()
+        )}
+      </ModuleCard>
+
+      {/* Admissions funnel */}
+      <ModuleCard icon={ClipboardCheck} title="Admissions" to="/admissions">
+        {adm.isLoading ? (
+          <CardLoading />
+        ) : adm.isError ? (
+          <CardErr />
+        ) : (
+          (() => {
+            const map = new Map<string, number>(
+              (adm.data?.stages ?? []).map((s: any) => [s.stage, s.count]),
+            );
+            const g = (keys: string[]) => keys.reduce((s, k) => s + (map.get(k) ?? 0), 0);
+            const followUp = g(["under_review", "document_verification", "parent_verification"]);
+            return (
+              <>
+                <Funnel
+                  rows={[
+                    { label: "Enquiry", value: g(["draft", "submitted"]) },
+                    { label: "Follow-up", value: followUp },
+                    { label: "Verifying", value: g(["fee_assignment", "class_allocation"]) },
+                    { label: "Approved", value: g(["approved"]) },
+                  ]}
+                />
+                {followUp > 0 ? (
+                  <CardAlert tone="warning">⏰ {followUp} awaiting follow-up</CardAlert>
+                ) : (
+                  <CardAlert tone="good">✓ {map.get("admitted") ?? 0} admitted this year</CardAlert>
+                )}
+              </>
+            );
+          })()
+        )}
+      </ModuleCard>
+
+      {/* Assets */}
+      <ModuleCard icon={Package} title="Assets" to="/assets">
+        {assets.isLoading ? (
+          <CardLoading />
+        ) : assets.isError ? (
+          <CardErr />
+        ) : (
+          (() => {
+            const a = assets.data ?? {};
+            const st = a.stats ?? {};
+            const cats = (a.topCategories ?? []).slice(0, 3);
+            const max = Math.max(1, ...cats.map((c: any) => c.count));
+            return (
+              <>
+                <StatTrio
+                  items={[
+                    { n: String(st.total ?? 0), k: "Total assets" },
+                    { n: inrShort(a.totalValue ?? 0), k: "Book value" },
+                    {
+                      n: String(st.repair ?? 0),
+                      k: "Under repair",
+                      tone: st.repair > 0 ? "crit" : undefined,
+                    },
+                  ]}
+                />
+                <div className="mb-2 mt-3 text-xs text-muted-foreground">Top categories</div>
+                <MiniBars rows={cats.map((c: any) => ({ label: c.name, value: c.count, max }))} />
+                {st.repair > 0 && (
+                  <CardAlert tone="critical">
+                    ✖ {st.repair} asset{st.repair !== 1 ? "s" : ""} under repair
+                  </CardAlert>
+                )}
+              </>
+            );
+          })()
+        )}
+      </ModuleCard>
+
+      {/* Fleet */}
+      <ModuleCard icon={Bus} title="Fleet" to="/fleet">
+        {fleet.isLoading ? (
+          <CardLoading />
+        ) : fleet.isError ? (
+          <CardErr />
+        ) : (
+          (() => {
+            const f = fleet.data ?? {};
+            const v = f.vehicles ?? {};
+            const renewals = Array.isArray(f.renewals) ? f.renewals.length : (f.renewals ?? 0);
+            const max = Math.max(1, v.total ?? 0);
+            return (
+              <>
+                <StatTrio
+                  items={[
+                    { n: String(v.total ?? 0), k: "Vehicles" },
+                    { n: String(f.routes ?? 0), k: "Routes" },
+                    { n: inrShort(f.fuelSpend ?? 0), k: "Fuel (MTD)" },
+                  ]}
+                />
+                <div className="mb-2 mt-3 text-xs text-muted-foreground">Fleet status</div>
+                <MiniBars
+                  rows={[
+                    { label: "Active", value: v.active ?? 0, max },
+                    {
+                      label: "In maintenance",
+                      value: v.inMaintenance ?? 0,
+                      max,
+                      tone: "var(--warning, #d97706)",
+                    },
+                  ]}
+                />
+                {renewals > 0 && (
+                  <CardAlert tone="warning">
+                    ⏰ {renewals} renewal{renewals !== 1 ? "s" : ""} due soon
+                  </CardAlert>
+                )}
+              </>
+            );
+          })()
+        )}
+      </ModuleCard>
+    </div>
+  );
+}
+
+function PaymentList({ rows }: { rows: any[] }) {
+  if (!rows.length) return <EmptyNote text="No recent payments." />;
+  return (
+    <div className="divide-y">
+      {rows.slice(0, 5).map((p) => (
+        <div key={p.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+          <div className="min-w-0">
+            <div className="truncate font-medium">{p.name}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {[p.className, p.method ? p.method.toUpperCase() : null].filter(Boolean).join(" · ")}
+            </div>
+          </div>
+          <div className="whitespace-nowrap font-semibold text-emerald-600 dark:text-emerald-400">
+            +{inr(p.amount)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DuesList({ rows }: { rows: any[] }) {
+  if (!rows.length) return <EmptyNote text="No overdue accounts." />;
+  return (
+    <div className="divide-y">
+      {rows.slice(0, 5).map((d) => (
+        <div key={d.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+          <div className="min-w-0">
+            <div className="truncate font-medium">{d.name}</div>
+            <div className="text-[11px] text-muted-foreground">{d.days} days overdue</div>
+          </div>
+          <div className="whitespace-nowrap font-semibold text-red-600 dark:text-red-400">
+            {inr(d.amount)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyNote({ text }: { text: string }) {
+  return <div className="py-8 text-center text-xs text-muted-foreground">{text}</div>;
+}
+
+function CardErr() {
+  return (
+    <div className="grid flex-1 place-items-center py-8 text-xs text-muted-foreground">
+      Couldn't load this module.
+    </div>
   );
 }
 

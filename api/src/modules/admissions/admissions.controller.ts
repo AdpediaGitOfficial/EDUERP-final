@@ -142,6 +142,12 @@ export class AdmissionsController {
     return this.svc.createDraft(actor, dto);
   }
 
+  /** Enquiry counts per pipeline stage — powers the admin dashboard funnel. */
+  @Get("stage-counts")
+  stageCounts(@CurrentUser() actor: AuthUser) {
+    return this.svc.stageCounts(actor);
+  }
+
   /** Preview/reserve the next admission + roll numbers for the wizard's Auto buttons. */
   @Get("next-numbers")
   nextNumbers(@CurrentUser() actor: AuthUser, @Query("classId") classId?: string) {

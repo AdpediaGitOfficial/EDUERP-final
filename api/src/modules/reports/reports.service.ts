@@ -225,7 +225,7 @@ export class ReportsService {
     }
 
     // Upcoming holidays, defaulters, activity feed.
-    const [upcoming, defaulterRows, recentAdmissions, recentPayments, recentComplaints] =
+    const [upcoming, defaulterRows, recentAdmissions, recentPayments0, recentComplaints] =
       await Promise.all([
         this.prisma.holidays.findMany({
           where: { start_date: { gte: today } },
@@ -256,12 +256,18 @@ export class ReportsService {
         this.prisma.payments.findMany({
           where: { status: "successful" },
           orderBy: { paid_at: "desc" },
-          take: 5,
+          take: 6,
           select: {
             id: true,
             amount: true,
             paid_at: true,
-            students: { select: { profiles: { select: { full_name: true } } } },
+            method: true,
+            students: {
+              select: {
+                profiles: { select: { full_name: true } },
+                classes: { select: { name: true, section: true } },
+              },
+            },
           },
         }),
         this.prisma.complaints.findMany({
@@ -289,7 +295,7 @@ export class ReportsService {
         at: a.created_at,
         text: `${a.profiles?.full_name ?? a.admission_no} admitted`,
       })),
-      ...recentPayments.map((p) => ({
+      ...recentPayments0.map((p) => ({
         kind: "payment" as const,
         tone: "text-emerald-600",
         at: p.paid_at,
@@ -370,7 +376,29 @@ export class ReportsService {
     const collectedPrevMonth = num(collectedPrevMonthAgg._sum.amount);
     const attYesterdayPct = pctPresent(attYesterday).pct;
 
+    // Fees card: whole-year demand vs collected (not just this month).
+    const annualDemand = feeRows.reduce((s, f) => s + num(f.amount_due), 0);
+    const collectedTotal = feeRows.reduce((s, f) => s + num(f.amount_paid), 0);
+    const feeSummary = {
+      annualDemand,
+      collected: collectedTotal,
+      pending: dueTotal,
+      collectionPct: annualDemand ? (collectedTotal / annualDemand) * 100 : 0,
+    };
+    const recentPayments = recentPayments0.map((p) => ({
+      id: p.id,
+      name: p.students?.profiles?.full_name ?? "A student",
+      className: p.students?.classes
+        ? `${p.students.classes.name}${p.students.classes.section ? " · " + p.students.classes.section : ""}`
+        : null,
+      method: p.method ?? null,
+      amount: num(p.amount),
+      at: p.paid_at,
+    }));
+
     return {
+      feeSummary,
+      recentPayments,
       studentCount,
       teacherCount,
       staffCount,
