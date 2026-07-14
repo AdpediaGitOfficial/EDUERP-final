@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   Res,
@@ -182,6 +184,39 @@ class CollectPaymentsDto {
   lines: CollectLineDto[];
 }
 
+class CreateFeeTypeDto {
+  @IsString()
+  @MinLength(1)
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+class UpdateFeeTypeDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
 class SendRemindersDto {
   @IsArray()
   @ArrayNotEmpty()
@@ -339,5 +374,31 @@ export class FeesController {
   @Roles("admin")
   assign(@CurrentUser() actor: AuthUser, @Body() dto: AssignStructureDto) {
     return this.fees.assignStructure(actor, dto.structureId, dto.dueDate, dto.classId);
+  }
+
+  // ============================ Fee Types ============================
+
+  @Get("fees/types")
+  @Roles("admin", "accountant")
+  listFeeTypes(@Query("includeInactive") includeInactive?: string) {
+    return this.fees.listFeeTypes(includeInactive === "1" || includeInactive === "true");
+  }
+
+  @Post("fees/types")
+  @Roles("admin")
+  createFeeType(@Body() dto: CreateFeeTypeDto) {
+    return this.fees.createFeeType(dto);
+  }
+
+  @Patch("fees/types/:id")
+  @Roles("admin")
+  updateFeeType(@Param("id") id: string, @Body() dto: UpdateFeeTypeDto) {
+    return this.fees.updateFeeType(id, dto);
+  }
+
+  @Delete("fees/types/:id")
+  @Roles("admin")
+  deleteFeeType(@Param("id") id: string) {
+    return this.fees.deleteFeeType(id);
   }
 }

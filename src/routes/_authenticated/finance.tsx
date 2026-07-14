@@ -14,8 +14,14 @@ export const Route = createFileRoute("/_authenticated/finance")({
 const NAV: TabItem[] = [
   { to: "/finance", label: "Dashboard", exact: true },
   { to: "/finance/collection", label: "Collection" },
-  { to: "/finance/fees", label: "Fees" },
   { to: "/finance/payments", label: "Payments" },
+  {
+    label: "Setup",
+    items: [
+      { to: "/finance/fees", label: "Fee Structures" },
+      { to: "/finance/fee-types", label: "Fee Types" },
+    ],
+  },
   { to: "/finance/expenses", label: "Expenses" },
   { to: "/finance/ledger", label: "Ledger" },
   { to: "/finance/reconciliation", label: "Reconciliation" },

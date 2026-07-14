@@ -594,6 +594,19 @@ model fee_structures {
   @@schema("public")
 }
 
+/// Named fee heads (Tuition, Admission, Transport, …) that Fee Groups are
+/// composed from. The DB enforces a case-insensitive unique name.
+model fee_types {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  category    String   @default("other")
+  description String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@schema("public")
+}
+
 /// Reminder audit log for the Fees Collection "Due Fees" list — one row per
 /// (student, channel) each time a payment reminder is sent to a parent.
 model fee_reminders {

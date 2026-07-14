@@ -941,4 +941,68 @@ export class FeesService {
       sentAt: r.created_at,
     }));
   }
+
+  // ============================ Fee Types ============================
+
+  private feeTypeRow(t: {
+    id: string;
+    name: string;
+    category: string;
+    description: string | null;
+    is_active: boolean;
+    created_at: Date;
+  }) {
+    return {
+      id: t.id,
+      name: t.name,
+      category: t.category,
+      description: t.description,
+      isActive: t.is_active,
+      createdAt: t.created_at,
+    };
+  }
+
+  async listFeeTypes(includeInactive = false) {
+    const rows = await this.prisma.fee_types.findMany({
+      where: includeInactive ? {} : { is_active: true },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+    });
+    return rows.map((r) => this.feeTypeRow(r));
+  }
+
+  async createFeeType(dto: { name: string; category?: string; description?: string }) {
+    const row = await this.prisma.fee_types.create({
+      data: {
+        name: dto.name.trim(),
+        category: dto.category?.trim() || "other",
+        description: dto.description?.trim() || null,
+      },
+    });
+    return this.feeTypeRow(row);
+  }
+
+  async updateFeeType(
+    id: string,
+    dto: { name?: string; category?: string; description?: string; isActive?: boolean },
+  ) {
+    const existing = await this.prisma.fee_types.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Fee type not found");
+    const row = await this.prisma.fee_types.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.category !== undefined ? { category: dto.category.trim() || "other" } : {}),
+        ...(dto.description !== undefined ? { description: dto.description.trim() || null } : {}),
+        ...(dto.isActive !== undefined ? { is_active: dto.isActive } : {}),
+      },
+    });
+    return this.feeTypeRow(row);
+  }
+
+  async deleteFeeType(id: string) {
+    const existing = await this.prisma.fee_types.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Fee type not found");
+    await this.prisma.fee_types.delete({ where: { id } });
+    return { ok: true };
+  }
 }
