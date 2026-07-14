@@ -58,6 +58,16 @@ function AdmissionsPage() {
     queryFn: () => apiGet<{ rows: Row[]; total: number }>(`/admissions?${params}`),
   });
 
+  // Per-stage counts so the filter dropdown shows how many are in each stage
+  // (makes an empty result self-explanatory instead of looking broken).
+  const { data: counts } = useQuery({
+    queryKey: ["admission-stage-counts"],
+    queryFn: () => apiGet<{ stages: { stage: string; count: number }[]; total: number }>(
+      "/admissions/stage-counts",
+    ),
+  });
+  const countFor = (s: string) => counts?.stages.find((x) => x.stage === s)?.count ?? 0;
+
   return (
     <AppShell>
       <PageHeader
@@ -88,10 +98,10 @@ function AdmissionsPage() {
             <SelectValue placeholder="Stage: all" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Stage: all</SelectItem>
+            <SelectItem value="all">Stage: all ({counts?.total ?? 0})</SelectItem>
             {[...ADMISSION_STAGES, "rejected"].map((s) => (
               <SelectItem key={s} value={s}>
-                {STAGE_LABEL[s]}
+                {STAGE_LABEL[s]} ({countFor(s)})
               </SelectItem>
             ))}
           </SelectContent>
