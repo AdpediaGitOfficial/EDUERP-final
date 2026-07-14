@@ -224,7 +224,7 @@ function Dashboard() {
                     <td className="p-3 text-right font-semibold">{c.students}</td>
                     <td className="p-3 text-right">
                       <Link
-                        to="/classes"
+                        to="/academics/classes"
                         className="inline-flex text-muted-foreground hover:text-foreground"
                         aria-label={`Open ${c.name}`}
                       >

@@ -11,15 +11,15 @@ export const Route = createFileRoute("/_authenticated/academics")({
   ),
 });
 
-// The workspace shell. Sub-pages Classes and Timetable still live at their own
-// top-level routes today; the tab bar links out to them and highlights by path.
+// The workspace shell. Timetable still lives at its own top-level route today;
+// the tab bar links out to it and highlights by path.
 const NAV: TabItem[] = [
   { to: "/academics", label: "Dashboard", exact: true },
   {
     label: "Structure",
     items: [
       { to: "/academics/sessions", label: "Sessions" },
-      { to: "/classes", label: "Classes" },
+      { to: "/academics/classes", label: "Classes" },
       { to: "/academics/subjects", label: "Subjects" },
       { to: "/academics/rooms", label: "Rooms" },
     ],
