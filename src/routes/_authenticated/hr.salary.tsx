@@ -568,8 +568,86 @@ function SetSalaryTab() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  // Bulk-assign a template to everyone who has no salary structure yet.
+  const { data: coverage } = useQuery({
+    queryKey: ["payroll-coverage"],
+    queryFn: () => apiGet<{ activeStaff: number; withSalary: number; withoutSalary: number }>(
+      "/hr/payroll/coverage",
+    ),
+  });
+  const [bulkTpl, setBulkTpl] = useState<string>("");
+  const [bulkEff, setBulkEff] = useState(new Date().toISOString().slice(0, 10));
+  const bulkAssign = useMutation({
+    mutationFn: async () => {
+      if (!bulkTpl) throw new Error("Pick a template first");
+      const res = await apiFetch("/hr/salary/bulk-assign", {
+        method: "POST",
+        body: JSON.stringify({ templateId: bulkTpl, effectiveFrom: bulkEff }),
+      });
+      if (!res || !res.ok) {
+        const b = res ? await res.json().catch(() => null) : null;
+        throw new Error(b?.message ?? "Could not assign salaries");
+      }
+      return res.json();
+    },
+    onSuccess: (r: any) => {
+      toast.success(`Assigned salary to ${r.assigned} staff${r.skipped ? `, ${r.skipped} skipped` : ""}`);
+      qc.invalidateQueries({ queryKey: ["payroll-coverage"] });
+      qc.invalidateQueries({ queryKey: ["employee-salary", staffId] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const without = coverage?.withoutSalary ?? 0;
+
   return (
-    <div className="grid lg:grid-cols-[320px_1fr] gap-4">
+    <div className="space-y-4">
+      {without > 0 && (
+        <Card className="rounded-2xl p-4 border-amber-300/60 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h3 className="font-semibold text-amber-900 dark:text-amber-200">
+                {without} of {coverage?.activeStaff} staff have no salary set
+              </h3>
+              <p className="text-sm text-amber-800/80 dark:text-amber-200/70">
+                Assign a template to everyone without a structure so they flow into payroll.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[12rem]">
+                <Label className="text-xs">Template</Label>
+                <Select value={bulkTpl} onValueChange={setBulkTpl}>
+                  <SelectTrigger aria-label="Bulk template">
+                    <SelectValue placeholder="Choose template…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(templates ?? []).map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Effective from</Label>
+                <Input
+                  type="date"
+                  value={bulkEff}
+                  onChange={(e) => setBulkEff(e.target.value)}
+                  aria-label="Bulk effective from"
+                />
+              </div>
+              <Button
+                onClick={() => bulkAssign.mutate()}
+                disabled={!bulkTpl || bulkAssign.isPending}
+              >
+                {bulkAssign.isPending ? "Assigning…" : `Assign to all ${without}`}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+      <div className="grid lg:grid-cols-[320px_1fr] gap-4">
       {/* Employee picker */}
       <Card className="rounded-2xl p-3 h-fit">
         <Input
@@ -735,6 +813,7 @@ function SetSalaryTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

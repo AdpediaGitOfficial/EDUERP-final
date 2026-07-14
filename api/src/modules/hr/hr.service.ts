@@ -1052,6 +1052,100 @@ export class HrService {
     return { ok: true };
   }
 
+  /**
+   * Salary coverage — how many active staff have / don't have a structure.
+   * Drives the "N staff have no salary set → they won't be paid" banner.
+   */
+  async payrollCoverage(actor: AuthUser) {
+    if (!this.canReadPayroll(actor)) throw new ForbiddenException();
+    const [activeStaff, withSalary] = await Promise.all([
+      this.prisma.staff.count({ where: { status: "active" } }),
+      this.prisma.hr_salary_structures.count({ where: { staff: { status: "active" } } }),
+    ]);
+    return { activeStaff, withSalary, withoutSalary: Math.max(0, activeStaff - withSalary) };
+  }
+
+  /**
+   * Assign a salary template to every active staff member who has no structure
+   * yet — the one-click way to make payroll functional at scale. Copies the
+   * template's components verbatim; existing structures are left untouched.
+   */
+  async bulkAssignSalary(actor: AuthUser, templateId: string, effectiveFrom?: string) {
+    this.requireHr(actor);
+    const tpl = await this.prisma.hr_salary_templates.findUnique({ where: { id: templateId } });
+    if (!tpl) throw new BadRequestException("Unknown salary template");
+    const missing = await this.prisma.staff.findMany({
+      where: { status: "active", salary_structure: { is: null } },
+      select: { id: true },
+    });
+    if (missing.length === 0) return { assigned: 0, skipped: 0 };
+    const eff = effectiveFrom ? new Date(effectiveFrom) : new Date();
+    const base = {
+      template_id: tpl.id,
+      effective_from: eff,
+      basic: tpl.basic,
+      earnings: tpl.earnings as Prisma.InputJsonValue,
+      deductions: tpl.deductions as Prisma.InputJsonValue,
+      pf_enabled: tpl.pf_enabled,
+      esi_enabled: tpl.esi_enabled,
+      pt_enabled: tpl.pt_enabled,
+      tds_enabled: tpl.tds_enabled,
+      tds_amount: tpl.tds_amount,
+    };
+    const res = await this.prisma.hr_salary_structures.createMany({
+      data: missing.map((s) => ({ staff_id: s.id, ...base })),
+      skipDuplicates: true, // a concurrent assign for the same staff is skipped, not an error
+    });
+    return { assigned: res.count, skipped: missing.length - res.count };
+  }
+
+  /**
+   * Cross-month salary dues — every *pending* (unpaid) payroll run, with a
+   * summary of who is owed and how much. Powers the "Salary Pending / Dues"
+   * view. Paying uses the existing payPayrollRun endpoint.
+   */
+  async payrollDues(actor: AuthUser, opts: { department?: string } = {}) {
+    if (!this.canReadPayroll(actor)) throw new ForbiddenException();
+    const rows = await this.prisma.payroll_runs.findMany({
+      where: {
+        status: "pending",
+        ...(opts.department ? { staff: { department: opts.department } } : {}),
+      },
+      include: {
+        staff: {
+          select: { full_name: true, employee_code: true, department: true, designation: true },
+        },
+      },
+      orderBy: [{ month: "asc" }, { staff: { full_name: "asc" } }],
+    });
+    const staffSet = new Set<string>();
+    let totalDue = 0;
+    let oldestMonth: Date | null = null;
+    const items = rows.map((r) => {
+      staffSet.add(r.staff_id);
+      totalDue += Number(r.net_salary || 0);
+      if (!oldestMonth || r.month < oldestMonth) oldestMonth = r.month;
+      return {
+        id: r.id,
+        staffName: r.staff?.full_name ?? null,
+        employeeCode: r.staff?.employee_code ?? null,
+        department: r.staff?.department ?? null,
+        designation: r.staff?.designation ?? null,
+        month: r.month,
+        netSalary: r.net_salary,
+      };
+    });
+    return {
+      summary: {
+        totalDue: this.round2(totalDue),
+        runCount: items.length,
+        staffCount: staffSet.size,
+        oldestMonth,
+      },
+      rows: items,
+    };
+  }
+
   // ── Loans & advances: request → approve → disburse → repay ──────────────────
   private static readonly LOAN_STATUSES = ["pending", "approved", "active", "closed", "rejected"];
 

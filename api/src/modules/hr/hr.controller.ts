@@ -151,6 +151,10 @@ class EmployeeSalaryDto extends SalaryComponentsDto {
   @IsOptional() @IsDateString() effective_from?: string;
   @IsOptional() @IsString() notes?: string;
 }
+class BulkAssignSalaryDto {
+  @IsUUID() templateId: string;
+  @IsOptional() @IsDateString() effectiveFrom?: string;
+}
 
 class LoanDto {
   @IsUUID() staff_id: string;
@@ -462,6 +466,21 @@ export class HrController {
   @Delete("salary-templates/:id")
   deleteSalaryTemplate(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
     return this.hr.deleteSalaryTemplate(actor, id);
+  }
+
+  @Post("salary/bulk-assign")
+  bulkAssignSalary(@CurrentUser() actor: AuthUser, @Body() dto: BulkAssignSalaryDto) {
+    return this.hr.bulkAssignSalary(actor, dto.templateId, dto.effectiveFrom);
+  }
+
+  @Get("payroll/coverage")
+  payrollCoverage(@CurrentUser() actor: AuthUser) {
+    return this.hr.payrollCoverage(actor);
+  }
+
+  @Get("payroll/dues")
+  payrollDues(@CurrentUser() actor: AuthUser, @Query("department") department?: string) {
+    return this.hr.payrollDues(actor, { department });
   }
 
   @Get("staff/:id/salary")
