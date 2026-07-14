@@ -20,6 +20,7 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import { streamReceiptPdf } from "../../common/pdf/receipt-pdf";
 import { streamCollectionReceiptPdf } from "../../common/pdf/collection-receipt-pdf";
+import { streamChallanPdf } from "../../common/pdf/challan-pdf";
 import { Type } from "class-transformer";
 import {
   ArrayNotEmpty,
@@ -324,6 +325,28 @@ class UnassignGroupDto {
   studentIds: string[];
 }
 
+class GenerateChallanDto {
+  @IsUUID()
+  studentId: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID("all", { each: true })
+  feeAssignmentIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
 class SendRemindersDto {
   @IsArray()
   @ArrayNotEmpty()
@@ -571,5 +594,54 @@ export class FeesController {
   @Roles("admin")
   unassignGroup(@Body() dto: UnassignGroupDto) {
     return this.fees.unassignGroup(dto.groupId, dto.studentIds);
+  }
+
+  // ============================ Fee Challans ============================
+
+  @Get("fees/challans")
+  @Roles("admin", "accountant")
+  listChallans(
+    @CurrentUser() actor: AuthUser,
+    @Query("studentId") studentId?: string,
+    @Query("status") status?: string,
+    @Query("page", new ParseIntPipe({ optional: true })) page?: number,
+    @Query("pageSize", new ParseIntPipe({ optional: true })) pageSize?: number,
+  ) {
+    return this.fees.listChallans(actor, { studentId, status, page, pageSize });
+  }
+
+  @Get("fees/challans/:id")
+  @Roles("admin", "accountant")
+  getChallan(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.fees.getChallan(actor, id);
+  }
+
+  @Post("fees/challans")
+  @Roles("admin", "accountant")
+  generateChallan(@CurrentUser() actor: AuthUser, @Body() dto: GenerateChallanDto) {
+    return this.fees.generateChallan(actor, dto);
+  }
+
+  @Get("fees/challans/:id/pdf")
+  @Roles("admin", "accountant")
+  async challanPdf(
+    @CurrentUser() actor: AuthUser,
+    @Param("id") id: string,
+    @Res() res: Response,
+  ) {
+    const data = await this.fees.challanForPdf(actor, id);
+    streamChallanPdf(res, { schoolName: SCHOOL_NAME, ...data });
+  }
+
+  @Post("fees/challans/:id/send")
+  @Roles("admin", "accountant")
+  sendChallan(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.fees.sendChallan(actor, id);
+  }
+
+  @Patch("fees/challans/:id/cancel")
+  @Roles("admin", "accountant")
+  cancelChallan(@CurrentUser() actor: AuthUser, @Param("id") id: string) {
+    return this.fees.cancelChallan(actor, id);
   }
 }

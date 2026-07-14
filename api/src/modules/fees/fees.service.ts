@@ -1276,4 +1276,195 @@ export class FeesService {
     ]);
     return { removed: removed.count, protectedPaid };
   }
+
+  // ============================ Fee Challans ============================
+
+  private genChallanNo() {
+    const d = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    return `CHL-${d}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  }
+
+  private challanListRow(c: any) {
+    const cls = c.students?.classes;
+    return {
+      id: c.id,
+      challanNo: c.challan_no,
+      studentName: c.students?.profiles?.full_name ?? null,
+      admissionNo: c.students?.admission_no ?? null,
+      className: cls ? `${cls.name}${cls.section ? " · " + cls.section : ""}` : null,
+      title: c.title,
+      status: c.status,
+      total: Number(c.total_amount),
+      items: c._count?.fee_challan_items ?? undefined,
+      dueDate: c.due_date,
+      createdAt: c.created_at,
+    };
+  }
+
+  async generateChallan(
+    actor: AuthUser,
+    dto: {
+      studentId: string;
+      feeAssignmentIds?: string[];
+      title?: string;
+      dueDate?: string;
+      notes?: string;
+    },
+  ) {
+    this.ensureCollector(actor);
+    const student = await this.prisma.students.findUnique({
+      where: { id: dto.studentId },
+      select: { id: true },
+    });
+    if (!student) throw new NotFoundException("Student not found");
+    const assignments = await this.prisma.fee_assignments.findMany({
+      where: {
+        student_id: dto.studentId,
+        ...(dto.feeAssignmentIds?.length ? { id: { in: dto.feeAssignmentIds } } : {}),
+      },
+      select: { id: true, title: true, amount_due: true, amount_paid: true },
+    });
+    const items = assignments
+      .map((a) => ({
+        id: a.id,
+        label: a.title,
+        balance: this.round2(Number(a.amount_due) - Number(a.amount_paid)),
+      }))
+      .filter((i) => i.balance > 0.009);
+    if (!items.length)
+      throw new BadRequestException("No outstanding dues to bill on this challan.");
+    const total = this.round2(items.reduce((s, i) => s + i.balance, 0));
+    const challan = await this.prisma.fee_challans.create({
+      data: {
+        challan_no: this.genChallanNo(),
+        student_id: dto.studentId,
+        title: dto.title?.trim() || null,
+        notes: dto.notes?.trim() || null,
+        total_amount: total,
+        due_date: dto.dueDate ? new Date(dto.dueDate) : null,
+        created_by: actor.id,
+        fee_challan_items: {
+          create: items.map((i) => ({
+            fee_assignment_id: i.id,
+            label: i.label,
+            amount: i.balance,
+          })),
+        },
+      },
+    });
+    return this.getChallan(actor, challan.id);
+  }
+
+  async listChallans(
+    actor: AuthUser,
+    opts: { studentId?: string; status?: string; page?: number; pageSize?: number },
+  ) {
+    this.ensureCollector(actor);
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(opts.pageSize ?? 50, 200);
+    const where: Prisma.fee_challansWhereInput = {
+      ...(opts.studentId ? { student_id: opts.studentId } : {}),
+      ...(opts.status ? { status: opts.status } : {}),
+    };
+    const [total, rows] = await Promise.all([
+      this.prisma.fee_challans.count({ where }),
+      this.prisma.fee_challans.findMany({
+        where,
+        orderBy: { created_at: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          students: {
+            select: {
+              admission_no: true,
+              profiles: { select: { full_name: true } },
+              classes: { select: { name: true, section: true } },
+            },
+          },
+          _count: { select: { fee_challan_items: true } },
+        },
+      }),
+    ]);
+    return { total, page, pageSize, rows: rows.map((c) => this.challanListRow(c)) };
+  }
+
+  async getChallan(actor: AuthUser, id: string) {
+    this.ensureCollector(actor);
+    const c = await this.prisma.fee_challans.findUnique({
+      where: { id },
+      include: {
+        students: {
+          select: {
+            admission_no: true,
+            profiles: { select: { full_name: true } },
+            classes: { select: { name: true, section: true } },
+          },
+        },
+        fee_challan_items: {
+          include: { fee_assignments: { select: { amount_due: true, amount_paid: true } } },
+        },
+      },
+    });
+    if (!c) throw new NotFoundException("Challan not found");
+    const items = c.fee_challan_items.map((it) => {
+      const bal = it.fee_assignments
+        ? this.round2(Number(it.fee_assignments.amount_due) - Number(it.fee_assignments.amount_paid))
+        : null;
+      return {
+        id: it.id,
+        label: it.label,
+        amount: Number(it.amount),
+        currentBalance: bal,
+      };
+    });
+    const settled =
+      items.length > 0 && items.every((i) => i.currentBalance != null && i.currentBalance <= 0.009);
+    return { ...this.challanListRow(c), notes: c.notes, items, settled };
+  }
+
+  async challanForPdf(actor: AuthUser, id: string) {
+    const detail = await this.getChallan(actor, id);
+    return {
+      challanNo: detail.challanNo,
+      createdAt: detail.createdAt as Date,
+      dueDate: detail.dueDate as Date | null,
+      studentName: detail.studentName,
+      admissionNo: detail.admissionNo,
+      className: detail.className,
+      title: detail.title,
+      notes: detail.notes,
+      items: detail.items.map((i) => ({ label: i.label ?? "Fee", amount: i.amount })),
+      total: detail.total,
+    };
+  }
+
+  async sendChallan(actor: AuthUser, id: string) {
+    this.ensureCollector(actor);
+    const c = await this.prisma.fee_challans.findUnique({
+      where: { id },
+      include: { students: { select: { parent_student: { select: { parent_id: true } } } } },
+    });
+    if (!c) throw new NotFoundException("Challan not found");
+    const parentIds = c.students.parent_student.map((p) => p.parent_id);
+    const res = await this.notifications.notify({
+      senderId: actor.id,
+      userIds: parentIds,
+      subject: `Fee Challan ${c.challan_no}`,
+      body: `A fee challan of INR ${Number(c.total_amount).toFixed(2)} has been issued${
+        c.due_date ? `, payable by ${c.due_date.toISOString().slice(0, 10)}` : ""
+      }.`,
+    });
+    return { ok: true, notified: res.recipients };
+  }
+
+  async cancelChallan(actor: AuthUser, id: string) {
+    this.ensureCollector(actor);
+    const existing = await this.prisma.fee_challans.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Challan not found");
+    const row = await this.prisma.fee_challans.update({
+      where: { id },
+      data: { status: "cancelled" },
+    });
+    return { ok: true, status: row.status };
+  }
 }
