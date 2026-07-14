@@ -329,6 +329,47 @@ export class ReportsService {
       .reduce((s, p) => s + num(p.amount), 0);
     const efficiency = { thisPct: (cThis / invoiced) * 100, lastPct: (cLast / invoiced) * 100 };
 
+    // ---- KPI "today" pulse + period-over-period deltas ----
+    // Operational tiles (collected today, leaves today) and the deltas that let
+    // each KPI show movement (▲/▼ vs the prior period) instead of a flat number.
+    const tomorrow = new Date(y, m, now.getDate() + 1);
+    const prevMonthStart = new Date(y, m - 1, 1);
+    const yesterday = new Date(y, m, now.getDate() - 1);
+    const [
+      collectedTodayAgg,
+      collectedPrevMonthAgg,
+      newStudentsMonth,
+      newStaffMonth,
+      leavesToday,
+      pendingLeaves,
+      attYesterday,
+    ] = await Promise.all([
+      this.prisma.payments.aggregate({
+        where: { paid_at: { gte: today, lt: tomorrow }, status: "successful" },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.payments.aggregate({
+        where: { paid_at: { gte: prevMonthStart, lt: monthStart }, status: "successful" },
+        _sum: { amount: true },
+      }),
+      this.prisma.students.count({ where: { created_at: { gte: monthStart } } }),
+      this.prisma.staff.count({ where: { created_at: { gte: monthStart } } }),
+      this.prisma.leave_requests.count({
+        where: { status: "approved", start_date: { lte: today }, end_date: { gte: today } },
+      }),
+      this.prisma.leave_requests.count({ where: { status: "pending" } }),
+      this.prisma.attendance.groupBy({
+        by: ["status"],
+        where: { date: yesterday },
+        _count: { _all: true },
+      }),
+    ]);
+    const collectedToday = num(collectedTodayAgg._sum.amount);
+    const collectedTodayCount = collectedTodayAgg._count._all;
+    const collectedPrevMonth = num(collectedPrevMonthAgg._sum.amount);
+    const attYesterdayPct = pctPresent(attYesterday).pct;
+
     return {
       studentCount,
       teacherCount,
@@ -337,6 +378,14 @@ export class ReportsService {
       dueTotal,
       pendingCount,
       collectedMonth,
+      collectedToday,
+      collectedTodayCount,
+      collectedPrevMonth,
+      newStudentsMonth,
+      newStaffMonth,
+      leavesToday,
+      pendingLeaves,
+      attYesterdayPct,
       expenseMonth,
       payrollMonth,
       openComplaints,

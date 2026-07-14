@@ -7,6 +7,8 @@ import { apiFetch, apiGet } from "@/lib/api/client";
 import { CHART, CHART_SUCCESS, CHART_DANGER, CHART_INFO, chartColor } from "@/lib/chart";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { KpiTile, SectionLabel } from "@/components/dashboard/kpi";
+import { inrShort } from "@/lib/money";
 import {
   UserPlus,
   CalendarPlus,
@@ -107,15 +109,6 @@ function MiniStat({
   );
 }
 
-/** Subtle group heading so a wall of stat cards reads as organized sections. */
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-      {children}
-    </div>
-  );
-}
-
 function Dashboard() {
   const { user } = useCurrentUser();
   return (
@@ -138,13 +131,6 @@ function Dashboard() {
 }
 
 function AdminDashboard({ fullName }: { fullName: string }) {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const monthStart = new Date(y, m, 1).toISOString();
-  const todayStr = now.toISOString().slice(0, 10);
-  const yr = `${y}–${y + 1}`;
-
   const {
     data: dash,
     isLoading: dashLoading,
@@ -196,6 +182,20 @@ function AdminDashboard({ fullName }: { fullName: string }) {
   const netPositive = netPosition >= 0;
   const effDelta = (efficiency?.thisPct ?? 0) - (efficiency?.lastPct ?? 0);
 
+  // KPI command-strip deltas & sparklines (period-over-period movement).
+  const attPct = extras?.attPct ?? 0;
+  const attDelta = attPct - (dash?.attYesterdayPct ?? 0);
+  const prevMo = dash?.collectedPrevMonth ?? 0;
+  const incomeDelta = prevMo ? (((data?.collectedMonth ?? 0) - prevMo) / prevMo) * 100 : null;
+  const attSpark = (attTrend ?? []).slice(-14).map((d: any) => d.students as number);
+  const incomeSpark = (trend ?? []).map((t: any) => t.revenue as number);
+  const newStu = dash?.newStudentsMonth ?? 0;
+  const newStf = dash?.newStaffMonth ?? 0;
+  const leavesToday = dash?.leavesToday ?? 0;
+  const pendingLeaves = dash?.pendingLeaves ?? 0;
+  const collectedToday = dash?.collectedToday ?? 0;
+  const collectedTodayCount = dash?.collectedTodayCount ?? 0;
+
   if (dashError) {
     return (
       <>
@@ -234,71 +234,91 @@ function AdminDashboard({ fullName }: { fullName: string }) {
         title={`Welcome ${fullName.split(" ")[0]}`}
         subtitle="Overview of your school's operations."
       />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-2xl overflow-hidden relative min-h-[240px] bg-[oklch(0.9_0.08_240)] p-6">
-          <div className="absolute top-4 right-4 rounded-xl bg-white/80 backdrop-blur px-4 py-2 flex items-center gap-2">
-            <CalendarPlus className="size-4 text-primary" />
-            <div className="text-xs">
-              <div className="text-muted-foreground">Academic Year</div>
-              <div className="font-semibold">{yr}</div>
-            </div>
-          </div>
-          <svg
-            viewBox="0 0 400 200"
-            className="absolute bottom-0 left-0 w-full"
-            preserveAspectRatio="none"
-          >
-            <path
-              d="M0,150 Q100,90 200,120 T400,110 L400,200 L0,200 Z"
-              fill="oklch(0.75 0.15 145)"
-              opacity="0.7"
-            />
-            <path
-              d="M0,170 Q100,130 200,150 T400,140 L400,200 L0,200 Z"
-              fill="oklch(0.65 0.15 145)"
-            />
-            <circle cx="320" cy="60" r="16" fill="oklch(0.85 0.15 80)" />
-            <polygon points="120,155 130,130 140,155" fill="oklch(0.45 0.15 275)" />
-            <polygon points="260,158 270,128 280,158" fill="oklch(0.45 0.15 275)" />
-            <circle cx="180" cy="150" r="6" fill="oklch(0.6 0.15 25)" />
-            <rect x="177" y="150" width="6" height="15" fill="oklch(0.5 0.15 275)" />
-            <circle cx="210" cy="145" r="6" fill="oklch(0.55 0.15 240)" />
-            <rect x="207" y="145" width="6" height="18" fill="oklch(0.55 0.15 240)" />
-          </svg>
-        </div>
-        <div className="grid grid-cols-1 gap-4">
-          <StatCard
-            label="Total Students"
-            value={String(data?.studentCount ?? 0)}
-            subtitle="enrolled"
-            tone="sky"
-          />
-          <StatCard
-            label="Teachers"
-            value={String(data?.teacherCount ?? 0)}
-            subtitle="teaching staff"
-            tone="indigo"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-        <StatCard
-          label="Collected this month"
-          value={money(data?.collectedMonth ?? 0)}
-          subtitle="revenue"
+      {/* KPI command strip — dense, analytics-driven, with deltas and live/critical chips. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        <KpiTile
+          label="Students"
+          value={String(data?.studentCount ?? 0)}
+          to="/students"
+          delta={{
+            text: `${newStu > 0 ? "+" : ""}${newStu}`,
+            dir: newStu > 0 ? "up" : "flat",
+            sub: "this month",
+          }}
+        />
+        <KpiTile
+          label="Staff"
+          value={String(data?.staffCount ?? 0)}
+          to="/hr/staff"
+          delta={{
+            text: `${newStf > 0 ? "+" : ""}${newStf}`,
+            dir: newStf > 0 ? "up" : "flat",
+            sub: "new joins",
+          }}
+        />
+        <KpiTile
+          label="Attendance"
+          value={`${attPct.toFixed(1)}%`}
+          to="/attendance-overview"
+          spark={attSpark}
+          delta={{
+            text: `${Math.abs(attDelta).toFixed(1)} pts`,
+            dir: attDelta >= 0 ? "up" : "down",
+            sub: "vs yest",
+          }}
+        />
+        <KpiTile
+          label="Collected today"
+          value={inrShort(collectedToday)}
           tone="violet"
+          chip={{ label: "Live", tone: "live" }}
+          delta={
+            collectedTodayCount
+              ? { text: String(collectedTodayCount), sub: "receipts" }
+              : undefined
+          }
         />
-        <StatCard
-          label="Pending Dues"
-          value={money(data?.dueTotal ?? 0)}
-          subtitle={`${data?.pendingCount ?? 0} outstanding`}
+        <KpiTile
+          label="Fees due"
+          value={inrShort(data?.dueTotal ?? 0)}
           tone="coral"
+          chip={{ label: "Critical", tone: "critical" }}
+          delta={{ text: String(data?.pendingCount ?? 0), sub: "students" }}
         />
-        <StatCard
-          label="Sections"
-          value={String(data?.classCount ?? 0)}
-          subtitle="classes running"
-          tone="indigo"
+        <KpiTile
+          label="Income (MTD)"
+          value={inrShort(data?.collectedMonth ?? 0)}
+          to="/finance"
+          spark={incomeSpark}
+          delta={
+            incomeDelta != null
+              ? {
+                  text: `${Math.abs(incomeDelta).toFixed(0)}%`,
+                  dir: incomeDelta >= 0 ? "up" : "down",
+                  sub: "vs last mo",
+                }
+              : undefined
+          }
+        />
+        <KpiTile
+          label="Leaves today"
+          value={String(leavesToday)}
+          to="/hr/leave"
+          delta={
+            pendingLeaves
+              ? { text: String(pendingLeaves), dir: "flat", sub: "pending" }
+              : undefined
+          }
+        />
+        <KpiTile
+          label="Collection rate"
+          value={`${(efficiency?.thisPct ?? 0).toFixed(0)}%`}
+          to="/fees"
+          delta={{
+            text: `${Math.abs(effDelta).toFixed(1)} pts`,
+            dir: effDelta >= 0 ? "up" : "down",
+            sub: "vs last term",
+          }}
         />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
