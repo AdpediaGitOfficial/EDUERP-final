@@ -3712,3 +3712,47 @@ describe("account credentials: self-service change-password + admin set/reveal",
     expect(denied.status).toBe(403);
   });
 });
+
+describe("class movement rules: promotion = higher only, transfer = same grade only", () => {
+  it("rejects invalid promotions and transfers at the API", async () => {
+    const classes = (await get("/classes", "admin")).body as any[];
+    const byName = (n: string) => classes.filter((c) => c.name === n);
+    const g10 = byName("Grade 10");
+    const g1 = byName("Grade 1");
+    // Seed always has these; guard just in case.
+    if (g10.length < 2 || g1.length < 1) return;
+    const g10a = g10[0].id;
+    const g10b = g10[1].id;
+    const g1x = g1[0].id;
+
+    // Promotion to a LOWER grade → blocked.
+    const lower = await post("/students/promote", "admin", {
+      fromClassId: g10a,
+      toClassId: g1x,
+    });
+    expect(lower.status).toBe(400);
+
+    // Promotion to the SAME grade (section change) → blocked (that's a transfer).
+    const same = await post("/students/promote", "admin", {
+      fromClassId: g10a,
+      toClassId: g10b,
+    });
+    expect(same.status).toBe(400);
+
+    // Academics promotion engine: a real promoted student to a lower grade → blocked.
+    const anyStudent = (await get(`/students/search?classId=${g10a}&limit=1`, "admin")).body
+      .rows?.[0];
+    if (anyStudent) {
+      const eng = await post("/academics/promotion/execute", "admin", {
+        from_class_id: g10a,
+        to_class_id: g1x,
+        promotions: [{ student_id: anyStudent.id, result: "promoted" }],
+      });
+      expect(eng.status).toBe(400);
+
+      // Transfer to a DIFFERENT grade → blocked (throws before any write).
+      const xfer = await post(`/students/${anyStudent.id}/transfer`, "admin", { toClassId: g1x });
+      expect(xfer.status).toBe(400);
+    }
+  });
+});

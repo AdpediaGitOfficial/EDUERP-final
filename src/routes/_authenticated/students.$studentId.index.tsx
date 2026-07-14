@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { apiGet, apiPost } from "@/lib/api/client";
+import { isSameGrade } from "@/lib/grades";
 import { CHART_PRIMARY } from "@/lib/chart";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -428,6 +429,10 @@ function ChildDetailPage() {
   const cls = s.classes
     ? `${s.classes.name}${s.classes.section ? ` · ${s.classes.section}` : ""}`
     : "No class yet";
+  // Transfer stays within the same grade — offer only same-grade destinations.
+  const sameGradeClasses = (allClasses ?? []).filter(
+    (c: any) => c.id !== s.classes?.id && isSameGrade(s.classes?.name ?? null, c.name),
+  );
 
   return (
     <AppShell>
@@ -514,7 +519,7 @@ function ChildDetailPage() {
           )}
           {isDesk && (
             <Button size="sm" onClick={() => setTransferOpen(true)}>
-              <ArrowRightLeft className="size-4" /> Transfer / Promote
+              <ArrowRightLeft className="size-4" /> Transfer
             </Button>
           )}
         </div>
@@ -523,34 +528,38 @@ function ChildDetailPage() {
       {/* SIS stat strip (Total Fees / Paid / Balance / Behavior) + QR + actions */}
       <SisProfilePanel studentId={studentId} />
 
-      {/* Transfer modal */}
+      {/* Transfer modal — same grade only (section / stream / batch change). */}
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Transfer / promote {s.profiles?.full_name}</DialogTitle>
+            <DialogTitle>Transfer {s.profiles?.full_name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 text-sm">
             <p className="text-muted-foreground">
-              Move this student to another class. A fresh roll number is assigned automatically in
-              the destination class.
+              A transfer moves the student to another class <b>within the same grade</b> (section,
+              stream or batch). To move them to a higher grade, use Promotion. A fresh roll number
+              is assigned automatically.
             </p>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">Destination class</label>
+              <label className="text-sm font-medium">Destination class (same grade)</label>
               <Select value={toClassId} onValueChange={setToClassId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a class" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(allClasses ?? [])
-                    .filter((c: any) => c.id !== classId)
-                    .map((c: any) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                        {c.section ? ` · ${c.section}` : ""}
-                      </SelectItem>
-                    ))}
+                  {sameGradeClasses.map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                      {c.section ? ` · ${c.section}` : ""}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              {allClasses && sameGradeClasses.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No other class in {s.classes?.name ?? "this grade"} to transfer to.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { EmptyRow } from "@/components/empty-state";
 import { apiFetch, apiGet, apiPost } from "@/lib/api/client";
+import { isPromotion } from "@/lib/grades";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1633,9 +1634,23 @@ function PromoteDialog({
       .catch(() => setPreview([]));
   }, [from]);
 
+  const fromClass = classes.find((c) => c.id === from);
+  // Promotion advances to a strictly higher grade only — never the same or a
+  // lower grade (that would be a Transfer). Offer only valid destinations.
+  const toOptions = fromClass
+    ? classes.filter((c) => c.id !== from && isPromotion(fromClass.name, c.name))
+    : [];
+  // If the chosen destination stops being valid (e.g. From changed), clear it.
+  useEffect(() => {
+    if (to && !toOptions.some((c) => c.id === to)) setTo("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from]);
+
   const submit = async () => {
     if (!from || !to) return toast.error("Pick both classes");
     if (from === to) return toast.error("From and To must differ");
+    if (fromClass && !isPromotion(fromClass.name, classes.find((c) => c.id === to)?.name ?? null))
+      return toast.error("Promotion must move students to a higher grade.");
     setBusy(true);
     try {
       const res = await apiPost<{ moved: number }>("/students/promote", {
@@ -1682,18 +1697,24 @@ function PromoteDialog({
           </div>
           <div className="space-y-1.5">
             <Label>To class</Label>
-            <Select value={to} onValueChange={setTo}>
+            <Select value={to} onValueChange={setTo} disabled={!from}>
               <SelectTrigger>
-                <SelectValue placeholder="Select next class" />
+                <SelectValue placeholder={from ? "Select a higher grade" : "Pick a class first"} />
               </SelectTrigger>
               <SelectContent>
-                {classes.map((c) => (
+                {toOptions.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {classLabel(c)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {from && toOptions.length === 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                No higher grade exists — this is the top grade. Use the promotion register to
+                graduate / pass out these students.
+              </p>
+            )}
           </div>
         </div>
         {preview.length > 0 && (

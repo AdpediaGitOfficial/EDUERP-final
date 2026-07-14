@@ -8,6 +8,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import { PrismaService } from "../../infra/database/prisma.service";
+import { isPromotion, isSameGrade } from "../../common/grades";
 import { AuthService } from "../auth/auth.service";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
@@ -117,6 +118,22 @@ export class StudentsService {
   async promote(actor: AuthUser, fromClassId: string, toClassId: string, exclude: string[] = []) {
     if (!actor.roles.includes("admin"))
       throw new ForbiddenException("Only admins can promote students.");
+    if (fromClassId === toClassId)
+      throw new BadRequestException("The destination class must differ from the source.");
+    const [fromClass, toClass] = await Promise.all([
+      this.prisma.classes.findUnique({ where: { id: fromClassId }, select: { name: true } }),
+      this.prisma.classes.findUnique({ where: { id: toClassId }, select: { name: true } }),
+    ]);
+    if (!fromClass) throw new NotFoundException("Source class not found");
+    if (!toClass) throw new NotFoundException("Destination class not found");
+    // Promotion may only advance to a strictly higher grade. Same or lower grade
+    // (e.g. Grade 10 → Grade 1, or a same-grade section change) is rejected — a
+    // same-grade move is a Transfer, not a promotion.
+    if (!isPromotion(fromClass.name, toClass.name)) {
+      throw new BadRequestException(
+        `Promotion must move students to a higher grade. "${toClass.name}" is not above "${fromClass.name}" — use Transfer for a same-grade change.`,
+      );
+    }
     const res = await this.prisma.students.updateMany({
       where: {
         class_id: fromClassId,
@@ -139,7 +156,7 @@ export class StudentsService {
       throw new ForbiddenException("Only admins or reception can transfer students.");
     const student = await this.prisma.students.findUnique({
       where: { id: studentId },
-      select: { id: true, class_id: true },
+      select: { id: true, class_id: true, classes: { select: { name: true } } },
     });
     if (!student) throw new NotFoundException("Student not found");
     const toClass = await this.prisma.classes.findUnique({
@@ -149,6 +166,18 @@ export class StudentsService {
     if (!toClass) throw new NotFoundException("Destination class not found");
     if (student.class_id === toClassId)
       throw new BadRequestException("Student is already in that class");
+    // A transfer stays within the SAME grade (section / stream / batch change
+    // only). Moving to a different grade must go through Promotion instead.
+    if (!student.class_id || !student.classes) {
+      throw new BadRequestException(
+        "This student isn't assigned to a class yet — assign one before transferring.",
+      );
+    }
+    if (!isSameGrade(student.classes.name, toClass.name)) {
+      throw new BadRequestException(
+        `Transfers must stay within the same grade. "${toClass.name}" is a different grade from "${student.classes.name}" — use Promotion to change grade.`,
+      );
+    }
 
     const manualRoll = rollNo?.trim() || null;
     const finalRoll = await this.prisma.$transaction(async (tx) => {

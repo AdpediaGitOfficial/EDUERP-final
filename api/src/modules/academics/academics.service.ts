@@ -9,6 +9,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../infra/database/prisma.service";
+import { isPromotion } from "../../common/grades";
 import type { AuthUser } from "../../common/decorators/current-user.decorator";
 
 export interface CalendarEventInput {
@@ -1619,6 +1620,11 @@ export class AcademicsService {
       if (!tc) throw new NotFoundException("Target class not found");
       if (tc.id === fromClass.id)
         throw new BadRequestException("The target class must differ from the source.");
+      // Promotion advances to a strictly higher grade only.
+      if (!isPromotion(fromClass.name, tc.name))
+        throw new BadRequestException(
+          `Promotion must move students to a higher grade. "${tc.name}" is not above "${fromClass.name}".`,
+        );
       toClass = { id: tc.id, academic_year: tc.academic_year };
     }
 

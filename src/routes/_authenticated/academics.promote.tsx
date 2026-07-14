@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { apiGet, apiFetch } from "@/lib/api/client";
+import { isPromotion } from "@/lib/grades";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -80,6 +81,16 @@ function Page() {
     `${c.name}${c.section ? ` ${c.section}` : ""} · ${c.academicYear}`;
   const promotedCount = Object.values(results).filter((r) => r === "promoted").length;
 
+  // Promotion targets must be a strictly higher grade than the source class.
+  const fromClassRow = (classes ?? []).find((c) => c.id === fromClass);
+  const higherGradeClasses = fromClassRow
+    ? (classes ?? []).filter((c) => c.id !== fromClass && isPromotion(fromClassRow.name, c.name))
+    : [];
+  useEffect(() => {
+    if (toClass && !higherGradeClasses.some((c) => c.id === toClass)) setToClass("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromClass]);
+
   const execute = useMutation({
     mutationFn: async () => {
       const res = await apiFetch("/academics/promotion/execute", {
@@ -140,13 +151,11 @@ function Page() {
                 <SelectValue placeholder="Target class" />
               </SelectTrigger>
               <SelectContent>
-                {(classes ?? [])
-                  .filter((c) => c.id !== fromClass)
-                  .map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {classLabel(c)}
-                    </SelectItem>
-                  ))}
+                {higherGradeClasses.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {classLabel(c)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
