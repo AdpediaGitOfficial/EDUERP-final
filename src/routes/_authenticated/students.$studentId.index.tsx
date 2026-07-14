@@ -23,6 +23,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
@@ -41,6 +48,8 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Check,
   Search,
   LayoutGrid,
   List,
@@ -80,6 +89,15 @@ import { UserCircle, Star, IdCard } from "lucide-react";
 export const Route = createFileRoute("/_authenticated/students/$studentId/")({
   component: ChildDetailPage,
 });
+
+// Attendance / Marksheet / Disciplinary / Behavior are collapsed into one menu
+// on the tab bar to keep it compact.
+const GROUPED_TABS = [
+  { value: "attendance", label: "Attendance", Icon: ClipboardCheck },
+  { value: "marks", label: "Marksheet", Icon: BookOpenCheck },
+  { value: "disciplinary", label: "Disciplinary", Icon: ShieldAlert },
+  { value: "behavior", label: "Behavior", Icon: Star },
+] as const;
 
 const initials = (n?: string) =>
   (n ?? "?")
@@ -614,14 +632,27 @@ function ChildDetailPage() {
             <Users className="size-4 mr-1" />
             Siblings
           </TabsTrigger>
-          <TabsTrigger value="attendance">
-            <ClipboardCheck className="size-4 mr-1" />
-            Attendance
-          </TabsTrigger>
-          <TabsTrigger value="marks">
-            <BookOpenCheck className="size-4 mr-1" />
-            Marksheet
-          </TabsTrigger>
+          {/* Attendance / Marksheet / Disciplinary / Behavior grouped in a menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                GROUPED_TABS.some((g) => g.value === tab) && "bg-background text-foreground shadow",
+              )}
+            >
+              {GROUPED_TABS.find((g) => g.value === tab)?.label ?? "Records"}
+              <ChevronDown className="size-4 ml-1" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {GROUPED_TABS.map(({ value, label, Icon }) => (
+                <DropdownMenuItem key={value} onSelect={() => setTab(value)}>
+                  <Icon className="size-4 mr-2" />
+                  {label}
+                  {tab === value && <Check className="size-4 ml-auto" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {!isAdmin && (
             <TabsTrigger value="homework">
               <NotebookPen className="size-4 mr-1" />
@@ -658,17 +689,9 @@ function ChildDetailPage() {
             <Bus className="size-4 mr-1" />
             Transport
           </TabsTrigger>
-          <TabsTrigger value="disciplinary">
-            <ShieldAlert className="size-4 mr-1" />
-            Disciplinary
-          </TabsTrigger>
           <TabsTrigger value="documents">
             <FileText className="size-4 mr-1" />
             Documents
-          </TabsTrigger>
-          <TabsTrigger value="behavior">
-            <Star className="size-4 mr-1" />
-            Behavior
           </TabsTrigger>
           <TabsTrigger value="credentials">
             <IdCard className="size-4 mr-1" />
