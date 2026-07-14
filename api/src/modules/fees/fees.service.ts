@@ -1619,6 +1619,98 @@ export class FeesService {
     };
   }
 
+  // ============================ Carry Forward ============================
+
+  /** Students in a class carrying an outstanding balance to roll into next year. */
+  async carryForwardPreview(actor: AuthUser, classId: string) {
+    this.ensureCollector(actor);
+    if (!classId) throw new BadRequestException("classId is required");
+    const students = await this.prisma.students.findMany({
+      where: { class_id: classId, status: "active" },
+      select: {
+        id: true,
+        admission_no: true,
+        roll_no: true,
+        profiles: { select: { full_name: true } },
+      },
+      orderBy: [{ roll_no: "asc" }],
+    });
+    const ids = students.map((s) => s.id);
+    const grouped = ids.length
+      ? await this.prisma.fee_assignments.groupBy({
+          by: ["student_id"],
+          where: { student_id: { in: ids } },
+          _sum: { amount_due: true, amount_paid: true },
+        })
+      : [];
+    const out = new Map(
+      grouped.map((g) => [
+        g.student_id,
+        this.round2(Number(g._sum.amount_due ?? 0) - Number(g._sum.amount_paid ?? 0)),
+      ]),
+    );
+    return students
+      .map((s) => ({
+        studentId: s.id,
+        admissionNo: s.admission_no,
+        rollNo: s.roll_no,
+        name: s.profiles?.full_name ?? null,
+        outstanding: out.get(s.id) ?? 0,
+      }))
+      .filter((r) => r.outstanding > 0.009);
+  }
+
+  /** Consolidate each student's outstanding into a single "Opening Due Balance"
+   *  line and settle the carried lines, so nothing is double-counted. Paid
+   *  history is preserved (paid lines keep their paid amount). */
+  async carryForwardExecute(
+    actor: AuthUser,
+    dto: { studentIds: string[]; dueDate?: string; label?: string },
+  ) {
+    this.ensureCollector(actor);
+    const title = dto.label?.trim() || "Opening Due Balance";
+    const due = dto.dueDate ? new Date(dto.dueDate) : new Date(new Date().toISOString().slice(0, 10));
+    let created = 0;
+    let skipped = 0;
+    for (const sid of dto.studentIds) {
+      const done = await this.prisma.$transaction(async (tx) => {
+        const assigns = await tx.fee_assignments.findMany({
+          where: { student_id: sid },
+          select: { id: true, amount_due: true, amount_paid: true },
+        });
+        const outstanding = this.round2(
+          assigns.reduce((s, a) => s + (Number(a.amount_due) - Number(a.amount_paid)), 0),
+        );
+        if (outstanding <= 0.009) return false;
+        await tx.fee_assignments.create({
+          data: {
+            student_id: sid,
+            structure_id: null,
+            title,
+            amount_due: outstanding,
+            amount_paid: new Prisma.Decimal(0),
+            due_date: due,
+            status: "pending",
+          },
+        });
+        for (const a of assigns) {
+          if (Number(a.amount_paid) <= 0.009) {
+            await tx.fee_assignments.delete({ where: { id: a.id } });
+          } else {
+            await tx.fee_assignments.update({
+              where: { id: a.id },
+              data: { amount_due: a.amount_paid, status: "paid" },
+            });
+          }
+        }
+        return true;
+      });
+      if (done) created++;
+      else skipped++;
+    }
+    return { created, skipped };
+  }
+
   /** Per fee-group: assigned, collected and outstanding across all students. */
   async feeGroupReport(actor: AuthUser) {
     this.ensureCollector(actor);

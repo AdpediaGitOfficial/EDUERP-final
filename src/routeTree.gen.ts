@@ -103,6 +103,7 @@ import { Route as AuthenticatedFinanceFeeGroupsRouteImport } from './routes/_aut
 import { Route as AuthenticatedFinanceExpensesRouteImport } from './routes/_authenticated/finance.expenses'
 import { Route as AuthenticatedFinanceCollectionRouteImport } from './routes/_authenticated/finance.collection'
 import { Route as AuthenticatedFinanceChallansRouteImport } from './routes/_authenticated/finance.challans'
+import { Route as AuthenticatedFinanceCarryForwardRouteImport } from './routes/_authenticated/finance.carry-forward'
 import { Route as AuthenticatedFinanceAssignFeesRouteImport } from './routes/_authenticated/finance.assign-fees'
 import { Route as AuthenticatedEssTrainingRouteImport } from './routes/_authenticated/ess.training'
 import { Route as AuthenticatedEssProfileRouteImport } from './routes/_authenticated/ess.profile'
@@ -663,6 +664,12 @@ const AuthenticatedFinanceChallansRoute =
     path: '/challans',
     getParentRoute: () => AuthenticatedFinanceRoute,
   } as any)
+const AuthenticatedFinanceCarryForwardRoute =
+  AuthenticatedFinanceCarryForwardRouteImport.update({
+    id: '/carry-forward',
+    path: '/carry-forward',
+    getParentRoute: () => AuthenticatedFinanceRoute,
+  } as any)
 const AuthenticatedFinanceAssignFeesRoute =
   AuthenticatedFinanceAssignFeesRouteImport.update({
     id: '/assign-fees',
@@ -990,6 +997,7 @@ export interface FileRoutesByFullPath {
   '/ess/profile': typeof AuthenticatedEssProfileRoute
   '/ess/training': typeof AuthenticatedEssTrainingRoute
   '/finance/assign-fees': typeof AuthenticatedFinanceAssignFeesRoute
+  '/finance/carry-forward': typeof AuthenticatedFinanceCarryForwardRoute
   '/finance/challans': typeof AuthenticatedFinanceChallansRoute
   '/finance/collection': typeof AuthenticatedFinanceCollectionRouteWithChildren
   '/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
@@ -1116,6 +1124,7 @@ export interface FileRoutesByTo {
   '/ess/profile': typeof AuthenticatedEssProfileRoute
   '/ess/training': typeof AuthenticatedEssTrainingRoute
   '/finance/assign-fees': typeof AuthenticatedFinanceAssignFeesRoute
+  '/finance/carry-forward': typeof AuthenticatedFinanceCarryForwardRoute
   '/finance/challans': typeof AuthenticatedFinanceChallansRoute
   '/finance/collection': typeof AuthenticatedFinanceCollectionRouteWithChildren
   '/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
@@ -1255,6 +1264,7 @@ export interface FileRoutesById {
   '/_authenticated/ess/profile': typeof AuthenticatedEssProfileRoute
   '/_authenticated/ess/training': typeof AuthenticatedEssTrainingRoute
   '/_authenticated/finance/assign-fees': typeof AuthenticatedFinanceAssignFeesRoute
+  '/_authenticated/finance/carry-forward': typeof AuthenticatedFinanceCarryForwardRoute
   '/_authenticated/finance/challans': typeof AuthenticatedFinanceChallansRoute
   '/_authenticated/finance/collection': typeof AuthenticatedFinanceCollectionRouteWithChildren
   '/_authenticated/finance/expenses': typeof AuthenticatedFinanceExpensesRoute
@@ -1395,6 +1405,7 @@ export interface FileRouteTypes {
     | '/ess/profile'
     | '/ess/training'
     | '/finance/assign-fees'
+    | '/finance/carry-forward'
     | '/finance/challans'
     | '/finance/collection'
     | '/finance/expenses'
@@ -1521,6 +1532,7 @@ export interface FileRouteTypes {
     | '/ess/profile'
     | '/ess/training'
     | '/finance/assign-fees'
+    | '/finance/carry-forward'
     | '/finance/challans'
     | '/finance/collection'
     | '/finance/expenses'
@@ -1659,6 +1671,7 @@ export interface FileRouteTypes {
     | '/_authenticated/ess/profile'
     | '/_authenticated/ess/training'
     | '/_authenticated/finance/assign-fees'
+    | '/_authenticated/finance/carry-forward'
     | '/_authenticated/finance/challans'
     | '/_authenticated/finance/collection'
     | '/_authenticated/finance/expenses'
@@ -2394,6 +2407,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFinanceChallansRouteImport
       parentRoute: typeof AuthenticatedFinanceRoute
     }
+    '/_authenticated/finance/carry-forward': {
+      id: '/_authenticated/finance/carry-forward'
+      path: '/carry-forward'
+      fullPath: '/finance/carry-forward'
+      preLoaderRoute: typeof AuthenticatedFinanceCarryForwardRouteImport
+      parentRoute: typeof AuthenticatedFinanceRoute
+    }
     '/_authenticated/finance/assign-fees': {
       id: '/_authenticated/finance/assign-fees'
       path: '/assign-fees'
@@ -2837,6 +2857,7 @@ const AuthenticatedFinanceCollectionRouteWithChildren =
 
 interface AuthenticatedFinanceRouteChildren {
   AuthenticatedFinanceAssignFeesRoute: typeof AuthenticatedFinanceAssignFeesRoute
+  AuthenticatedFinanceCarryForwardRoute: typeof AuthenticatedFinanceCarryForwardRoute
   AuthenticatedFinanceChallansRoute: typeof AuthenticatedFinanceChallansRoute
   AuthenticatedFinanceCollectionRoute: typeof AuthenticatedFinanceCollectionRouteWithChildren
   AuthenticatedFinanceExpensesRoute: typeof AuthenticatedFinanceExpensesRoute
@@ -2852,6 +2873,7 @@ interface AuthenticatedFinanceRouteChildren {
 
 const AuthenticatedFinanceRouteChildren: AuthenticatedFinanceRouteChildren = {
   AuthenticatedFinanceAssignFeesRoute: AuthenticatedFinanceAssignFeesRoute,
+  AuthenticatedFinanceCarryForwardRoute: AuthenticatedFinanceCarryForwardRoute,
   AuthenticatedFinanceChallansRoute: AuthenticatedFinanceChallansRoute,
   AuthenticatedFinanceCollectionRoute:
     AuthenticatedFinanceCollectionRouteWithChildren,

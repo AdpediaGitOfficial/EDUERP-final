@@ -339,6 +339,21 @@ class RefundPaymentDto {
   method?: string;
 }
 
+class CarryForwardDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID("all", { each: true })
+  studentIds: string[];
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @IsOptional()
+  @IsString()
+  label?: string;
+}
+
 class GenerateChallanDto {
   @IsUUID()
   studentId: string;
@@ -698,5 +713,19 @@ export class FeesController {
   @Roles("admin", "accountant")
   feeGroupReport(@CurrentUser() actor: AuthUser) {
     return this.fees.feeGroupReport(actor);
+  }
+
+  // ============================ Carry Forward ============================
+
+  @Get("fees/carry-forward/preview")
+  @Roles("admin")
+  carryForwardPreview(@CurrentUser() actor: AuthUser, @Query("classId") classId: string) {
+    return this.fees.carryForwardPreview(actor, classId);
+  }
+
+  @Post("fees/carry-forward/execute")
+  @Roles("admin")
+  carryForwardExecute(@CurrentUser() actor: AuthUser, @Body() dto: CarryForwardDto) {
+    return this.fees.carryForwardExecute(actor, dto);
   }
 }
