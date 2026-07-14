@@ -10,6 +10,8 @@ import {
 } from "@nestjs/common";
 import { AttendanceService } from "./attendance.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionGuard } from "../../common/guards/permission.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import {
   ArrayNotEmpty,
@@ -49,7 +51,7 @@ class MarkSelfDto {
   status: string;
 }
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller("attendance")
 export class AttendanceController {
   constructor(@Inject(AttendanceService) private readonly attendance: AttendanceService) {}
@@ -68,6 +70,7 @@ export class AttendanceController {
   }
 
   @Post("mark")
+  @RequirePermission("attendance.mark")
   mark(@CurrentUser() actor: AuthUser, @Body() dto: MarkDto) {
     return this.attendance.mark(actor, dto.classId, dto.date, dto.entries);
   }

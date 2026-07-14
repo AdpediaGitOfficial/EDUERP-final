@@ -12,6 +12,8 @@ import {
 } from "@nestjs/common";
 import { CommunicationService } from "./communication.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionGuard } from "../../common/guards/permission.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import { IsDateString, IsIn, IsOptional, IsString, IsUUID, MinLength } from "class-validator";
 
@@ -71,7 +73,7 @@ class CreateHolidayDto {
   type?: string;
 }
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller()
 export class CommunicationController {
   constructor(@Inject(CommunicationService) private readonly comms: CommunicationService) {}
@@ -110,6 +112,7 @@ export class CommunicationController {
   }
 
   @Post("broadcasts/send")
+  @RequirePermission("broadcast.send")
   sendBroadcast(@CurrentUser() actor: AuthUser, @Body() dto: SendBroadcastDto) {
     return this.comms.sendBroadcast(actor, dto);
   }

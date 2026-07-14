@@ -157,7 +157,7 @@ function Page() {
     <AppShell>
       <PageHeader
         title="Staff Access Control"
-        subtitle="Change roles, toggle module-level permissions, and review an audit trail of every change."
+        subtitle="Change roles and module-level permissions. Permissions are on by default — turning one off revokes that action for the user. Every change is audited."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.6fr] gap-6">
@@ -248,7 +248,8 @@ function Page() {
                 </div>
                 <ul className="divide-y">
                   {PERMISSIONS.map((p) => {
-                    const on = permMap.get(p.key) ?? false;
+                    // Revoke model: allowed unless an admin has explicitly turned it off.
+                    const on = permMap.get(p.key) ?? true;
                     return (
                       <li key={p.key} className="p-4 flex items-center gap-4">
                         <div className="flex-1 min-w-0">

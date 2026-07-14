@@ -11,6 +11,8 @@ import {
 } from "@nestjs/common";
 import { HomeworkService } from "./homework.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionGuard } from "../../common/guards/permission.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import { Type } from "class-transformer";
 import {
@@ -123,7 +125,7 @@ class SaveExamResultsDto {
   entries: ExamResultEntryDto[];
 }
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller()
 export class HomeworkController {
   constructor(@Inject(HomeworkService) private readonly homework: HomeworkService) {}
@@ -139,6 +141,7 @@ export class HomeworkController {
   }
 
   @Post("homework")
+  @RequirePermission("homework.assign")
   create(@CurrentUser() actor: AuthUser, @Body() dto: CreateHomeworkDto) {
     return this.homework.createHomework(actor, dto);
   }
@@ -185,6 +188,7 @@ export class HomeworkController {
   }
 
   @Post("exam-results")
+  @RequirePermission("gradebook.edit")
   saveResults(@CurrentUser() actor: AuthUser, @Body() dto: SaveExamResultsDto) {
     return this.homework.saveExamResults(actor, dto.examId, dto.entries);
   }

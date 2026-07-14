@@ -12,6 +12,8 @@ import {
 } from "@nestjs/common";
 import { ComplaintsService } from "./complaints.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { PermissionGuard } from "../../common/guards/permission.guard";
+import { RequirePermission } from "../../common/decorators/require-permission.decorator";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
 import { IsIn, IsOptional, IsString, IsUUID, MinLength } from "class-validator";
 
@@ -44,7 +46,7 @@ class ReplyDto {
   body: string;
 }
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller("complaints")
 export class ComplaintsController {
   constructor(@Inject(ComplaintsService) private readonly complaints: ComplaintsService) {}
@@ -60,6 +62,7 @@ export class ComplaintsController {
   }
 
   @Post()
+  @RequirePermission("complaints.raise")
   create(@CurrentUser() actor: AuthUser, @Body() dto: CreateComplaintDto) {
     return this.complaints.create(actor, dto);
   }
