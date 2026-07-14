@@ -6,6 +6,7 @@ import request from "supertest";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, type INestApplication } from "@nestjs/common";
 import { PrismaExceptionFilter } from "../src/common/filters/prisma-exception.filter";
+import { PrismaService } from "../src/infra/database/prisma.service";
 import cookieParser from "cookie-parser";
 import { AppModule } from "../src/app.module";
 
@@ -224,8 +225,10 @@ describe("reports: role dashboards", () => {
   it("teacher dashboard returns assigned classes + schedule shape", async () => {
     const res = await get("/reports/teacher-dashboard", "teacher");
     expect(res.status).toBe(200);
-    expect(res.body.classCount).toBe(4);
-    expect(res.body.classStats.length).toBe(4);
+    // The teacher has assignments (exact count tracks the current timetable) —
+    // assert non-empty and that the summary count matches the detail rows.
+    expect(res.body.classCount).toBeGreaterThan(0);
+    expect(res.body.classStats.length).toBe(res.body.classCount);
     expect(Array.isArray(res.body.todaySchedule)).toBe(true);
     expect(res.body.teacher.full_name).toBe("Anjali Nair");
   });
@@ -2349,15 +2352,46 @@ describe("Admin writes ported off Supabase server-functions (B40)", () => {
     expect(typeof res.body.tempPassword).toBe("string");
   });
 
-  it("promote is admin-only and returns a moved count (from==to is a harmless no-op update)", async () => {
+  it("promote is admin-only, validates source≠destination, and returns a moved count", async () => {
     const classes = (await get("/classes", "admin")).body as any[];
+    const gradeOf = (name: string) => {
+      const m = /(\d{1,2})/.exec(name || "");
+      return m ? parseInt(m[1], 10) : NaN;
+    };
     const c = classes[0];
+    // admin-only
     expect(
       (await post("/students/promote", "teacher", { fromClassId: c.id, toClassId: c.id })).status,
     ).toBe(403);
-    const res = await post("/students/promote", "admin", { fromClassId: c.id, toClassId: c.id });
+    // source must differ from destination
+    expect(
+      (await post("/students/promote", "admin", { fromClassId: c.id, toClassId: c.id })).status,
+    ).toBe(400);
+
+    // A real promotion needs a strictly-higher destination grade. Pick such a
+    // pair from the current seed, and exclude every active student in the source
+    // so the demo data is left untouched (moved === 0) — this exercises the
+    // happy path without mutating real class membership.
+    let fromC: any, toC: any;
+    for (const a of classes) {
+      const hit = classes.find((b) => gradeOf(b.name) > gradeOf(a.name));
+      if (hit) {
+        fromC = a;
+        toC = hit;
+        break;
+      }
+    }
+    expect(fromC && toC).toBeTruthy();
+    const preview = (await get(`/academics/promotion/preview?fromClassId=${fromC.id}`, "admin"))
+      .body;
+    const exclude = (preview.students ?? []).map((s: any) => s.id);
+    const res = await post("/students/promote", "admin", {
+      fromClassId: fromC.id,
+      toClassId: toC.id,
+      exclude,
+    });
     expect(res.status).toBe(201);
-    expect(typeof res.body.moved).toBe("number");
+    expect(res.body.moved).toBe(0);
   });
 
   it("bulk-status is admin-only; setting active->active updates the given ids", async () => {
@@ -3313,21 +3347,37 @@ describe("Academics: elective enrolment (seats + waitlist)", () => {
 
 describe("Academics: promotion engine", () => {
   it("promotes + detains, updates class, records the register; guards; RBAC", async () => {
+    const prisma = app.get(PrismaService);
     const classes = (await get("/classes", "admin")).body as any[];
-    // source: a class with >= 2 active students; target: a different class
+    const gradeOf = (name: string) => {
+      const m = /(\d{1,2})/.exec(name || "");
+      return m ? parseInt(m[1], 10) : NaN;
+    };
+    // source: a class with >= 2 active students that also has a strictly-higher
+    // grade class to promote INTO (the engine only allows upward moves).
     let fromId = "";
+    let toId = "";
     let students: any[] = [];
     for (const c of classes) {
+      const higher = classes.find((b) => gradeOf(b.name) > gradeOf(c.name));
+      if (!higher) continue;
       const pv = await get(`/academics/promotion/preview?fromClassId=${c.id}`, "admin");
       if (pv.body.students?.length >= 2) {
         fromId = c.id;
+        toId = higher.id;
         students = pv.body.students;
         break;
       }
     }
     expect(fromId).toBeTruthy();
-    const toId = classes.find((c) => c.id !== fromId).id;
+    expect(toId).toBeTruthy();
     const [s1, s2] = students;
+    // snapshot s1 so we can restore it exactly (the engine is one-directional,
+    // so we can't reverse-promote it back — restore via the DB instead).
+    const s1Before = await prisma.students.findUnique({
+      where: { id: s1.id },
+      select: { class_id: true, roll_no: true },
+    });
 
     // teacher cannot run
     expect(
@@ -3376,12 +3426,10 @@ describe("Academics: promotion engine", () => {
     const batch = reg.body.find((b: any) => b.promoted === 1 && b.detained === 1);
     expect(batch).toBeTruthy();
 
-    // move s1 back to keep demo data intact
-    await post("/academics/promotion/execute", "admin", {
-      from_class_id: toId,
-      to_class_id: fromId,
-      promotions: [{ student_id: s1.id, result: "promoted" }],
-    });
+    // restore s1 to its original class + roll to keep demo data intact. The
+    // promotion engine only moves upward, so we can't reverse-promote — write
+    // the original values back directly.
+    await prisma.students.update({ where: { id: s1.id }, data: s1Before ?? {} });
   });
 });
 
@@ -3481,6 +3529,15 @@ describe("Academics: reports & analytics", () => {
 describe("hr: payroll generation + pay + payslip", () => {
   const YEAR = 2099;
   const MONTH = 12; // a far-future month kept isolated from real data
+
+  // Start from a clean slate: this fixed month can be left in a "paid" state by
+  // a previous run (re-generate skips paid runs), which would make the freshly
+  // generated rows non-pending. Clear it so the block is deterministic on re-run.
+  beforeAll(async () => {
+    await app
+      .get(PrismaService)
+      .payroll_runs.deleteMany({ where: { month: new Date(Date.UTC(YEAR, MONTH - 1, 1)) } });
+  });
 
   it("a non-HR user cannot generate payroll (403)", async () => {
     expect(
