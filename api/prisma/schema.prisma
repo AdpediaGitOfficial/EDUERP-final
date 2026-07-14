@@ -1422,6 +1422,17 @@ model student_categories {
   @@schema("public")
 }
 
+model houses {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  color           String?
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime          @default(now()) @db.Timestamptz(6)
+  student_details student_details[]
+
+  @@schema("public")
+}
+
 model student_custom_fields {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   label      String
@@ -1445,6 +1456,7 @@ model student_details {
   permanent_address   String?
   category_id         String?             @db.Uuid
   house               String?
+  house_id            String?             @db.Uuid
   religion            String?
   caste               String?
   sub_caste           String?
@@ -1470,9 +1482,11 @@ model student_details {
   updated_at          DateTime            @default(now()) @db.Timestamptz(6)
   students            students            @relation(fields: [student_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   student_categories  student_categories? @relation(fields: [category_id], references: [id], onUpdate: NoAction)
+  houses              houses?             @relation(fields: [house_id], references: [id], onUpdate: NoAction)
   profiles            profiles?           @relation(fields: [updated_by], references: [id], onUpdate: NoAction)
 
   @@index([category_id], map: "idx_student_details_category")
+  @@index([house_id], map: "idx_student_details_house")
   @@schema("public")
 }
 

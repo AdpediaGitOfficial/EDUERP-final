@@ -536,6 +536,7 @@ export class StudentsService {
         include: {
           profiles: { select: { full_name: true, email: true } },
           classes: { select: { id: true, name: true, section: true } },
+          student_details: { select: { houses: { select: { id: true, name: true, color: true } } } },
         },
       }),
     ]);
@@ -555,6 +556,13 @@ export class StudentsService {
         email: s.profiles?.email ?? null,
         class: s.classes
           ? { id: s.classes.id, name: s.classes.name, section: s.classes.section }
+          : null,
+        house: s.student_details?.houses
+          ? {
+              id: s.student_details.houses.id,
+              name: s.student_details.houses.name,
+              color: s.student_details.houses.color,
+            }
           : null,
       })),
     };

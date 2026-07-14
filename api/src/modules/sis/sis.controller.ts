@@ -30,6 +30,11 @@ class CategoryDto {
   @IsString() @MinLength(1) @MaxLength(60) name: string;
 }
 
+class HouseDto {
+  @IsString() @MinLength(1) @MaxLength(60) name: string;
+  @IsOptional() @IsString() @MaxLength(20) color?: string;
+}
+
 class CustomFieldDto {
   @IsString() @MinLength(1) @MaxLength(80) label: string;
   @IsOptional() @IsIn(["text", "dropdown"]) fieldType?: string;
@@ -73,6 +78,31 @@ export class SisController {
   @Delete("categories/:id")
   deleteCategory(@CurrentUser() actor: AuthUser, @Param("id", new ParseUUIDPipe()) id: string) {
     return this.sis.deleteCategory(actor, id);
+  }
+
+  // ---- houses ----
+  @Get("houses")
+  listHouses(@CurrentUser() actor: AuthUser) {
+    return this.sis.listHouses(actor);
+  }
+
+  @Post("houses")
+  createHouse(@CurrentUser() actor: AuthUser, @Body() dto: HouseDto) {
+    return this.sis.createHouse(actor, dto.name, dto.color);
+  }
+
+  @Patch("houses/:id")
+  updateHouse(
+    @CurrentUser() actor: AuthUser,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: HouseDto,
+  ) {
+    return this.sis.updateHouse(actor, id, dto.name, dto.color);
+  }
+
+  @Delete("houses/:id")
+  deleteHouse(@CurrentUser() actor: AuthUser, @Param("id", new ParseUUIDPipe()) id: string) {
+    return this.sis.deleteHouse(actor, id);
   }
 
   // ---- custom fields ----

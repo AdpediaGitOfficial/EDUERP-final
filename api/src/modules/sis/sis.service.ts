@@ -78,6 +78,64 @@ export class SisService {
     if (clash) throw new ConflictException("A category with that name already exists");
   }
 
+  // ---------------------------------------------------------- houses ---
+
+  /** Houses (Red/Blue/…) — readable by desk staff + teachers (they allocate);
+   *  writes are admin. Each carries an optional colour for badges. */
+  async listHouses(actor: AuthUser) {
+    if (!actor.roles.some((r) => r === "admin" || r === "reception" || r === "teacher"))
+      throw new ForbiddenException("Not allowed");
+    const rows = await this.prisma.houses.findMany({ orderBy: { name: "asc" } });
+    return rows.map((h) => ({ id: h.id, name: h.name, color: h.color }));
+  }
+
+  async createHouse(actor: AuthUser, name: string, color?: string) {
+    this.requireAdmin(actor);
+    const clean = name.trim();
+    if (!clean) throw new ConflictException("Name is required");
+    await this.assertHouseNameFree(clean, null);
+    const row = await this.prisma.houses.create({
+      data: { name: clean, color: color?.trim() || null },
+    });
+    return { id: row.id, name: row.name, color: row.color };
+  }
+
+  async updateHouse(actor: AuthUser, id: string, name: string, color?: string) {
+    this.requireAdmin(actor);
+    const clean = name.trim();
+    if (!clean) throw new ConflictException("Name is required");
+    const existing = await this.prisma.houses.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("House not found");
+    await this.assertHouseNameFree(clean, id);
+    const row = await this.prisma.houses.update({
+      where: { id },
+      data: { name: clean, color: color?.trim() || null, updated_at: new Date() },
+    });
+    return { id: row.id, name: row.name, color: row.color };
+  }
+
+  async deleteHouse(actor: AuthUser, id: string) {
+    this.requireAdmin(actor);
+    const inUse = await this.prisma.student_details.count({ where: { house_id: id } });
+    if (inUse > 0)
+      throw new ConflictException(
+        `This house has ${inUse} student(s) allocated; reassign them before deleting.`,
+      );
+    await this.prisma.houses.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  private async assertHouseNameFree(name: string, exceptId: string | null) {
+    const clash = await this.prisma.houses.findFirst({
+      where: {
+        name: { equals: name, mode: "insensitive" },
+        ...(exceptId ? { id: { not: exceptId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (clash) throw new ConflictException("A house with that name already exists");
+  }
+
   // --------------------------------------------------- custom fields ---
 
   /** Active field definitions the admission wizard renders (desk-readable). */

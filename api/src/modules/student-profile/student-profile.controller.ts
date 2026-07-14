@@ -11,7 +11,15 @@ import {
   Put,
   UseGuards,
 } from "@nestjs/common";
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 import { StudentProfileService } from "./student-profile.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, type AuthUser } from "../../common/decorators/current-user.decorator";
@@ -70,6 +78,10 @@ class DocumentDto {
   @IsOptional() @IsBoolean() verified?: boolean;
 }
 
+class HouseAllocationDto {
+  @IsOptional() @IsUUID() houseId?: string | null;
+}
+
 class SendPassDto {
   @IsIn(["student", "parent"]) target: "student" | "parent";
   // Optional custom password; if omitted a strong one is generated.
@@ -106,6 +118,16 @@ export class StudentProfileController {
     @Param("studentId", new ParseUUIDPipe()) studentId: string,
   ) {
     return this.svc.sisProfile(actor, studentId);
+  }
+
+  // Allocate/clear a student's house (admin/reception, or the class teacher).
+  @Patch("house")
+  setHouse(
+    @CurrentUser() actor: AuthUser,
+    @Param("studentId", new ParseUUIDPipe()) studentId: string,
+    @Body() dto: HouseAllocationDto,
+  ) {
+    return this.svc.setHouse(actor, studentId, dto.houseId ?? null);
   }
 
   @Post("send-pass")

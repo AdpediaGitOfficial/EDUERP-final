@@ -429,6 +429,36 @@ export class StudentProfileService {
    * Behavior score formula (stated on the tab): each positive note = +1, each
    * concern note = −1, neutral = 0; the score is their sum.
    */
+  /** Allocate (or clear) a student's house. Admin/reception for anyone;
+   *  teachers only for students in their own classes (assertReadable scope). */
+  async setHouse(actor: AuthUser, studentId: string, houseId: string | null) {
+    if (!actor.roles.some((r) => r === "admin" || r === "reception" || r === "teacher"))
+      throw new ForbiddenException("Not allowed to allocate houses");
+    await this.assertReadable(actor, studentId);
+    let name: string | null = null;
+    if (houseId) {
+      const h = await this.prisma.houses.findUnique({
+        where: { id: houseId },
+        select: { id: true, name: true },
+      });
+      if (!h) throw new NotFoundException("House not found");
+      name = h.name;
+    }
+    await this.prisma.student_details.upsert({
+      where: { student_id: studentId },
+      create: { student_id: studentId, house_id: houseId, updated_by: actor.id },
+      update: { house_id: houseId, updated_by: actor.id, updated_at: new Date() },
+    });
+    await this.log(
+      studentId,
+      actor,
+      "house_allocated",
+      houseId ? `Allocated to ${name}` : "House cleared",
+      { houseId },
+    );
+    return { ok: true, houseId, house: name };
+  }
+
   async sisProfile(actor: AuthUser, studentId: string) {
     await this.assertReadable(actor, studentId);
     const canEdit = this.isDesk(actor);
@@ -438,7 +468,12 @@ export class StudentProfileService {
       include: {
         profiles: { select: { id: true, full_name: true, email: true, phone: true } },
         classes: { select: { name: true, section: true, academic_year: true } },
-        student_details: { include: { student_categories: { select: { name: true } } } },
+        student_details: {
+          include: {
+            student_categories: { select: { name: true } },
+            houses: { select: { id: true, name: true, color: true } },
+          },
+        },
         student_medical: true,
       },
     });
@@ -535,7 +570,9 @@ export class StudentProfileService {
         admissionNo: student.admission_no,
         rollNo: student.roll_no,
         gender: student.gender,
-        house: det?.house ?? null,
+        house: det?.houses?.name ?? det?.house ?? null,
+        houseId: det?.houses?.id ?? null,
+        houseColor: det?.houses?.color ?? null,
         bloodGroup: student.student_medical?.blood_group ?? null,
         photoUrl: det?.photo_url ?? null,
         status: student.status,
