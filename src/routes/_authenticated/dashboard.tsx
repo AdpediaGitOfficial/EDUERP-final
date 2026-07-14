@@ -187,8 +187,6 @@ function AdminDashboard({ fullName }: { fullName: string }) {
   const attDelta = attPct - (dash?.attYesterdayPct ?? 0);
   const prevMo = dash?.collectedPrevMonth ?? 0;
   const incomeDelta = prevMo ? (((data?.collectedMonth ?? 0) - prevMo) / prevMo) * 100 : null;
-  const attSpark = (attTrend ?? []).slice(-14).map((d: any) => d.students as number);
-  const incomeSpark = (trend ?? []).map((t: any) => t.revenue as number);
   const newStu = dash?.newStudentsMonth ?? 0;
   const newStf = dash?.newStaffMonth ?? 0;
   const leavesToday = dash?.leavesToday ?? 0;
@@ -234,8 +232,10 @@ function AdminDashboard({ fullName }: { fullName: string }) {
         title={`Welcome ${fullName.split(" ")[0]}`}
         subtitle="Overview of your school's operations."
       />
-      {/* KPI command strip — dense, analytics-driven, with deltas and live/critical chips. */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+      {/* KPI command strip — dense, analytics-driven, with deltas and live/critical chips.
+          2→4→8 columns by width so a laptop (sidebar in view) gets a clean 4×2 grid
+          and wide monitors collapse it to the single strip. */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-8">
         <KpiTile
           label="Students"
           value={String(data?.studentCount ?? 0)}
@@ -260,7 +260,6 @@ function AdminDashboard({ fullName }: { fullName: string }) {
           label="Attendance"
           value={`${attPct.toFixed(1)}%`}
           to="/attendance-overview"
-          spark={attSpark}
           delta={{
             text: `${Math.abs(attDelta).toFixed(1)} pts`,
             dir: attDelta >= 0 ? "up" : "down",
@@ -289,7 +288,6 @@ function AdminDashboard({ fullName }: { fullName: string }) {
           label="Income (MTD)"
           value={inrShort(data?.collectedMonth ?? 0)}
           to="/finance"
-          spark={incomeSpark}
           delta={
             incomeDelta != null
               ? {

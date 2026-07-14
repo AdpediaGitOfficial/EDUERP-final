@@ -26,7 +26,6 @@ export function KpiTile({
   chip,
   tone = "plain",
   to,
-  spark,
 }: {
   label: string;
   value: string;
@@ -34,30 +33,26 @@ export function KpiTile({
   chip?: KpiChip;
   tone?: KpiTone;
   to?: string;
-  spark?: number[];
 }) {
   const hero = tone === "violet" || tone === "coral";
   const body = (
     <div
       className={cn(
-        "relative flex min-h-[104px] flex-col gap-1 overflow-hidden rounded-xl p-3.5 transition-shadow",
+        "flex h-full min-h-[104px] flex-col gap-1 overflow-hidden rounded-xl p-3.5 transition-shadow",
         TONE[tone],
         to && "hover:shadow-md",
       )}
     >
       <div
         className={cn(
-          "text-[11px] font-semibold uppercase tracking-wide",
+          "text-[11px] font-semibold uppercase leading-tight tracking-wide",
           hero ? "opacity-80" : "text-muted-foreground",
         )}
       >
         {label}
       </div>
       <div className="font-display text-2xl font-semibold leading-tight tabular-nums">{value}</div>
-      {spark && spark.length > 1 && (
-        <Sparkline points={spark} hero={hero} className="absolute right-2.5 top-3" />
-      )}
-      <div className="mt-auto flex flex-wrap items-center gap-2">
+      <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1">
         {chip && <Chip chip={chip} hero={hero} />}
         {delta && <Delta delta={delta} hero={hero} />}
       </div>
@@ -118,38 +113,6 @@ function Chip({ chip, hero }: { chip: KpiChip; hero: boolean }) {
       {chip.tone === "critical" && <span aria-hidden>⚠</span>}
       {chip.label}
     </span>
-  );
-}
-
-function Sparkline({
-  points,
-  hero,
-  className,
-}: {
-  points: number[];
-  hero: boolean;
-  className?: string;
-}) {
-  const w = 54;
-  const h = 18;
-  const max = Math.max(...points);
-  const min = Math.min(...points);
-  const rng = max - min || 1;
-  const d = points
-    .map((p, i) => `${((i / (points.length - 1)) * w).toFixed(1)},${(h - ((p - min) / rng) * h).toFixed(1)}`)
-    .join(" ");
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className={className} aria-hidden>
-      <polyline
-        points={d}
-        fill="none"
-        stroke={hero ? "currentColor" : "var(--chart-1)"}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity={hero ? 0.7 : 0.9}
-      />
-    </svg>
   );
 }
 
