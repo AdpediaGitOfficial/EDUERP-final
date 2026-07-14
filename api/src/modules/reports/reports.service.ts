@@ -376,6 +376,76 @@ export class ReportsService {
     const collectedPrevMonth = num(collectedPrevMonthAgg._sum.amount);
     const attYesterdayPct = pctPresent(attYesterday).pct;
 
+    // Upcoming birthdays (today + next 6 days) — students (dob on student_details,
+    // which has no Prisma relation, so resolved in a second lookup) plus staff.
+    const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dayKeys = new Map<number, number>();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(y, m, now.getDate() + i);
+      dayKeys.set(d.getMonth() * 100 + d.getDate(), i);
+    }
+    const daysAwayOf = (d: Date | null) =>
+      d ? dayKeys.get(d.getUTCMonth() * 100 + d.getUTCDate()) : undefined;
+    const dateLabelOf = (d: Date) => `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
+
+    const [detailRows, staffBdayRows] = await Promise.all([
+      this.prisma.student_details.findMany({
+        where: { dob: { not: null } },
+        select: { student_id: true, dob: true },
+      }),
+      this.prisma.staff.findMany({
+        where: { dob: { not: null }, status: "active" },
+        select: { id: true, full_name: true, dob: true, designation: true },
+      }),
+    ]);
+    const matchedStudents = detailRows
+      .map((r) => ({ id: r.student_id, dob: r.dob as Date, daysAway: daysAwayOf(r.dob) }))
+      .filter((x): x is { id: string; dob: Date; daysAway: number } => x.daysAway !== undefined);
+    const stuMeta = matchedStudents.length
+      ? await this.prisma.students.findMany({
+          where: { id: { in: matchedStudents.map((x) => x.id) } },
+          select: {
+            id: true,
+            profiles: { select: { full_name: true } },
+            classes: { select: { name: true, section: true } },
+          },
+        })
+      : [];
+    const stuById = new Map(stuMeta.map((s) => [s.id, s]));
+    const birthdays = [
+      ...matchedStudents.map((x) => {
+        const meta = stuById.get(x.id);
+        return {
+          id: x.id,
+          kind: "student" as const,
+          name: meta?.profiles?.full_name ?? "Student",
+          sub: meta?.classes
+            ? `${meta.classes.name}${meta.classes.section ? " · " + meta.classes.section : ""}`
+            : "Student",
+          dateLabel: dateLabelOf(x.dob),
+          daysAway: x.daysAway,
+          isToday: x.daysAway === 0,
+        };
+      }),
+      ...staffBdayRows.flatMap((s) => {
+        const daysAway = daysAwayOf(s.dob);
+        if (daysAway === undefined) return [];
+        return [
+          {
+            id: s.id,
+            kind: "staff" as const,
+            name: s.full_name,
+            sub: s.designation ?? "Staff",
+            dateLabel: dateLabelOf(s.dob as Date),
+            daysAway,
+            isToday: daysAway === 0,
+          },
+        ];
+      }),
+    ]
+      .sort((a, b) => a.daysAway - b.daysAway)
+      .slice(0, 8);
+
     // Fees card: whole-year demand vs collected (not just this month).
     const annualDemand = feeRows.reduce((s, f) => s + num(f.amount_due), 0);
     const collectedTotal = feeRows.reduce((s, f) => s + num(f.amount_paid), 0);
@@ -399,6 +469,7 @@ export class ReportsService {
     return {
       feeSummary,
       recentPayments,
+      birthdays,
       studentCount,
       teacherCount,
       staffCount,

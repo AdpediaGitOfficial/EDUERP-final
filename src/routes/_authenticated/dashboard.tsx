@@ -250,6 +250,10 @@ function AdminDashboard({ fullName }: { fullName: string }) {
         `/fees/reports/collection?groupBy=${range.groupBy}&from=${range.from}&to=${range.to}`,
       ),
   });
+  const { data: notices } = useQuery({
+    queryKey: ["dash-notices"],
+    queryFn: () => apiGet<{ rows: any[] }>("/announcements?pageSize=4"),
+  });
 
   // Single comprehensive endpoint (ports the ~13 client-side aggregations).
   // Derive the original variable shapes so the JSX below is unchanged.
@@ -286,6 +290,9 @@ function AdminDashboard({ fullName }: { fullName: string }) {
   const upcoming = dash?.upcoming as any[] | undefined;
   const defaulters = dash?.defaulters as any[] | undefined;
   const activity = dash?.activity as { at: string; text: string; tone: string }[] | undefined;
+  const birthdays = dash?.birthdays as
+    | { id: string; kind: string; name: string; sub: string; dateLabel: string; isToday: boolean }[]
+    | undefined;
 
   const effDelta = (efficiency?.thisPct ?? 0) - (efficiency?.lastPct ?? 0);
 
@@ -660,64 +667,143 @@ function AdminDashboard({ fullName }: { fullName: string }) {
         </div>
       )}
 
-      {/* Info panels */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6 mb-6">
+      {/* Today around campus — engagement widgets. */}
+      <SectionLabel>Today around campus</SectionLabel>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Birthdays */}
+        <Card className="p-4 rounded-2xl">
+          <div className="flex items-center gap-2 font-medium mb-3">
+            <Cake className="size-4 text-primary" />
+            Birthdays
+          </div>
+          {(birthdays?.length ?? 0) === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              No birthdays this week.
+            </div>
+          ) : (
+            <ul className="space-y-1">
+              {birthdays!.map((b) => (
+                <li key={b.id} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="grid size-8 flex-none place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {b.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .slice(0, 2)
+                        .join("")}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{b.name}</div>
+                      <div className="text-[11px] text-muted-foreground">{b.sub}</div>
+                    </div>
+                  </div>
+                  {b.isToday ? (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                      Today
+                    </span>
+                  ) : (
+                    <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                      {b.dateLabel}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/* Official notices */}
         <Card className="p-4 rounded-2xl">
           <div className="flex items-center justify-between mb-3">
-            <div className="font-medium flex items-center gap-2">
-              <CalendarDays className="size-4 text-primary" />
-              Upcoming holidays
+            <div className="flex items-center gap-2 font-medium">
+              <Megaphone className="size-4 text-primary" />
+              Official notices
             </div>
-            <Link to="/holidays" className="text-xs text-primary hover:underline">
+            <Link to="/announcements" className="text-xs text-primary hover:underline">
               All
             </Link>
           </div>
-          <ul className="space-y-2 text-sm">
-            {(upcoming ?? []).map((h: any) => (
-              <li
-                key={h.id}
-                className="flex items-center justify-between border-b last:border-0 pb-2 last:pb-0"
-              >
-                <div>
-                  <div className="font-medium">{h.name}</div>
-                  <div className="text-xs text-muted-foreground capitalize">{h.type}</div>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {format(new Date(h.start_date), "d MMM")}
-                </div>
-              </li>
-            ))}
-            {(!upcoming || upcoming.length === 0) && (
-              <li className="text-sm text-muted-foreground">No upcoming holidays.</li>
-            )}
-          </ul>
+          {(notices?.rows?.length ?? 0) === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">No notices yet.</div>
+          ) : (
+            <ul className="space-y-2.5">
+              {notices!.rows.slice(0, 4).map((n) => (
+                <li key={n.id} className="border-b last:border-0 pb-2.5 last:pb-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-sm font-medium">{n.title}</div>
+                    {n.createdAt && (
+                      <time className="whitespace-nowrap text-[11px] text-muted-foreground">
+                        {format(new Date(n.createdAt), "d MMM")}
+                      </time>
+                    )}
+                  </div>
+                  {n.body && (
+                    <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
+        {/* Upcoming events (holidays) */}
         <Card className="p-4 rounded-2xl">
           <div className="flex items-center justify-between mb-3">
-            <div className="font-medium flex items-center gap-2">
-              <Activity className="size-4 text-primary" />
-              Recent activity
+            <div className="flex items-center gap-2 font-medium">
+              <CalendarDays className="size-4 text-primary" />
+              Upcoming events
             </div>
+            <Link to="/holidays" className="text-xs text-primary hover:underline">
+              Calendar
+            </Link>
           </div>
-          <ul className="space-y-2 text-sm max-h-72 overflow-auto">
-            {(activity ?? []).map((a, i) => (
-              <li
-                key={i}
-                className="flex items-start justify-between gap-2 border-b last:border-0 pb-2 last:pb-0"
-              >
-                <div className={`text-sm ${a.tone}`}>{a.text}</div>
-                <div className="text-[11px] text-muted-foreground whitespace-nowrap">
-                  {format(new Date(a.at), "d MMM HH:mm")}
-                </div>
-              </li>
-            ))}
-            {(!activity || activity.length === 0) && (
-              <li className="text-sm text-muted-foreground">No recent activity.</li>
-            )}
-          </ul>
+          {(upcoming?.length ?? 0) === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              Nothing scheduled soon.
+            </div>
+          ) : (
+            <ul className="space-y-2.5">
+              {(upcoming ?? []).map((h: any) => (
+                <li key={h.id} className="flex items-center gap-3">
+                  <div className="flex-none rounded-lg bg-muted/60 px-2.5 py-1 text-center">
+                    <div className="text-sm font-bold leading-none">
+                      {format(new Date(h.start_date), "d")}
+                    </div>
+                    <div className="text-[10px] uppercase text-muted-foreground">
+                      {format(new Date(h.start_date), "MMM")}
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{h.name}</div>
+                    <div className="text-[11px] capitalize text-muted-foreground">{h.type}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
+
+      {/* Recent activity */}
+      <Card className="p-4 rounded-2xl mt-4 mb-6">
+        <div className="flex items-center gap-2 font-medium mb-3">
+          <Activity className="size-4 text-primary" />
+          Recent activity
+        </div>
+        <ul className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+          {(activity ?? []).map((a, i) => (
+            <li key={i} className="flex items-start justify-between gap-2 border-b last:border-0 pb-2">
+              <div className={`text-sm ${a.tone}`}>{a.text}</div>
+              <div className="text-[11px] text-muted-foreground whitespace-nowrap">
+                {format(new Date(a.at), "d MMM HH:mm")}
+              </div>
+            </li>
+          ))}
+          {(!activity || activity.length === 0) && (
+            <li className="text-sm text-muted-foreground">No recent activity.</li>
+          )}
+        </ul>
+      </Card>
     </>
   );
 }
