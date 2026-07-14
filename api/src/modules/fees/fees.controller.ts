@@ -217,6 +217,89 @@ class UpdateFeeTypeDto {
   isActive?: boolean;
 }
 
+class FeeGroupComponentDto {
+  @IsOptional()
+  @IsUUID()
+  feeTypeId?: string;
+
+  @IsString()
+  @MinLength(1)
+  label: string;
+
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  demandDate?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fineAmount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fineAfterDays?: number;
+}
+
+class CreateFeeGroupDto {
+  @IsString()
+  @MinLength(1)
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  academicYear?: string;
+
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FeeGroupComponentDto)
+  components: FeeGroupComponentDto[];
+}
+
+class UpdateFeeGroupDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  academicYear?: string;
+
+  @IsOptional()
+  @IsUUID()
+  classId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FeeGroupComponentDto)
+  components?: FeeGroupComponentDto[];
+}
+
+class ArchiveFeeGroupDto {
+  @IsBoolean()
+  archived: boolean;
+}
+
+class CloneFeeGroupDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+}
+
 class SendRemindersDto {
   @IsArray()
   @ArrayNotEmpty()
@@ -400,5 +483,49 @@ export class FeesController {
   @Roles("admin")
   deleteFeeType(@Param("id") id: string) {
     return this.fees.deleteFeeType(id);
+  }
+
+  // ============================ Fee Groups ============================
+
+  @Get("fees/groups")
+  @Roles("admin", "accountant")
+  listFeeGroups(@Query("includeArchived") includeArchived?: string) {
+    return this.fees.listFeeGroups(includeArchived === "1" || includeArchived === "true");
+  }
+
+  @Get("fees/groups/:id")
+  @Roles("admin", "accountant")
+  getFeeGroup(@Param("id") id: string) {
+    return this.fees.getFeeGroup(id);
+  }
+
+  @Post("fees/groups")
+  @Roles("admin")
+  createFeeGroup(@Body() dto: CreateFeeGroupDto) {
+    return this.fees.createFeeGroup(dto);
+  }
+
+  @Patch("fees/groups/:id")
+  @Roles("admin")
+  updateFeeGroup(@Param("id") id: string, @Body() dto: UpdateFeeGroupDto) {
+    return this.fees.updateFeeGroup(id, dto);
+  }
+
+  @Post("fees/groups/:id/clone")
+  @Roles("admin")
+  cloneFeeGroup(@Param("id") id: string, @Body() dto: CloneFeeGroupDto) {
+    return this.fees.cloneFeeGroup(id, dto.name);
+  }
+
+  @Post("fees/groups/:id/archive")
+  @Roles("admin")
+  archiveFeeGroup(@Param("id") id: string, @Body() dto: ArchiveFeeGroupDto) {
+    return this.fees.archiveFeeGroup(id, dto.archived);
+  }
+
+  @Delete("fees/groups/:id")
+  @Roles("admin")
+  deleteFeeGroup(@Param("id") id: string) {
+    return this.fees.deleteFeeGroup(id);
   }
 }

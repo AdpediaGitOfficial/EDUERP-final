@@ -1005,4 +1005,163 @@ export class FeesService {
     await this.prisma.fee_types.delete({ where: { id } });
     return { ok: true };
   }
+
+  // ============================ Fee Groups ============================
+
+  private groupInclude = {
+    classes: { select: { name: true, section: true } },
+    fee_group_components: {
+      orderBy: { sort_order: "asc" as const },
+      include: { fee_types: { select: { name: true } } },
+    },
+  };
+
+  private feeGroupRow(g: any) {
+    const components = (g.fee_group_components ?? []).map((c: any) => ({
+      id: c.id,
+      feeTypeId: c.fee_type_id,
+      feeTypeName: c.fee_types?.name ?? null,
+      label: c.label,
+      amount: Number(c.amount),
+      dueDate: c.due_date,
+      demandDate: c.demand_date,
+      fineAmount: Number(c.fine_amount),
+      fineAfterDays: c.fine_after_days,
+    }));
+    return {
+      id: g.id,
+      name: g.name,
+      academicYear: g.academic_year,
+      classId: g.class_id,
+      className: g.classes
+        ? `${g.classes.name}${g.classes.section ? " · " + g.classes.section : ""}`
+        : null,
+      isArchived: g.is_archived,
+      total: this.round2(components.reduce((s: number, c: any) => s + c.amount, 0)),
+      components,
+    };
+  }
+
+  private componentData(components: any[]) {
+    return (components ?? []).map((c, i) => ({
+      fee_type_id: c.feeTypeId ?? null,
+      label: c.label.trim(),
+      amount: this.round2(Number(c.amount) || 0),
+      due_date: c.dueDate ? new Date(c.dueDate) : null,
+      demand_date: c.demandDate ? new Date(c.demandDate) : null,
+      fine_amount: this.round2(Number(c.fineAmount) || 0),
+      fine_after_days: c.fineAfterDays != null ? Number(c.fineAfterDays) : null,
+      sort_order: i,
+    }));
+  }
+
+  async listFeeGroups(includeArchived = false) {
+    const rows = await this.prisma.fee_groups.findMany({
+      where: includeArchived ? {} : { is_archived: false },
+      orderBy: { created_at: "desc" },
+      include: this.groupInclude,
+    });
+    return rows.map((r) => this.feeGroupRow(r));
+  }
+
+  async getFeeGroup(id: string) {
+    const row = await this.prisma.fee_groups.findUnique({
+      where: { id },
+      include: this.groupInclude,
+    });
+    if (!row) throw new NotFoundException("Fee group not found");
+    return this.feeGroupRow(row);
+  }
+
+  async createFeeGroup(dto: {
+    name: string;
+    academicYear?: string;
+    classId?: string;
+    components: any[];
+  }) {
+    const row = await this.prisma.fee_groups.create({
+      data: {
+        name: dto.name.trim(),
+        academic_year: dto.academicYear?.trim() || "2025-2026",
+        class_id: dto.classId ?? null,
+        fee_group_components: { create: this.componentData(dto.components) },
+      },
+      include: this.groupInclude,
+    });
+    return this.feeGroupRow(row);
+  }
+
+  async updateFeeGroup(
+    id: string,
+    dto: { name?: string; academicYear?: string; classId?: string; components?: any[] },
+  ) {
+    const existing = await this.prisma.fee_groups.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Fee group not found");
+    const row = await this.prisma.$transaction(async (tx) => {
+      await tx.fee_groups.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+          ...(dto.academicYear !== undefined ? { academic_year: dto.academicYear.trim() } : {}),
+          ...(dto.classId !== undefined ? { class_id: dto.classId || null } : {}),
+        },
+      });
+      // Full replace of components when provided.
+      if (dto.components) {
+        await tx.fee_group_components.deleteMany({ where: { group_id: id } });
+        for (const c of this.componentData(dto.components)) {
+          await tx.fee_group_components.create({ data: { ...c, group_id: id } });
+        }
+      }
+      return tx.fee_groups.findUnique({ where: { id }, include: this.groupInclude });
+    });
+    return this.feeGroupRow(row);
+  }
+
+  async cloneFeeGroup(id: string, name?: string) {
+    const src = await this.prisma.fee_groups.findUnique({
+      where: { id },
+      include: { fee_group_components: { orderBy: { sort_order: "asc" } } },
+    });
+    if (!src) throw new NotFoundException("Fee group not found");
+    const row = await this.prisma.fee_groups.create({
+      data: {
+        name: name?.trim() || `${src.name} (Copy)`,
+        academic_year: src.academic_year,
+        class_id: src.class_id,
+        fee_group_components: {
+          create: src.fee_group_components.map((c, i) => ({
+            fee_type_id: c.fee_type_id,
+            label: c.label,
+            amount: c.amount,
+            due_date: c.due_date,
+            demand_date: c.demand_date,
+            fine_amount: c.fine_amount,
+            fine_after_days: c.fine_after_days,
+            sort_order: i,
+          })),
+        },
+      },
+      include: this.groupInclude,
+    });
+    return this.feeGroupRow(row);
+  }
+
+  async archiveFeeGroup(id: string, archived: boolean) {
+    const existing = await this.prisma.fee_groups.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Fee group not found");
+    const row = await this.prisma.fee_groups.update({
+      where: { id },
+      data: { is_archived: archived },
+      include: this.groupInclude,
+    });
+    return this.feeGroupRow(row);
+  }
+
+  async deleteFeeGroup(id: string) {
+    const existing = await this.prisma.fee_groups.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Fee group not found");
+    await this.prisma.fee_groups.delete({ where: { id } });
+    return { ok: true };
+  }
 }
