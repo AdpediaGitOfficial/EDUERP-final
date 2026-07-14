@@ -1196,7 +1196,7 @@ function StudentDashboard({ userId, fullName }: { userId: string; fullName: stri
         <Card className="rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="font-display font-semibold">Today's Classes</div>
-            <Link to="/academics/classes" className="text-sm text-primary">
+            <Link to="/timetable" className="text-sm text-primary">
               Full timetable
             </Link>
           </div>

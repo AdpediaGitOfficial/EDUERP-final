@@ -190,17 +190,14 @@ function AdminStudentsList() {
     },
   });
 
+  // /classes is now role-scoped server-side (teachers get only their assigned
+  // classes), so use it directly instead of fetching all and filtering.
   const { data: classes } = useQuery({
     enabled: !!user,
-    queryKey: ["all-classes", isTeacher ? assignedClassIds : "all"],
+    queryKey: ["all-classes", user?.id],
     queryFn: async () => {
       const all = await apiGet<any[]>("/classes");
-      const rows = all.map((c) => ({ id: c.id, name: c.name, section: c.section }));
-      if (isTeacher) {
-        const set = new Set(assignedClassIds ?? []);
-        return rows.filter((c) => set.has(c.id));
-      }
-      return rows;
+      return all.map((c) => ({ id: c.id, name: c.name, section: c.section }));
     },
   });
   const { data: students } = useQuery({

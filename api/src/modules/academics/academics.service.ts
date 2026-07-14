@@ -79,9 +79,37 @@ export interface SubjectInput {
 export class AcademicsService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async listClasses(_actor: AuthUser, year?: string) {
+  async listClasses(actor: AuthUser, year?: string) {
+    // Teachers only see the classes they're assigned to teach (teacher_classes)
+    // or are the class-teacher of. Admin/reception (and any non-teacher desk
+    // role) keep the full list.
+    const teacherScoped =
+      actor.roles.includes("teacher") &&
+      !actor.roles.some((r) => r === "admin" || r === "reception");
+    let allowedIds: string[] | null = null;
+    if (teacherScoped) {
+      const [assigned, incharge] = await Promise.all([
+        this.prisma.teacher_classes.findMany({
+          where: { teacher_id: actor.id },
+          select: { class_id: true },
+        }),
+        this.prisma.classes.findMany({
+          where: { class_teacher_id: actor.id },
+          select: { id: true },
+        }),
+      ]);
+      allowedIds = Array.from(
+        new Set<string>([
+          ...assigned.map((r) => r.class_id).filter((x): x is string => !!x),
+          ...incharge.map((r) => r.id),
+        ]),
+      );
+    }
     const rows = await this.prisma.classes.findMany({
-      where: year && year !== "all" ? { academic_year: year } : {},
+      where: {
+        ...(year && year !== "all" ? { academic_year: year } : {}),
+        ...(allowedIds ? { id: { in: allowedIds } } : {}),
+      },
       orderBy: [{ name: "asc" }, { section: "asc" }],
       include: { _count: { select: { students: true } } },
     });
