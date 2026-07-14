@@ -47,7 +47,17 @@ import {
   Star,
   Columns3,
   Upload,
+  SlidersHorizontal,
+  Tags,
+  ListPlus,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -309,12 +319,33 @@ function AdminStudentsList() {
         }
         action={
           isAdmin && (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <UserPlus className="size-4" /> Admit student
-                </Button>
-              </DialogTrigger>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <SlidersHorizontal className="size-4" /> Setup
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuLabel>Student setup</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link to="/student-categories" className="cursor-pointer">
+                      <Tags className="size-4" /> Student Categories
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/custom-fields" className="cursor-pointer">
+                      <ListPlus className="size-4" /> Custom Fields
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <UserPlus className="size-4" /> Admit student
+                  </Button>
+                </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Admit student</DialogTitle>
@@ -375,7 +406,8 @@ function AdminStudentsList() {
                   </Button>
                 </form>
               </DialogContent>
-            </Dialog>
+              </Dialog>
+            </div>
           )
         }
       />

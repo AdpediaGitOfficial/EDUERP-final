@@ -34,8 +34,6 @@ import {
   Contact,
   User,
   Menu,
-  Tags,
-  ListPlus,
   ChevronDown,
 } from "lucide-react";
 import {
@@ -68,8 +66,8 @@ const NAV: NavItem[] = [
   { to: "/students", label: "Students", icon: GraduationCap, roles: ["admin", "teacher"] },
   { to: "/parents", label: "Parents", icon: Contact, roles: ["admin", "reception"] },
   { to: "/admissions", label: "Admissions", icon: ClipboardList, roles: ["admin", "reception"] },
-  { to: "/student-categories", label: "Student Categories", icon: Tags, roles: ["admin"] },
-  { to: "/custom-fields", label: "Custom Fields", icon: ListPlus, roles: ["admin"] },
+  // Student Categories + Custom Fields are student-data setup masters — reached
+  // from the Students page ("Setup" menu), not as top-level sidebar items.
   { to: "/academics", label: "Academics", icon: BookOpen, roles: ["admin"] },
   { to: "/my-classes", label: "My Classes", icon: School, roles: ["teacher"] },
   { to: "/timetable", label: "Timetable", icon: CalendarDays, roles: ["teacher", "student"] },
